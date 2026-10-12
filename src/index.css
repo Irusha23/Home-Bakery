@@ -1,0 +1,202 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ivory: #f7f5f0;
+  --color-white: #ffffff;
+  --color-sage: #78917b;
+  --color-sage-dark: #566f5b;
+  --color-sage-soft: #e7ede5;
+  --color-sage-soft-strong: #dce6da;
+  --color-sage-border: #cedacb;
+  --color-cocoa: #5c463c;
+  --color-muted: #81786f;
+  --color-muted-light: #aaa299;
+  --color-warm-border: #e7e1d7;
+  --color-neutral-soft: #f1eee8;
+  --color-success: #477653;
+  --color-success-soft: #e6f0e7;
+  --color-warning: #a96f21;
+  --color-warning-soft: #fbf0df;
+  --color-warning-border: #efd9b6;
+  --color-error: #b54747;
+
+  --radius-control: 0.875rem;
+  --radius-card: 1.25rem;
+  --radius-sheet: 1.75rem;
+  --radius-nav: 1.625rem;
+  --radius-nav-item: 1.15rem;
+
+  --shadow-subtle: 0 1px 2px rgb(92 70 60 / 0.04);
+  --shadow-card: 0 8px 24px rgb(92 70 60 / 0.08);
+  --shadow-button: 0 5px 14px rgb(86 111 91 / 0.2);
+  --shadow-nav: 0 10px 32px rgb(92 70 60 / 0.14);
+  --shadow-dialog: 0 24px 70px rgb(92 70 60 / 0.2);
+  --shadow-shell: 0 0 60px rgb(92 70 60 / 0.08);
+
+  --text-nav: 0.625rem;
+  --text-title: 1.625rem;
+  --text-screen-title: 2rem;
+
+  --tracking-section: 0.11em;
+
+  --spacing-touch: 2.75rem;
+  --spacing-page: 1rem;
+  --spacing-nav-item: 3.5rem;
+  --spacing-quick-action: 7.25rem;
+  --spacing-hero-image: 13.25rem;
+  --spacing-dialog: 26rem;
+  --spacing-copy: 19rem;
+  --spacing-empty: 17rem;
+  --spacing-textarea: 6.5rem;
+  --spacing-dialog-content: 24rem;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-ui: 180ms;
+}
+
+:root {
+  font-family: var(--font-sans);
+  color: var(--color-cocoa);
+  background: var(--color-sage-soft);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 20rem;
+  background: var(--color-sage-soft);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 20rem;
+  min-height: 100vh;
+  background: var(--color-sage-soft);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell {
+  width: 100%;
+  max-width: 27rem;
+  margin-inline: auto;
+}
+
+.screen-safe-top {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.875rem);
+}
+
+.screen-bottom-padding {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-nav-safe {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.w-nav {
+  width: min(calc(100% - 0.5rem), 26rem);
+}
+
+.grid-cols-hero {
+  grid-template-columns: minmax(0, 1.14fr) minmax(7.5rem, 0.86fr);
+}
+
+.grid-cols-order-meta {
+  grid-template-columns: minmax(7.5rem, 0.9fr) minmax(0, 1.1fr);
+}
+
+.grid-cols-purchase {
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+}
+
+.grid-cols-purchase-action {
+  grid-template-columns: minmax(0, 1fr) 5.5rem;
+}
+
+.screen-header {
+  padding-top: 0.125rem;
+}
+
+.focused-flow {
+  min-height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.875rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.active\:scale-button:active {
+  transform: scale(0.98);
+}
+
+.backdrop-blur-overlay {
+  backdrop-filter: blur(3px);
+}
+
+.backdrop-blur-nav {
+  backdrop-filter: blur(18px);
+}
+
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-dialog-in {
+  animation: dialog-in var(--duration-ui) var(--ease-out);
+}
+
+@media (min-width: 30rem) {
+  .mobile-shell {
+    border-inline: 1px solid var(--color-warm-border);
+  }
+}
+
+@media (max-width: 22rem) {
+  .grid-cols-hero {
+    grid-template-columns: minmax(0, 1fr) 7.25rem;
+  }
+
+  .text-nav {
+    font-size: 0.5625rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
