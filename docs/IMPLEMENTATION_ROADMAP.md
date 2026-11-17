@@ -1,183 +1,86 @@
 # Udeni's Specials — Implementation Roadmap
 
-**Status:** Proposed  
-**Development environment:** VS Code + GitHub Copilot  
-**Target:** Android-first, offline-capable application
+**Status:** Implemented in Web Prototype (`feature/remaining-workflows`)  
+**Stack:** React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 + Vitest  
+**Target:** Mobile-first, offline-capable home bakery application
 
-## Phase 0 — Planning approval
+## Phase 0 — Planning approval (Completed)
 
 Deliverables:
-- Approved architecture decision record.
-- Approved Copilot project instructions.
-- Approved Figma Make design brief.
-- Agreed business rules and acceptance criteria.
+- [x] Architecture & requirements design (`docs/ARCHITECTURE_DECISIONS.md`).
+- [x] Domain business rules and financial terminology agreed.
+- [x] Minimalistic 4-tab mobile UX direction established.
 
-Acceptance:
-- No unresolved architectural issue blocks the initial project setup.
-- Scope boundaries are explicit.
-- Core financial terminology is agreed.
+## Phase 1 — Project foundation & tooling (Completed)
 
-## Phase 1 — Development environment and project foundation
+Completed:
+- [x] Vite 8 + React 19 + TypeScript 5.7 + Tailwind CSS v4 scaffold (`package.json`, `vite.config.ts`).
+- [x] Git repository, feature branching (`feature/remaining-workflows`), and remote tracking.
+- [x] Type checking (`npx tsc --noEmit`), Vitest suite (`pnpm test --run`), and production build (`pnpm build`).
 
-Tasks:
-- Verify Node.js, Git, VS Code, Android Studio and Android SDK setup.
-- Create the Expo React Native TypeScript project.
-- Establish the initial Git repository and checkpoint.
-- Configure Expo Router and React Native Paper.
-- Configure the shared application theme.
-- Establish TypeScript, linting and test commands.
-- Verify the project starts on the Android emulator.
+## Phase 2 — Design system and 4-tab navigation (Completed)
 
-Acceptance:
-- Application launches successfully on the emulator.
-- Navigation shell renders correctly.
-- Type checking, tests and production-oriented build checks are available.
-- Dependencies are compatible and recorded in the lockfile.
-- No business features have been added prematurely.
+Completed:
+- [x] Shared warm bakery design tokens (`src/index.css`) and reusable UI primitives (`Button`, `Card`, `Dialog`, `Field`, `SelectField`, `Sheet`, `GroupedList`, `StatusBadge`, `SegmentedControl`, `CountdownBadge`, `Toast`).
+- [x] 4-tab bottom navigation (`Home`, `Orders`, `Kitchen`, `Money`) with stack transitions (`useNavigationStack.ts`) and sub-screens (`CustomersScreen`, `SettingsScreen`).
+- [x] Narrow mobile viewport layout, empty states, and confirmation dialogs.
 
-## Phase 2 — Design system and navigation
+## Phase 3 — Domain models and financial rules (Completed)
 
-Tasks:
-- Implement shared typography, colours, spacing and component conventions.
-- Implement the approved navigation structure.
-- Create the six core screen shells.
-- Add reusable inputs, cards, status indicators and dialogs.
-- Implement empty and error states.
+Completed:
+- [x] Typed domain models (`src/types.ts`) for products, variants, recipes, orders, order lines, preparation records, payments, refunds, expenses, shared allocations, and budgets.
+- [x] Pure domain calculators and validators (`src/lib/pricing.ts`, `src/lib/financials.ts`, `src/lib/expenses.ts`, `src/lib/budget.ts`, `src/lib/countdown.ts`).
+- [x] Automated unit tests covering margin/markup pricing, payment balances, refunds, expenses, and `dd:hh:mm:ss` countdowns.
 
-Acceptance:
-- The six main screen destinations are reachable.
-- Screens follow the approved Figma design.
-- Layouts remain usable on narrow Android screens.
-- Common components behave consistently.
+## Phase 4 — Orders, products, recipes, and baking workflow (Completed)
 
-## Phase 3 — Domain models and financial rules
+Completed:
+- [x] Multi-line order creation and editing (`CreateOrderFlow.tsx`) with saved recipes or `+ Customise` one-off recipes.
+- [x] Product & variant catalogue (`ProductEditorSheet.tsx`) with optional **"Copy recipe from existing"** starter cloning, plus Recipe Library (`RecipeEditorSheet.tsx`, `RecipesScreen.tsx`) with inline `Rs./kg | L | unit` pricing, batch scaling, and version history.
+- [x] Direct order-linked baking workflow (`PreparationProductScreen`): pantry checklist gate (`Have` / `Buy`) → `Start bake` transitions into minimalistic **Baking State** (scaled recipe + steps + `Cook mode` + live `dd:hh:mm:ss` recipe timer) → `Mark ready` (step-gated) redirects to the order's `Ready for pickup` page.
+- [x] Live `dd:hh:mm:ss` pickup countdowns on `OrderCard` and `OrderDetailScreen`, plus `REPEAT_ORDER` drafts.
 
-Tasks:
-- Define typed models for products, recipes, orders, order lines, expenses, payments and shared allocations.
-- Define money and quantity representations.
-- Implement recipe costing and order cost calculations.
-- Implement margin and markup pricing.
-- Implement payment balance calculations.
-- Implement shared expense allocation validation.
-- Add tests for normal and invalid cases.
+## Phase 5 — Shopping, purchases, and expenses (Completed)
 
-Acceptance:
-- A Rs. 1,000 cost with a 30% margin produces Rs. 1,428.57 before rounding.
-- The same cost with a 30% markup produces Rs. 1,300.
-- Invalid margin inputs are rejected.
-- Shared allocations cannot exceed the source expense.
-- Tests verify payment balances and cost calculations.
-- Historical snapshots have defined semantics.
+Completed:
+- [x] Manual pantry checklist-driven **Shopping** (`To buy`) list (`ShoppingScreen.tsx`) consolidating minimal total quantities across orders with calculated per-item and total `Rs.` estimates.
+- [x] Purchase recording (`ShoppingTripSheet.tsx`, `PurchaseForm.tsx`) updating inventory quantities and unit costs.
+- [x] Direct and shared expense recording and allocation (`MoneyScreen.tsx` → `Expenses`, `FinancesScreen.tsx`).
 
-## Phase 4 — Orders and products
+## Phase 6 — Pricing, payments, and due-balance tracking (Completed)
 
-Tasks:
-- Create and edit orders.
-- Add multiple product lines.
-- Maintain reusable recipes and custom one-off products.
-- Add order status and due-date handling.
-- Capture the relevant recipe and costing snapshot.
-- Implement order details and validation.
+Completed:
+- [x] Integrated `PricingCalculatorSheet` supporting margin/markup modes and manual agreed prices.
+- [x] Step-by-step partial payments, refunds, and `Collected` auto-prompt to record remaining balance when due.
+- [x] Standardized payment method dropdown (`Cash`, `Online transaction`, `Other` with optional specification).
+- [x] Unpaid & part-paid visibility across the app: `Orders → Due` filter + `Due Rs. X` card cues, `Home` contextual **Payments due** banner, and tappable **Unpaid customer orders** sheet in `Money`.
 
-Acceptance:
-- An order can contain multiple products.
-- Both recipe-based and custom products are supported.
-- Editing a reusable recipe does not silently rewrite existing order costs.
-- Invalid or incomplete order data is handled safely.
+## Phase 7 — Local persistence and migrations (Completed for Web)
 
-## Phase 5 — Shopping and expenses
+Completed:
+- [x] Versioned `localStorage` persistence (`src/state/persistence.ts`) with schema migration support and `PersistenceRecoveryScreen.tsx`.
+- [x] Centralized validated reducer (`src/state/AppState.tsx`) with `dispatchIfAccepted` safety guards.
+- [x] Persistence and reducer lifecycle test suites (`AppState.test.ts`, `ExtraStockLifecycle.test.ts`, `persistence.test.ts`).
 
-Tasks:
-- Generate shopping requirements from selected orders.
-- Consolidate compatible ingredient requirements.
-- Record actual purchases.
-- Record order-specific expenses.
-- Record shared shopping and transport expenses.
-- Allocate shared expenses and display unallocated balances.
+## Phase 8 — Dashboard, reporting, and budgeting (Completed)
 
-Acceptance:
-- Shopping requirements combine matching ingredients correctly.
-- Purchase spending is distinguished from ingredient consumption cost.
-- Shared expenses are recorded once and allocated consistently.
-- Related database updates use transactions where required.
+Completed:
+- [x] `HomeScreen` driven by live selectors (`todaySelectors.ts`): `Up next`, workload counts, `Upcoming pickups`, `Due` payment alerts, and `Notifications`.
+- [x] Minimalistic `MoneyScreen` with period filters, `Sales earned`, `Cash received`, `Money spent`, `Monthly goal`, category spend limits (`Budget`), and CSV exports (`orders`, `expenses`, `purchases`).
 
-## Phase 6 — Pricing and payments
+## Phase 9 — Backup, restore, and data recovery (Completed)
 
-Tasks:
-- Integrate the pricing calculator with order costing.
-- Support margin and markup modes.
-- Support price suggestions and manual agreed prices.
-- Record payments and outstanding balances.
-- Distinguish estimated profit from actual profit.
+Completed:
+- [x] Versioned JSON export and validated import (`BackupRestorePanel.tsx` in `SettingsScreen.tsx`).
+- [x] Weekly backup reminders with dismiss/snooze controls.
+- [x] Safe rejection of invalid backup files without corrupting live state.
 
-Acceptance:
-- The calculator uses the agreed business rules.
-- Changing an estimate does not silently overwrite an agreed price.
-- Partial payments produce the correct outstanding balance.
-- Missing cost information is clearly identified.
-- Payment records and financial summaries remain consistent.
+## Phase 10 — Release readiness & mobile packaging (Next)
 
-## Phase 7 — SQLite persistence
-
-Tasks:
-- Implement repository interfaces.
-- Implement SQLite repositories and schema migrations.
-- Configure database initialisation and error handling.
-- Persist all required business records.
-- Add transactions and database constraints.
-- Verify data across app restarts.
-
-Acceptance:
-- Core workflows operate offline.
-- Saved data survives application restarts.
-- Related records remain consistent after failures.
-- Migrations work against supported database versions.
-- Invalid database operations fail safely.
-
-## Phase 8 — Dashboard and history
-
-Tasks:
-- Populate the dashboard from saved records.
-- Add upcoming-order and outstanding-payment summaries.
-- Add completed-order history.
-- Add basic date filtering and financial summaries.
-
-Acceptance:
-- Dashboard figures are derived from consistent underlying records.
-- Estimated and actual results are clearly differentiated.
-- Cancelled and completed orders are handled correctly.
-- Empty states work when no orders exist.
-
-## Phase 9 — Backup, restore and data recovery
-
-Tasks:
-- Design a versioned export format.
-- Export required business records.
-- Validate imported data before restoration.
-- Define how duplicate or conflicting records are handled.
-- Add recovery guidance and destructive-action confirmation.
-
-Acceptance:
-- A valid export can be restored successfully.
-- Invalid files are rejected without corrupting existing records.
-- Restore operations are transactional where practical.
-- Backup and restore are tested on the Android application.
-
-## Phase 10 — Release readiness
-
-Tasks:
-- Complete emulator-based functional testing.
-- Test on the physical Android phone.
-- Verify keyboard behaviour, touch targets and scrolling.
-- Test offline use, restart behaviour and data recovery.
-- Fix high-priority usability and data-integrity defects.
-- Prepare installation and user guidance.
-
-Acceptance:
-- All critical end-to-end workflows pass.
-- No known critical data-loss or financial-calculation defect remains.
-- Physical-device testing is documented.
-- Known limitations are disclosed before real business use.
+Remaining tasks:
+- [ ] Physical Android device / mobile browser end-to-end QA pass (touch targets, keyboard, scrolling, offline reload).
+- [ ] Optional native wrapper / React Native + `expo-sqlite` port if distributing as a Play Store APK.
+- [ ] User onboarding notes and initial bakery catalog setup before live business use.
 
 ## Development rules
 

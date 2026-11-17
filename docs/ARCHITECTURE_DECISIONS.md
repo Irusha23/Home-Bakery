@@ -1,8 +1,8 @@
 # Udeni's Specials — Architecture & Requirements Design
 
-**Document version:** 1.0  
-**Status:** Requirements baseline established; ready for UI/UX design preparation  
-**Platform:** Android  
+**Document version:** 1.1  
+**Status:** Active web prototype implemented (`feature/remaining-workflows`); React Native port reference preserved  
+**Platform:** Mobile-first web app (Android-targeted)  
 **Business:** Udeni's Specials — Home Bakery  
 **Currency:** Sri Lankan Rupee (LKR)  
 **Measurement system:** Metric  
@@ -250,14 +250,14 @@ The primary navigation should remain appropriate for a phone.
 
 ### 5.1 Main sections
 
-1. Dashboard.
-2. Orders.
-3. Recipe Library.
-4. Shopping.
-5. Inventory.
-6. Finances.
+The implemented mobile shell uses a 4-tab bottom navigation bar so every daily workflow is reachable in one tap without crowding narrow screens:
 
-Customers, reports, settings, extra-stock preparation, and backup should remain accessible without overcrowding the primary navigation.
+1. **Home** (`today`) — `Up next` priority card, `New order`, contextual **Payments due** alert, 2×2 snapshot (`Due today`, `Ready`, `To buy`, `This month`), `Upcoming pickups`, Notifications bell, and `Settings`.
+2. **Orders** (`orders`) — `Active`, `Ready`, `Due`, `Done`, and `All` filters, search, `CreateOrderFlow`, `OrderDetailScreen`, `PreparationProductScreen`, and `CustomersScreen`.
+3. **Kitchen** (`kitchen`) — Consolidated **Shopping** (`To buy`) list and **Recipes & Products** catalogue (`RecipesScreen`).
+4. **Money** (`money`) — Minimalistic **Overview** (with tappable unpaid/part-paid breakdown & CSV exports), **Expenses**, and **Budget**.
+
+Customers, settings, backup/restore, and extra-stock workflows remain accessible from `Home` and `Orders` without overcrowding primary navigation.
 
 ### 5.2 Dashboard
 
@@ -1608,10 +1608,17 @@ The first release should prioritize correctness, simplicity, traceability, offli
 
 ## 29. Living Web Design Spec & React Native Port Mapping
 
-Approved updates finalized during implementation of the interactive web prototype:
+Architecture and UX decisions finalized in the implemented React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 web application (`src/`):
 
-- **5-Tab Information Architecture:** `Today`, `Orders`, `Recipes` (Recipes & Products catalogue), `Stock` (Shopping planner + Pantry & Finished Stock), and `Money` (Overview, Monthly Budget & Limits, Expenses, Reports & CSV Export).
+- **4-Tab Information Architecture:**
+  - **`Home` (`today`):** Greeting, `Up next` priority card, `New order` CTA, contextual **Payments due** warning banner (shown whenever non-draft, non-cancelled orders have `outstandingOrderBalance > 0`), 2×2 snapshot (`Due today`, `Ready`, `To buy`, `This month`), `Upcoming pickups`, Notifications bell (`selectAttentionItems`), and `Settings`.
+  - **`Orders` (`orders`):** `Active`, `Ready`, `Due (N)`, `Done`, and `All` filter pills; `OrderCard` with live `dd:hh:mm:ss` pickup countdowns (`CountdownBadge`), `Due Rs. X` balance cues, and contextual quick actions (`Confirm`, `To buy`, `Bake`, `Collected`, `Add payment`). Confirming `Collected` with a remaining balance automatically opens the **Record payment** dialog pre-filled with the balance due. Payment methods use a structured dropdown (`Cash`, `Online transaction`, `Other` with optional custom label) shared across order deposits and step-by-step payments.
+  - **`Kitchen` (`kitchen`):**
+    - **Shopping (`To buy`):** Driven by manual pantry checklist toggles (`Have` / `Buy`) on order items (`SET_PANTRY_CHECKLIST_ITEM`). Consolidates minimal total quantities across orders, displays calculated per-item and total estimated `Rs.` values from inventory unit prices (`Rs./kg | L | unit`), and records actual purchases via `ShoppingTripSheet`.
+    - **Recipes & Products:** Products define customer-facing items and size/pack variants, with an optional **"Copy recipe from existing"** selector when creating a new product (`ProductEditorSheet`). Recipes hold ingredients, packaging, inline `Rs./kg | L | unit` unit prices, batch scaling (`0.5×`–`10×`), `PricingCalculatorSheet`, preparation steps, and version history.
+    - **Direct Order-Linked Preparation (`PreparationProductScreen`):** The standalone Bake queue was removed in favor of direct order-linked preparation. Tapping `Start bake` dispatches `START_PREPARATION` (`startedAt` timestamp) and switches to a minimalistic **Baking State** view showing scaled recipe quantities, numbered preparation steps, `Cook mode`, and a live `dd:hh:mm:ss` recipe timer (`startedAt + preparationMinutes`). `Mark ready` is gated until all steps are checked and redirects directly back to the order's `Ready for pickup` page.
+  - **`Money` (`money`):** Minimalistic **Overview** (`Sales earned`, `Cash received`, `Money spent`, `Monthly goal`, tappable `Unpaid customer orders` row opening the **Unpaid & part-paid orders** sheet, and collapsible `Breakdown & exports` with CSV exports), **Expenses**, and **Budget**.
 - **Money Precision:** All monetary figures (`agreedPrice`, `payments`, `refunds`, `expenses`, `totalPrice`, `BudgetPlan` targets/limits, and rounded `suggestedPrice`) are validated and persisted as whole LKR integers (`Number.isSafeInteger`).
-- **Monthly Budgeting (`BudgetPlan`):** Supports both revenue/profit targets and per-category / ingredient spending limits evaluated against the `Asia/Colombo` calendar month, with 80% warning and 100% over-limit alerts surfaced on `Today` and `Money`.
-- **Schema & Storage Mapping (`v7` -> `expo-sqlite`):** Pure reducers and domain selectors live under `src/state/AppState.tsx` and `src/lib/*` with zero DOM dependencies so business rules, validation, and pricing formulas transfer directly to the React Native + SQLite target app (`Sheet -> @gorhom/bottom-sheet`, `motion -> Reanimated v3`, `persistence -> expo-sqlite`).
+- **Monthly Budgeting (`BudgetPlan`):** Supports both revenue/profit targets and per-category / ingredient spending limits evaluated against the `Asia/Colombo` calendar month, with 80% warning and 100% over-limit alerts surfaced on `Home` and `Money`.
+- **Persistence & Port Mapping (`src/state/persistence.ts` -> `expo-sqlite`):** Pure reducers (`src/state/AppState.tsx`) and domain selectors/calculators (`src/lib/*`) have zero DOM dependencies. The web app persists versioned state to `localStorage` with schema migrations, `PersistenceRecoveryScreen`, and JSON backup/restore (`BackupRestorePanel`), keeping business logic directly portable to React Native + `expo-sqlite` (`Sheet -> @gorhom/bottom-sheet`, `motion -> Reanimated v3`).
 
