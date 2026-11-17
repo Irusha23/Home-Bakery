@@ -23,7 +23,7 @@ export default function SelectField({
   className = "",
   ...props
 }: SelectFieldProps) {
-  const fieldId = id ?? label.toLowerCase().replaceAll(" ", "-")
+  const fieldId = id ?? label.toLowerCase().replace(/ /g, "-")
 
   return (
     <label className="block" htmlFor={fieldId}>

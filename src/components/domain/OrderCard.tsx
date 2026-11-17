@@ -1,20 +1,41 @@
 import {
   CalendarDays,
+  Check,
+  CheckCircle2,
   ChevronRight,
-  CircleDollarSign,
-  Clock3,
-  PackageCheck,
+  CreditCard,
+  Flame,
+  ShoppingBag,
 } from "lucide-react"
+import { getCollectionTargetMs } from "../../lib/countdown"
 import { formatDate, formatLkr, formatTime } from "../../lib/format"
-import type { Order, PaymentStatus, OrderStatus } from "../../types"
+import type { Order, OrderStatus, PaymentStatus } from "../../types"
+import CountdownBadge from "../ui/CountdownBadge"
 import StatusBadge from "../ui/StatusBadge"
 
-function orderTone(status: OrderStatus) {
+function quickActionIcon(label: string) {
+  if (label === "Confirm") return <Check aria-hidden="true" size={14} />
+  if (label === "Collected") return <CheckCircle2 aria-hidden="true" size={14} />
+  if (label === "Add payment") return <CreditCard aria-hidden="true" size={14} />
+  if (label === "To buy") return <ShoppingBag aria-hidden="true" size={14} />
+  return <Flame aria-hidden="true" size={14} />
+}
+
+function orderTone(status: OrderStatus, prepStatus: Order["preparationStatus"]) {
   if (status === "Completed") return "success" as const
-  if (status === "Confirmed" || status === "In Progress")
-    return "progress" as const
   if (status === "Cancelled") return "neutral" as const
-  return "warning" as const
+  if (status === "Draft") return "warning" as const
+  if (prepStatus === "Ready") return "success" as const
+  return "progress" as const
+}
+
+function orderLabel(status: OrderStatus, prepStatus: Order["preparationStatus"]) {
+  if (status === "Confirmed" || status === "In Progress") {
+    if (prepStatus === "Ready") return "Ready"
+    if (prepStatus === "In progress") return "Baking"
+    return "Confirmed"
+  }
+  return status
 }
 
 function paymentTone(status: PaymentStatus) {
@@ -26,95 +47,101 @@ function paymentTone(status: PaymentStatus) {
 
 type OrderCardProps = {
   order: Order
+  balanceDue?: number
+  quickActionLabel?: string
+  onQuickAction?: () => void
   onClick: () => void
 }
 
-export default function OrderCard({ order, onClick }: OrderCardProps) {
-  const totalQuantity = order.lines.reduce(
-    (sum, line) => sum + line.quantity,
-    0,
-  )
+export default function OrderCard({
+  order,
+  balanceDue,
+  quickActionLabel,
+  onQuickAction,
+  onClick,
+}: OrderCardProps) {
   const productSummary = order.lines
     .map((line) => `${line.quantity} × ${line.productName}`)
     .join(", ")
 
+  const statusText = orderLabel(order.status, order.preparationStatus)
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full rounded-card border border-warm-border bg-white p-4 text-left shadow-subtle transition duration-ui hover:-translate-y-0.5 hover:border-sage-border hover:shadow-card active:translate-y-0 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/25"
-    >
-      <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0 text-base font-semibold leading-snug text-cocoa">
-          {order.customerName}
-        </span>
-        <ChevronRight
-          aria-hidden="true"
-          className="mt-0.5 shrink-0 text-muted"
-          size={18}
-        />
-      </span>
-      <span className="mt-1 flex items-center justify-between gap-3">
-        <span className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted">
-          {order.reference}
-          {["Draft", "Cancelled", "Completed"].includes(order.status) ? (
-            <StatusBadge tone={orderTone(order.status)}>
-              {order.status}
+    <div className="rounded-card border border-warm-border bg-white shadow-subtle transition duration-ui hover:border-sage-border hover:shadow-card">
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full p-4 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/20"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold tracking-tight text-cocoa">
+              {order.customerName}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-muted">
+              {productSummary || "No items yet"}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <div className="text-right">
+              <span className="block text-sm font-bold tabular-nums text-cocoa">
+                {formatLkr(order.agreedPrice)}
+              </span>
+              {balanceDue !== undefined &&
+              balanceDue > 0 &&
+              order.status !== "Draft" &&
+              order.status !== "Cancelled" ? (
+                <span className="block text-[11px] font-semibold tabular-nums text-warning">
+                  Due {formatLkr(balanceDue)}
+                </span>
+              ) : null}
+            </div>
+            <ChevronRight aria-hidden="true" size={16} className="text-muted" />
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-warm-border/70 pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
+              <CalendarDays aria-hidden="true" size={13} className="text-sage" />
+              <span>
+                {formatDate(order.collectionDate)} · {formatTime(order.collectionTime)}
+              </span>
+            </span>
+            {order.status !== "Completed" && order.status !== "Cancelled" ? (
+              <CountdownBadge
+                targetMs={getCollectionTargetMs(
+                  order.collectionDate,
+                  order.collectionTime,
+                )}
+              />
+            ) : null}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <StatusBadge tone={orderTone(order.status, order.preparationStatus)}>
+              {statusText}
             </StatusBadge>
-          ) : null}
-        </span>
-        <span className="shrink-0 text-sm font-bold tabular-nums text-cocoa">
-          {formatLkr(order.agreedPrice)}
-        </span>
-      </span>
+            {order.status !== "Draft" && order.status !== "Cancelled" ? (
+              <StatusBadge tone={paymentTone(order.paymentStatus)}>
+                {order.paymentStatus}
+              </StatusBadge>
+            ) : null}
+          </div>
+        </div>
+      </button>
 
-      <span className="mt-3 block text-sm font-semibold leading-relaxed text-cocoa">
-        {productSummary}
-      </span>
-      <span className="mt-1 block text-xs text-muted">
-        {totalQuantity} {totalQuantity === 1 ? "product" : "products"}
-      </span>
-
-      <span className="mt-3 grid grid-cols-order-meta gap-3 rounded-control bg-ivory p-3">
-        <span className="flex items-center gap-2 border-r border-warm-border pr-3 text-xs text-muted">
-          <CalendarDays aria-hidden="true" size={15} className="text-sage" />
-          <span>
-            {formatDate(order.collectionDate)}
-            <span className="mt-0.5 flex items-center gap-1 font-semibold text-cocoa">
-              <Clock3 aria-hidden="true" size={12} />
-              {formatTime(order.collectionTime)}
-            </span>
-          </span>
-        </span>
-        <span className="min-w-0 space-y-2">
-          <span className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1 text-nav font-bold uppercase tracking-wide text-muted">
-              <PackageCheck aria-hidden="true" size={12} />
-              Prep
-            </span>
-            <span className="text-right text-xs font-semibold leading-tight text-cocoa">
-              {order.preparationStatus}
-            </span>
-          </span>
-          <span className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1 text-nav font-bold uppercase tracking-wide text-muted">
-              <CircleDollarSign aria-hidden="true" size={12} />
-              Paid
-            </span>
-            <span
-              className={`text-xs font-semibold ${
-                paymentTone(order.paymentStatus) === "success"
-                  ? "text-success"
-                  : paymentTone(order.paymentStatus) === "warning"
-                    ? "text-warning"
-                    : "text-sage-dark"
-              }`}
-            >
-              {order.paymentStatus}
-            </span>
-          </span>
-        </span>
-      </span>
-    </button>
+      {quickActionLabel && onQuickAction ? (
+        <div className="border-t border-warm-border/70 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={onQuickAction}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-control bg-sage-soft px-3 py-2 text-center text-xs font-semibold text-cocoa transition hover:bg-sage hover:text-white active:scale-button"
+          >
+            {quickActionIcon(quickActionLabel)}
+            <span>{quickActionLabel}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }

@@ -16,9 +16,9 @@ export default function AppShell({
   onNavigate,
 }: AppShellProps) {
   return (
-    <div className="mobile-shell min-h-screen bg-ivory text-cocoa shadow-shell">
+    <div className="mobile-shell min-h-screen bg-ivory text-cocoa">
       <main
-        className={`screen-safe-top min-h-screen ${
+        className={`screen-safe-top min-h-screen w-full overflow-x-hidden px-5 ${
           hideNavigation ? "pb-6" : "screen-bottom-padding"
         }`}
       >

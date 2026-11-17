@@ -1,4 +1,34 @@
-import type { AppData, Order, Recipe, RecipeSnapshot } from "../types"
+import type {
+  AppData,
+  AppSettings,
+  BudgetPlan,
+  Order,
+  Recipe,
+  RecipeSnapshot,
+} from "../types"
+import { BUILT_IN_EXPENSE_CATEGORIES } from "../lib/expenses"
+
+export const defaultBudgetPlan: BudgetPlan = {
+  monthlySalesTarget: 150000,
+  monthlyProfitTarget: 60000,
+  ingredientSpendLimit: 75000,
+  categoryLimits: {},
+  updatedAt: "2026-01-01T00:00:00.000Z",
+}
+
+export const defaultSettings: AppSettings = {
+  businessName: "Udeni's Specials",
+  ownerName: "Udeni",
+  defaultLabourRatePerHour: 600,
+  defaultPricingMode: "margin",
+  defaultMarginPercent: 45,
+  defaultMarkupPercent: 80,
+  priceRoundingStep: 50,
+  defaultLowStockThreshold: 2,
+  backupReminderDismissedAt: null,
+  backupReminderSnoozedUntil: null,
+  lastBackupAt: null,
+}
 
 export const demoRecipes: Recipe[] = [
   {
@@ -9,6 +39,7 @@ export const demoRecipes: Recipe[] = [
     version: 3,
     yield: 1,
     yieldLabel: "1 × 1.5 kg cake",
+    expectedOutput: null,
     preparationMinutes: 150,
     ingredients: [
       {
@@ -56,6 +87,7 @@ export const demoRecipes: Recipe[] = [
     version: 2,
     yield: 1,
     yieldLabel: "1 box of 12",
+    expectedOutput: null,
     preparationMinutes: 75,
     ingredients: [
       {
@@ -96,6 +128,7 @@ export const demoRecipes: Recipe[] = [
     version: 4,
     yield: 1,
     yieldLabel: "1 × 1 kg cake",
+    expectedOutput: null,
     preparationMinutes: 95,
     ingredients: [
       {
@@ -135,6 +168,19 @@ function snapshot(recipe: Recipe): RecipeSnapshot {
   return recipeSnapshot
 }
 
+function relativeIsoDate(offsetDays: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  return d.toISOString().slice(0, 10)
+}
+
+function relativeIsoTimestamp(offsetDays: number, hourUtc = 9): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  d.setUTCHours(hourUtc, 0, 0, 0)
+  return d.toISOString()
+}
+
 const sampleOrders: Order[] = [
   {
     id: "order-1008",
@@ -142,10 +188,10 @@ const sampleOrders: Order[] = [
     customerId: "customer-nadeesha",
     customerName: "Nadeesha Perera",
     isQuickOrder: false,
-    status: "In Progress",
-    preparationStatus: "In progress",
+    status: "Confirmed",
+    preparationStatus: "Awaiting preparation",
     paymentStatus: "Part paid",
-    collectionDate: "2025-04-15",
+    collectionDate: relativeIsoDate(0),
     collectionTime: "16:30",
     instructions: "Gold lettering: Happy Birthday Amaya.",
     lines: [
@@ -247,15 +293,15 @@ const sampleOrders: Order[] = [
     payments: [
       {
         id: "payment-1008-1",
-        date: "2025-04-10",
+        date: relativeIsoDate(-3),
         amount: 7500,
         method: "Bank transfer",
         note: "Deposit",
       },
     ],
-    createdAt: "2025-04-09T10:00:00.000Z",
-    updatedAt: "2025-04-15T08:30:00.000Z",
-    confirmedAt: "2025-04-10T07:20:00.000Z",
+    createdAt: relativeIsoTimestamp(-4, 8),
+    updatedAt: relativeIsoTimestamp(0, 7),
+    confirmedAt: relativeIsoTimestamp(-3, 7),
   },
   {
     id: "order-1009",
@@ -266,7 +312,7 @@ const sampleOrders: Order[] = [
     status: "Confirmed",
     preparationStatus: "Awaiting preparation",
     paymentStatus: "Paid",
-    collectionDate: "2025-04-16",
+    collectionDate: relativeIsoDate(1),
     collectionTime: "10:00",
     instructions: "Pastel green and ivory buttercream.",
     lines: [
@@ -350,14 +396,14 @@ const sampleOrders: Order[] = [
     payments: [
       {
         id: "payment-1009-1",
-        date: "2025-04-12",
+        date: relativeIsoDate(-2),
         amount: 9600,
         method: "Cash",
       },
     ],
-    createdAt: "2025-04-11T10:00:00.000Z",
-    updatedAt: "2025-04-12T09:00:00.000Z",
-    confirmedAt: "2025-04-11T10:30:00.000Z",
+    createdAt: relativeIsoTimestamp(-2, 10),
+    updatedAt: relativeIsoTimestamp(-1, 9),
+    confirmedAt: relativeIsoTimestamp(-2, 11),
   },
   {
     id: "order-1010",
@@ -368,7 +414,7 @@ const sampleOrders: Order[] = [
     status: "Draft",
     preparationStatus: "Not started",
     paymentStatus: "Unpaid",
-    collectionDate: "2025-04-18",
+    collectionDate: relativeIsoDate(3),
     collectionTime: "14:00",
     instructions: "",
     lines: [
@@ -394,8 +440,8 @@ const sampleOrders: Order[] = [
     reservations: [],
     shortages: [],
     payments: [],
-    createdAt: "2025-04-14T12:15:00.000Z",
-    updatedAt: "2025-04-14T12:15:00.000Z",
+    createdAt: relativeIsoTimestamp(-1, 12),
+    updatedAt: relativeIsoTimestamp(-1, 12),
     confirmedAt: null,
   },
   {
@@ -406,8 +452,8 @@ const sampleOrders: Order[] = [
     isQuickOrder: false,
     status: "Completed",
     preparationStatus: "Completed",
-    paymentStatus: "Unpaid",
-    collectionDate: "2025-04-12",
+    paymentStatus: "Paid",
+    collectionDate: relativeIsoDate(-2),
     collectionTime: "15:30",
     instructions: "Collected by customer.",
     lines: [
@@ -432,10 +478,18 @@ const sampleOrders: Order[] = [
     },
     reservations: [],
     shortages: [],
-    payments: [],
-    createdAt: "2025-04-08T09:00:00.000Z",
-    updatedAt: "2025-04-12T16:00:00.000Z",
-    confirmedAt: "2025-04-08T09:20:00.000Z",
+    payments: [
+      {
+        id: "payment-1005-1",
+        date: relativeIsoDate(-2),
+        amount: 10000,
+        method: "Cash",
+      },
+    ],
+    createdAt: relativeIsoTimestamp(-5, 9),
+    updatedAt: relativeIsoTimestamp(-2, 16),
+    confirmedAt: relativeIsoTimestamp(-5, 10),
+    collectedAt: relativeIsoTimestamp(-2, 16),
   },
 ]
 
@@ -552,6 +606,7 @@ export const demoData: AppData = {
       physical: 4,
       unit: "unit",
       category: "finished",
+      unbatchedLegacyQuantity: 4,
       lowStockThreshold: 1,
       averageUnitCost: 1850,
     },
@@ -561,13 +616,23 @@ export const demoData: AppData = {
       physical: 2,
       unit: "unit",
       category: "finished",
+      unbatchedLegacyQuantity: 2,
       lowStockThreshold: 1,
       averageUnitCost: 1400,
     },
   ],
   extraStockPlans: [],
+  extraStockPreparations: [],
+  finishedStockBatches: [],
+  finishedStockTransactions: [],
   purchases: [],
+  refunds: [],
+  expenseCategories: structuredClone(BUILT_IN_EXPENSE_CATEGORIES),
+  expenses: [],
+  expenseAllocationHistories: [],
   inventoryMovements: [],
   shoppingSelections: {},
   preparationRecords: [],
+  settings: structuredClone(defaultSettings),
+  budgetPlan: structuredClone(defaultBudgetPlan),
 }

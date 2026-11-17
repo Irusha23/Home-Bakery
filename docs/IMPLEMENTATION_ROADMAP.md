@@ -192,3 +192,15 @@ Acceptance:
 ## Definition of project completion
 
 The initial release is complete when the owner can manage real orders, calculate prices accurately, record expenses and payments, retrieve saved records offline, and recover her business data through a tested backup and restore workflow.
+
+## Living Web Prototype Spec Status (Phases 0–10 Complete)
+
+This Figma Make / Vite React web prototype now serves as the complete interactive specification prior to the Expo React Native + SQLite port:
+
+- **Navigation:** 5-tab structure (`Today`, `Orders`, `Recipes`, `Stock`, `Money`) with stack history support (`src/navigation/useNavigationStack.ts`).
+- **Pure Domain Logic (`src/lib/*`):** Framework-free whole-LKR modules ready for direct copy into the Expo TypeScript codebase (`pricing.ts`, `orders.ts`, `inventory.ts`, `financials.ts`, `financialReports.ts`, `expenses.ts`, `budget.ts`, `csv.ts`, `preparation.ts`, `orderLifecycle.ts`, and `selectors/todaySelectors.ts`).
+- **UI & Motion Primitive Mapping for Expo Port:**
+  - `Sheet` (`src/components/ui/Sheet.tsx`) -> `@gorhom/bottom-sheet`
+  - `motion/react` springs & transitions (`src/lib/motion.ts`) -> `react-native-reanimated` v3
+  - `ToastProvider` (`src/components/ui/Toast.tsx`) -> native toast/banner manager
+  - `localStorage` persistence (`src/state/persistence.ts`, schema v7) -> `expo-sqlite` transactional repositories with JSON backup export/import preserved

@@ -1100,6 +1100,10 @@ Reports must distinguish historical recorded or approved costs from the latest a
 
 An expense must not be counted both as a direct cost and again as an allocated shared expense.
 
+### 17.6 Prototype persistence defaults
+
+The current local-first prototype stores expenses in `AppData`. Its built-in expense categories are `Utilities` and `Other`, identified by stable IDs; custom categories use their own stable IDs. Existing local schema-v5 data and backup-v1 files that omit expense collections load with those built-in categories and empty expense and allocation-history collections. New local data uses schema v6, and new backup exports use backup schema v2. Invalid present expense or allocation data must be preserved for recovery or rejected during restore, not silently repaired.
+
 ---
 
 ## 18. Payments, Refunds, and Cancellation Settlements
@@ -1599,3 +1603,15 @@ Its core concepts must remain distinct:
 These concepts work together through explicit, testable rules. They must not be collapsed into a single record or updated implicitly in ways that destroy historical information.
 
 The first release should prioritize correctness, simplicity, traceability, offline reliability, and a natural baking workflow over feature count or architectural sophistication.
+
+---
+
+## 29. Living Web Design Spec & React Native Port Mapping
+
+Approved updates finalized during implementation of the interactive web prototype:
+
+- **5-Tab Information Architecture:** `Today`, `Orders`, `Recipes` (Recipes & Products catalogue), `Stock` (Shopping planner + Pantry & Finished Stock), and `Money` (Overview, Monthly Budget & Limits, Expenses, Reports & CSV Export).
+- **Money Precision:** All monetary figures (`agreedPrice`, `payments`, `refunds`, `expenses`, `totalPrice`, `BudgetPlan` targets/limits, and rounded `suggestedPrice`) are validated and persisted as whole LKR integers (`Number.isSafeInteger`).
+- **Monthly Budgeting (`BudgetPlan`):** Supports both revenue/profit targets and per-category / ingredient spending limits evaluated against the `Asia/Colombo` calendar month, with 80% warning and 100% over-limit alerts surfaced on `Today` and `Money`.
+- **Schema & Storage Mapping (`v7` -> `expo-sqlite`):** Pure reducers and domain selectors live under `src/state/AppState.tsx` and `src/lib/*` with zero DOM dependencies so business rules, validation, and pricing formulas transfer directly to the React Native + SQLite target app (`Sheet -> @gorhom/bottom-sheet`, `motion -> Reanimated v3`, `persistence -> expo-sqlite`).
+

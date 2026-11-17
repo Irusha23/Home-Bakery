@@ -4,47 +4,57 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  --color-ivory: #f7f5f0;
+  --color-ivory: #f8fafc;
   --color-white: #ffffff;
-  --color-sage: #78917b;
-  --color-sage-dark: #566f5b;
-  --color-sage-soft: #e7ede5;
-  --color-sage-soft-strong: #dce6da;
-  --color-sage-border: #cedacb;
-  --color-cocoa: #5c463c;
-  --color-muted: #81786f;
-  --color-muted-light: #aaa299;
-  --color-warm-border: #e7e1d7;
-  --color-neutral-soft: #f1eee8;
-  --color-success: #477653;
-  --color-success-soft: #e6f0e7;
-  --color-warning: #a96f21;
-  --color-warning-soft: #fbf0df;
-  --color-warning-border: #efd9b6;
-  --color-error: #b54747;
+  --color-sage: #111827;
+  --color-sage-dark: #0f172a;
+  --color-sage-soft: #f1f5f9;
+  --color-sage-soft-strong: #e2e8f0;
+  --color-sage-border: #cbd5e1;
+  --color-rose: #e11d48;
+  --color-rose-soft: #fff1f2;
+  --color-rose-border: #fecdd3;
+  --color-cocoa: #0f172a;
+  --color-muted: #64748b;
+  --color-muted-light: #94a3b8;
+  --color-warm-border: #e2e8f0;
+  --color-neutral-soft: #f1f5f9;
+  --color-cream-dark: #e2e8f0;
+  --color-success: #059669;
+  --color-success-soft: #ecfdf5;
+  --color-warning: #d97706;
+  --color-warning-soft: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-error: #e11d48;
+  --color-error-soft: #fff1f2;
+  --color-error-border: #fecdd3;
 
   --radius-control: 0.875rem;
+  --radius-grouped: 1rem;
   --radius-card: 1.25rem;
   --radius-sheet: 1.75rem;
-  --radius-nav: 1.625rem;
-  --radius-nav-item: 1.15rem;
+  --radius-nav: 1.5rem;
+  --radius-nav-item: 1.125rem;
 
-  --shadow-subtle: 0 1px 2px rgb(92 70 60 / 0.04);
-  --shadow-card: 0 8px 24px rgb(92 70 60 / 0.08);
-  --shadow-button: 0 5px 14px rgb(86 111 91 / 0.2);
-  --shadow-nav: 0 10px 32px rgb(92 70 60 / 0.14);
-  --shadow-dialog: 0 24px 70px rgb(92 70 60 / 0.2);
-  --shadow-shell: 0 0 60px rgb(92 70 60 / 0.08);
+  --shadow-subtle: 0 1px 3px rgb(15 23 42 / 0.04);
+  --shadow-grouped: 0 2px 10px rgb(15 23 42 / 0.04);
+  --shadow-card: 0 10px 30px rgb(15 23 42 / 0.06);
+  --shadow-button: 0 6px 16px rgb(15 23 42 / 0.14);
+  --shadow-nav: 0 12px 32px rgb(15 23 42 / 0.1);
+  --shadow-dialog: 0 24px 70px rgb(15 23 42 / 0.18);
+  --shadow-sheet: 0 28px 80px rgb(15 23 42 / 0.22);
+  --shadow-shell: 0 0 60px rgb(15 23 42 / 0.06);
 
-  --text-nav: 0.625rem;
+  --text-nav: 0.6875rem;
   --text-title: 1.625rem;
-  --text-screen-title: 2rem;
+  --text-screen-title: 1.875rem;
 
-  --tracking-section: 0.11em;
+  --tracking-section: 0.09em;
 
   --spacing-touch: 2.75rem;
-  --spacing-page: 1rem;
-  --spacing-nav-item: 3.5rem;
+  --spacing-kitchen-touch: 3.5rem;
+  --spacing-page: 1.25rem;
+  --spacing-nav-item: 3.75rem;
   --spacing-quick-action: 7.25rem;
   --spacing-hero-image: 13.25rem;
   --spacing-dialog: 26rem;
@@ -54,13 +64,17 @@
   --spacing-dialog-content: 24rem;
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
   --duration-ui: 180ms;
+  --dur-micro: 180ms;
+  --dur-push: 340ms;
+  --dur-sheet: 360ms;
 }
 
 :root {
   font-family: var(--font-sans);
   color: var(--color-cocoa);
-  background: var(--color-sage-soft);
+  background: #eef2f6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -70,16 +84,18 @@
 }
 
 html {
-  min-width: 20rem;
-  background: var(--color-sage-soft);
+  width: 100%;
+  overflow-x: hidden;
+  background: #eef2f6;
   scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  min-width: 20rem;
+  width: 100%;
   min-height: 100vh;
-  background: var(--color-sage-soft);
+  overflow-x: hidden;
+  background: #eef2f6;
 }
 
 button,
@@ -93,24 +109,29 @@ button {
 
 .mobile-shell {
   width: 100%;
-  max-width: 27rem;
+  max-width: 26.875rem;
   margin-inline: auto;
+  overflow-x: hidden;
 }
 
 .screen-safe-top {
-  padding-top: calc(env(safe-area-inset-top, 0px) + 0.875rem);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
 }
 
 .screen-bottom-padding {
-  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .bottom-nav-safe {
   bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
+.pb-safe-bottom {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
 .w-nav {
-  width: min(calc(100% - 0.5rem), 26rem);
+  width: min(calc(100% - 1.5rem), 25rem);
 }
 
 .grid-cols-hero {

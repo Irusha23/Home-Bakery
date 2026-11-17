@@ -1,46 +1,62 @@
 import { useCallback, useState } from "react"
 import AppShell from "./components/AppShell"
-import Dialog from "./components/ui/Dialog"
-import AppStateProvider from "./state/AppState"
+import Sheet from "./components/ui/Sheet"
+import { ToastProvider } from "./components/ui/Toast"
+import { selectAttentionItems } from "./lib/selectors/todaySelectors"
+import { useNavigationStack } from "./navigation/useNavigationStack"
+import AppStateProvider, { useAppState } from "./state/AppState"
 import HomeScreen from "./screens/HomeScreen"
-import InventoryScreen from "./screens/InventoryScreen"
+import KitchenScreen from "./screens/KitchenScreen"
+import MoneyScreen from "./screens/MoneyScreen"
 import OrdersScreen from "./screens/OrdersScreen"
-import PlaceholderScreen from "./screens/PlaceholderScreen"
-import RecipesScreen from "./screens/RecipesScreen"
-import ShoppingScreen from "./screens/ShoppingScreen"
+import SettingsScreen from "./screens/SettingsScreen"
 import type { StarterAction, TabId } from "./types"
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<TabId>("home")
-  const [starterAction, setStarterAction] = useState<StarterAction | null>(null)
+  const { state } = useAppState()
+  const { activeTab, starterAction, switchTab, consumeStarterAction } =
+    useNavigationStack("today")
   const [isUpdatesOpen, setIsUpdatesOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [focusedScreen, setFocusedScreen] = useState(false)
-  const [inventoryIntent, setInventoryIntent] = useState<string | undefined>()
+  const [orderIntent, setOrderIntent] = useState<string | undefined>()
+
+  const attentionItems = selectAttentionItems(state).filter(
+    (item) => item.kind !== "low-stock",
+  )
 
   const navigate = useCallback(
     (tab: TabId, action: StarterAction | null = null) => {
-      setActiveTab(tab)
-      setStarterAction(action)
+      switchTab(tab, action)
       setFocusedScreen(false)
       window.scrollTo({ top: 0, behavior: "smooth" })
     },
-    [],
+    [switchTab],
   )
 
-  const consumeStarterAction = useCallback(() => {
-    setStarterAction(null)
-  }, [])
+  const openOrder = useCallback(
+    (orderId: string) => {
+      setOrderIntent(orderId)
+      navigate("orders")
+    },
+    [navigate],
+  )
 
-  const consumeInventoryIntent = useCallback(() => {
-    setInventoryIntent(undefined)
+  const consumeOrderIntent = useCallback(() => {
+    setOrderIntent(undefined)
   }, [])
 
   const renderScreen = () => {
-    if (activeTab === "home") {
+    if (isSettingsOpen) {
+      return <SettingsScreen onBack={() => setIsSettingsOpen(false)} />
+    }
+    if (activeTab === "today") {
       return (
         <HomeScreen
           onNavigate={navigate}
           onOpenUpdates={() => setIsUpdatesOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenOrder={openOrder}
         />
       )
     }
@@ -48,67 +64,86 @@ function AppContent() {
       return (
         <OrdersScreen
           starterAction={starterAction}
+          initialOrderId={orderIntent}
+          onConsumeOrderIntent={consumeOrderIntent}
           onConsumeStarterAction={consumeStarterAction}
           onFocusedChange={setFocusedScreen}
-          onOpenShopping={() => navigate("shopping")}
+          onOpenShopping={() => navigate("kitchen", "plan-shopping")}
         />
       )
     }
-    if (activeTab === "recipes") {
-      return <RecipesScreen onFocusedChange={setFocusedScreen} />
-    }
-    if (activeTab === "shopping") {
+    if (activeTab === "kitchen") {
       return (
-        <ShoppingScreen
+        <KitchenScreen
           starterAction={starterAction}
           onConsumeStarterAction={consumeStarterAction}
           onFocusedChange={setFocusedScreen}
-          onOpenInventory={(inventoryId) => {
-            setInventoryIntent(inventoryId)
-            navigate("inventory")
-          }}
         />
       )
     }
-    if (activeTab === "inventory") {
+    if (activeTab === "money") {
       return (
-        <InventoryScreen
+        <MoneyScreen
           starterAction={starterAction}
-          initialInventoryId={inventoryIntent}
-          onConsumeStarterAction={consumeStarterAction}
-          onConsumeInventoryIntent={consumeInventoryIntent}
-          onFocusedChange={setFocusedScreen}
+          onOpenOrder={openOrder}
+          onViewDueOrders={() => navigate("orders", "view-due")}
         />
       )
     }
-    return <PlaceholderScreen tab={activeTab} starterAction={starterAction} />
+    return null
   }
 
   return (
     <>
       <AppShell
         activeTab={activeTab}
-        hideNavigation={focusedScreen}
-        onNavigate={(tab) => navigate(tab)}
+        hideNavigation={focusedScreen || isSettingsOpen}
+        onNavigate={(tab) => {
+          setIsSettingsOpen(false)
+          navigate(tab)
+        }}
       >
         {renderScreen()}
       </AppShell>
 
-      <Dialog
+      <Sheet
         open={isUpdatesOpen}
-        title="You’re all caught up"
-        description="Two reminders are already highlighted on your dashboard."
+        title="Bakery reminders"
+        subtitle="Live alerts derived from your orders, stock, and backups"
         onClose={() => setIsUpdatesOpen(false)}
       >
-        <div className="space-y-3">
-          <div className="rounded-card bg-warning-soft p-4 text-sm text-cocoa">
-            Flour is short by 1.47 kg for confirmed orders.
-          </div>
-          <div className="rounded-card bg-sage-soft p-4 text-sm text-cocoa">
-            Nadeesha’s cake is due for collection at 4:30 PM.
-          </div>
+        <div className="space-y-2.5">
+          {attentionItems.length > 0 ? (
+            attentionItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setIsUpdatesOpen(false)
+                  if (item.kind === "backup") {
+                    setIsSettingsOpen(true)
+                  } else if (item.orderId) {
+                    openOrder(item.orderId)
+                  } else {
+                    navigate(item.targetTab, item.starterAction ?? null)
+                  }
+                }}
+                className={`w-full rounded-card border p-3.5 text-left transition active:scale-button ${item.tone === "warning"
+                    ? "border-warning-border bg-warning-soft text-cocoa"
+                    : "border-sage-border bg-sage-soft text-cocoa"
+                  }`}
+              >
+                <div className="text-sm font-semibold">{item.title}</div>
+                <p className="mt-0.5 text-xs text-muted">{item.detail}</p>
+              </button>
+            ))
+          ) : (
+            <div className="rounded-card bg-sage-soft p-4 text-sm text-cocoa">
+              Everything looks clear right now — no shortages or overdue bakes.
+            </div>
+          )}
         </div>
-      </Dialog>
+      </Sheet>
     </>
   )
 }
@@ -116,7 +151,9 @@ function AppContent() {
 export default function App() {
   return (
     <AppStateProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AppStateProvider>
   )
 }

@@ -1,37 +1,73 @@
 import { useMemo, useState } from "react"
 import {
+  Archive,
   BookOpen,
+  Calculator,
   Clock3,
+  Copy,
   History,
+  Layers,
   Package,
   Pencil,
+  Plus,
+  RotateCcw,
   Scale,
-  Save,
 } from "lucide-react"
-import Button from "../components/ui/Button"
+import InventoryItemSheet from "../components/domain/InventoryItemSheet"
+import ProductEditorSheet from "../components/domain/ProductEditorSheet"
+import PricingCalculatorSheet from "../components/domain/PricingCalculatorSheet"
+import RecipeEditorSheet from "../components/domain/RecipeEditorSheet"
 import ScreenHeader from "../components/ScreenHeader"
+import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
+import EmptyState from "../components/ui/EmptyState"
 import Field from "../components/ui/Field"
+import { GroupedList, ListRow } from "../components/ui/GroupedList"
+import MoneyText from "../components/ui/MoneyText"
+import SegmentedControl from "../components/ui/SegmentedControl"
 import StatusBadge from "../components/ui/StatusBadge"
-import TextAreaField from "../components/ui/TextAreaField"
+import Stepper from "../components/ui/Stepper"
+import { useToast } from "../components/ui/Toast"
 import { formatLkr, formatQuantity } from "../lib/format"
+import {
+  calculateItemRecipeCost,
+  estimateRecipeMaterialCost,
+  getDisplayPriceUnitLabel,
+  toDisplayUnitPrice,
+} from "../lib/pricing"
 import { useAppState } from "../state/AppState"
+import type { InventoryItem, Product, Recipe } from "../types"
 
 type RecipesScreenProps = {
   onFocusedChange: (focused: boolean) => void
 }
 
+type RecipesTabSection = "recipes" | "products"
+
 export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
-  const { state, dispatch } = useAppState()
+  const { state, dispatchIfAccepted } = useAppState()
+  const { showToast } = useToast()
+
+  const [section, setSection] = useState<RecipesTabSection>("recipes")
   const [search, setSearch] = useState("")
+  const [showArchived, setShowArchived] = useState(false)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
-  const [editing, setEditing] = useState(false)
-  const [instructions, setInstructions] = useState("")
-  const [error, setError] = useState("")
+  const [scaleMultiplier, setScaleMultiplier] = useState(1)
+  const [showHistory, setShowHistory] = useState(false)
+
+  const [recipeEditorTarget, setRecipeEditorTarget] =
+    useState<Recipe | "new" | null>(null)
+  const [productEditorTarget, setProductEditorTarget] =
+    useState<Product | "new" | null>(null)
+  const [pricingTarget, setPricingTarget] = useState<Recipe | null>(null)
+  const [editingPriceItem, setEditingPriceItem] =
+    useState<InventoryItem | null>(null)
 
   const recipes = useMemo(() => {
     const query = search.trim().toLowerCase()
     return state.recipes.filter((recipe) => {
+      if (!showArchived && recipe.archived) return false
+      if (!query) return true
       const product = state.products.find(
         (item) => item.id === recipe.productId,
       )
@@ -43,7 +79,19 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
         .toLowerCase()
         .includes(query)
     })
-  }, [search, state.products, state.recipes])
+  }, [search, showArchived, state.products, state.recipes])
+
+  const products = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return state.products.filter((product) => {
+      if (!showArchived && product.archived) return false
+      if (!query) return true
+      return [product.name, ...product.variants.map((v) => v.name)]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    })
+  }, [search, showArchived, state.products])
 
   const selectedRecipe = state.recipes.find(
     (recipe) => recipe.id === selectedRecipeId,
@@ -51,46 +99,32 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
 
   const openRecipe = (recipeId: string) => {
     setSelectedRecipeId(recipeId)
-    setEditing(false)
-    setError("")
+    setScaleMultiplier(1)
+    setShowHistory(false)
     onFocusedChange(true)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const closeRecipe = () => {
     setSelectedRecipeId(null)
-    setEditing(false)
-    setError("")
+    setShowHistory(false)
     onFocusedChange(false)
   }
 
-  const beginEdit = () => {
-    if (!selectedRecipe) return
-    setInstructions(selectedRecipe.instructions.join("\n"))
-    setEditing(true)
-  }
-
-  const saveVersion = () => {
-    if (!selectedRecipe) return
-    const nextInstructions = instructions
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean)
-    if (!nextInstructions.length) {
-      setError("Add at least one preparation instruction.")
-      return
+  const handleDuplicateRecipe = (source: Recipe) => {
+    const clone: Recipe = {
+      ...structuredClone(source),
+      id: `recipe-${crypto.randomUUID().slice(0, 8)}`,
+      name: `${source.name} (Copy)`,
+      version: 1,
+      archived: false,
+      history: [],
+      updatedAt: new Date().toISOString(),
     }
-    dispatch({
-      type: "UPDATE_RECIPE",
-      recipe: {
-        ...selectedRecipe,
-        instructions: nextInstructions,
-        version: selectedRecipe.version + 1,
-        updatedAt: new Date().toISOString(),
-      },
-    })
-    setEditing(false)
-    setError("")
+    if (dispatchIfAccepted({ type: "ADD_RECIPE", recipe: clone })) {
+      showToast("Recipe duplicated")
+      openRecipe(clone.id)
+    }
   }
 
   if (selectedRecipe) {
@@ -100,220 +134,529 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
     const variant = product?.variants.find(
       (item) => item.id === selectedRecipe.variantId,
     )
+    const liveBreakdown = estimateRecipeMaterialCost(
+      selectedRecipe,
+      state.inventory,
+      state.settings.defaultLabourRatePerHour,
+    )
+    const effectiveCost = liveBreakdown.hasLivePricing
+      ? liveBreakdown.totalCost
+      : selectedRecipe.estimatedCost
 
     return (
-      <div className="px-page pb-6">
-        <ScreenHeader
-          eyebrow={`${product?.name} · v${selectedRecipe.version}`}
-          title={selectedRecipe.name}
-          subtitle={variant?.name}
-          onBack={closeRecipe}
-          backLabel="Back to recipes"
-        />
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <Card className="p-3 text-center">
-            <Scale aria-hidden="true" className="mx-auto text-sage" size={18} />
-            <p className="mt-2 text-xs font-semibold text-cocoa">
-              {selectedRecipe.yieldLabel}
-            </p>
-          </Card>
-          <Card className="p-3 text-center">
-            <Clock3
-              aria-hidden="true"
-              className="mx-auto text-sage"
-              size={18}
-            />
-            <p className="mt-2 text-xs font-semibold text-cocoa">
-              {selectedRecipe.preparationMinutes} min
-            </p>
-          </Card>
-          <Card className="p-3 text-center">
-            <History
-              aria-hidden="true"
-              className="mx-auto text-sage"
-              size={18}
-            />
-            <p className="mt-2 text-xs font-semibold text-cocoa">
-              Version {selectedRecipe.version}
-            </p>
-          </Card>
-        </div>
-
-        <section className="mt-6">
-          <div className="mb-3 text-lg font-semibold text-cocoa">
-            Ingredients
-          </div>
-          <Card className="divide-y divide-warm-border p-0">
-            {selectedRecipe.ingredients.map((ingredient) => (
-              <div
-                key={ingredient.inventoryId}
-                className="flex items-center justify-between gap-3 p-4 text-sm"
+      <>
+        <div className="focused-flow pb-10">
+          <ScreenHeader
+            title={selectedRecipe.name}
+            subtitle={`${product?.name ?? "Custom product"}${
+              variant ? ` · ${variant.name}` : ""
+            } · v${selectedRecipe.version}`}
+            onBack={closeRecipe}
+            action={
+              <Button
+                size="compact"
+                variant="secondary"
+                leadingIcon={<Pencil aria-hidden="true" size={14} />}
+                onClick={() => setRecipeEditorTarget(selectedRecipe)}
               >
-                <span className="text-muted">{ingredient.name}</span>
-                <span className="font-semibold text-cocoa">
-                  {formatQuantity(ingredient.quantity, ingredient.unit)}
-                </span>
-              </div>
-            ))}
-          </Card>
-        </section>
+                Edit
+              </Button>
+            }
+          />
 
-        <section className="mt-6">
-          <div className="mb-3 text-lg font-semibold text-cocoa">Packaging</div>
-          <Card className="space-y-3">
-            {selectedRecipe.packaging.map((item) => (
-              <div
-                key={item.inventoryId}
-                className="flex items-center justify-between gap-3"
-              >
-                <span className="flex items-center gap-2 text-sm text-muted">
-                  <Package aria-hidden="true" size={16} />
-                  {item.name}
-                </span>
-                <span className="text-sm font-semibold text-cocoa">
-                  {formatQuantity(item.quantity, item.unit)}
-                </span>
+          <div className="space-y-4">
+            <Card className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge tone="neutral">
+                  {selectedRecipe.yieldLabel}
+                </StatusBadge>
+                <StatusBadge tone="progress">
+                  <Clock3 aria-hidden="true" size={12} />{" "}
+                  {selectedRecipe.preparationMinutes} mins
+                </StatusBadge>
+                {selectedRecipe.archived ? (
+                  <StatusBadge tone="warning">Archived</StatusBadge>
+                ) : null}
               </div>
-            ))}
-          </Card>
-        </section>
 
-        <section className="mt-6">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-lg font-semibold text-cocoa">Preparation</div>
-            <StatusBadge tone="neutral">
-              Library v{selectedRecipe.version}
-            </StatusBadge>
-          </div>
-          {editing ? (
-            <Card>
-              <TextAreaField
-                label="Preparation instructions"
-                value={instructions}
-                onChange={(event) => setInstructions(event.target.value)}
-                error={error || undefined}
-                helperText="Use one clear instruction per line."
-              />
-              <div className="mt-4 space-y-2">
-                <Button
-                  fullWidth
-                  leadingIcon={<Save aria-hidden="true" size={17} />}
-                  onClick={saveVersion}
-                >
-                  Save as version {selectedRecipe.version + 1}
-                </Button>
-                <Button
-                  fullWidth
-                  variant="ghost"
-                  onClick={() => setEditing(false)}
-                >
-                  Cancel
-                </Button>
+              <div className="grid grid-cols-2 gap-3 border-t border-warm-border pt-3">
+                <div>
+                  <div className="text-xs text-muted">Live cost (1× batch)</div>
+                  <div className="mt-0.5 text-lg font-bold text-cocoa">
+                    <MoneyText
+                      amount={Math.round(effectiveCost * scaleMultiplier)}
+                    />
+                  </div>
+                  {scaleMultiplier !== 1 ? (
+                    <div className="text-[11px] text-muted">
+                      Scaled ×{scaleMultiplier}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex items-center justify-end">
+                  <Button
+                    size="compact"
+                    variant="soft"
+                    leadingIcon={<Calculator aria-hidden="true" size={15} />}
+                    onClick={() => setPricingTarget(selectedRecipe)}
+                  >
+                    Price
+                  </Button>
+                </div>
               </div>
             </Card>
-          ) : (
-            <Card>
-              <ol className="space-y-4">
-                {selectedRecipe.instructions.map((instruction, index) => (
-                  <li key={instruction} className="flex items-start gap-3">
-                    <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-sage-soft text-xs font-bold text-sage-dark">
+
+            <Card
+              tone="sage"
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-2 text-sm font-semibold text-cocoa">
+                <Scale aria-hidden="true" size={16} />
+                Batch scale
+              </div>
+              <Stepper
+                label="Batch scale multiplier"
+                value={scaleMultiplier}
+                min={0.5}
+                max={10}
+                step={0.5}
+                unit="×"
+                onChange={setScaleMultiplier}
+              />
+            </Card>
+
+            <GroupedList title={`Ingredients (${selectedRecipe.ingredients.length})`}>
+              {selectedRecipe.ingredients.map((item) => {
+                const invItem = state.inventory.find(
+                  (i) => i.inventoryId === item.inventoryId,
+                )
+                const unitPrice = invItem
+                  ? toDisplayUnitPrice(invItem.averageUnitCost, invItem.unit)
+                  : undefined
+                const priceUnitLabel = invItem
+                  ? getDisplayPriceUnitLabel(invItem.unit)
+                  : "kg"
+                const lineCost = calculateItemRecipeCost(
+                  item.quantity * scaleMultiplier,
+                  item.unit,
+                  invItem,
+                )
+                return (
+                  <ListRow
+                    key={`${item.inventoryId}-${item.name}`}
+                    title={invItem?.name ?? item.name}
+                    subtitle={
+                      unitPrice !== undefined
+                        ? `${formatLkr(unitPrice)} / ${priceUnitLabel}${
+                            lineCost !== null ? ` · Cost ${formatLkr(lineCost)}` : ""
+                          }`
+                        : "Tap to set price per " + priceUnitLabel
+                    }
+                    value={formatQuantity(
+                      Number((item.quantity * scaleMultiplier).toFixed(2)),
+                      item.unit,
+                    )}
+                    showChevron={Boolean(invItem)}
+                    onClick={
+                      invItem ? () => setEditingPriceItem(invItem) : undefined
+                    }
+                  />
+                )
+              })}
+            </GroupedList>
+
+            {selectedRecipe.packaging.length > 0 ? (
+              <GroupedList
+                title={`Packaging (${selectedRecipe.packaging.length})`}
+              >
+                {selectedRecipe.packaging.map((item) => {
+                  const invItem = state.inventory.find(
+                    (i) => i.inventoryId === item.inventoryId,
+                  )
+                  const unitPrice = invItem
+                    ? toDisplayUnitPrice(invItem.averageUnitCost, invItem.unit)
+                    : undefined
+                  const lineCost = calculateItemRecipeCost(
+                    item.quantity * scaleMultiplier,
+                    item.unit,
+                    invItem,
+                  )
+                  return (
+                    <ListRow
+                      key={`${item.inventoryId}-${item.name}`}
+                      leading={
+                        <Package
+                          aria-hidden="true"
+                          size={16}
+                          className="text-muted"
+                        />
+                      }
+                      title={invItem?.name ?? item.name}
+                      subtitle={
+                        unitPrice !== undefined
+                          ? `${formatLkr(unitPrice)} / unit${
+                              lineCost !== null
+                                ? ` · Cost ${formatLkr(lineCost)}`
+                                : ""
+                            }`
+                          : "Tap to set price per unit"
+                      }
+                      value={formatQuantity(
+                        Number((item.quantity * scaleMultiplier).toFixed(2)),
+                        item.unit,
+                      )}
+                      showChevron={Boolean(invItem)}
+                      onClick={
+                        invItem ? () => setEditingPriceItem(invItem) : undefined
+                      }
+                    />
+                  )
+                })}
+              </GroupedList>
+            ) : null}
+
+            <Card className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-cocoa">
+                <BookOpen aria-hidden="true" size={16} />
+                Preparation instructions
+              </div>
+              <ol className="space-y-2.5 text-sm text-cocoa">
+                {selectedRecipe.instructions.map((step, index) => (
+                  <li key={index} className="flex gap-2.5">
+                    <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-sage-soft text-xs font-bold text-sage-dark">
                       {index + 1}
                     </span>
-                    <span className="pt-1 text-sm leading-relaxed text-cocoa">
-                      {instruction}
-                    </span>
+                    <span className="leading-relaxed">{step}</span>
                   </li>
                 ))}
               </ol>
-              <Button
-                className="mt-5"
-                fullWidth
-                variant="secondary"
-                leadingIcon={<Pencil aria-hidden="true" size={17} />}
-                onClick={beginEdit}
-              >
-                Create a new version
-              </Button>
             </Card>
-          )}
-        </section>
 
-        <div className="mt-5 flex items-center gap-2 rounded-control bg-sage-soft px-3 py-2 text-xs text-sage-dark">
-          <History aria-hidden="true" size={15} />
-          New versions never alter confirmed order snapshots.
+            {selectedRecipe.history && selectedRecipe.history.length > 0 ? (
+              <Card className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-cocoa">
+                    <History aria-hidden="true" size={16} />
+                    Previous versions ({selectedRecipe.history.length})
+                  </div>
+                  <Button
+                    size="compact"
+                    variant="ghost"
+                    onClick={() => setShowHistory((v) => !v)}
+                  >
+                    {showHistory ? "Hide" : "Show"}
+                  </Button>
+                </div>
+                {showHistory ? (
+                  <div className="space-y-2 border-t border-warm-border pt-2">
+                    {selectedRecipe.history.map((snap) => (
+                      <div
+                        key={`v-${snap.version}`}
+                        className="flex items-center justify-between rounded-control bg-ivory p-2.5 text-xs"
+                      >
+                        <div>
+                          <div className="font-semibold text-cocoa">
+                            v{snap.version} · {snap.yieldLabel}
+                          </div>
+                          <div className="text-muted">
+                            {snap.ingredients.length} ingredients ·{" "}
+                            {snap.preparationMinutes} mins
+                          </div>
+                        </div>
+                        <MoneyText amount={snap.estimatedCost} />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </Card>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                leadingIcon={<Copy aria-hidden="true" size={15} />}
+                onClick={() => handleDuplicateRecipe(selectedRecipe)}
+              >
+                Duplicate
+              </Button>
+              <Button
+                variant="secondary"
+                leadingIcon={
+                  selectedRecipe.archived ? (
+                    <RotateCcw aria-hidden="true" size={15} />
+                  ) : (
+                    <Archive aria-hidden="true" size={15} />
+                  )
+                }
+                onClick={() => {
+                  const nextArchived = !selectedRecipe.archived
+                  if (
+                    dispatchIfAccepted({
+                      type: "ARCHIVE_RECIPE",
+                      recipeId: selectedRecipe.id,
+                      archived: nextArchived,
+                    })
+                  ) {
+                    showToast(
+                      nextArchived ? "Recipe archived" : "Recipe restored",
+                    )
+                  }
+                }}
+              >
+                {selectedRecipe.archived ? "Restore" : "Archive"}
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
+
+        <RecipeEditorSheet
+          open={recipeEditorTarget !== null}
+          recipe={recipeEditorTarget === "new" ? null : recipeEditorTarget}
+          onSave={(saved) => {
+            if (recipeEditorTarget === "new") {
+              dispatchIfAccepted({ type: "ADD_RECIPE", recipe: saved })
+              showToast("Recipe created")
+            } else {
+              dispatchIfAccepted({ type: "UPDATE_RECIPE", recipe: saved })
+              showToast(`Saved ${saved.name} v${saved.version}`)
+            }
+          }}
+          onClose={() => setRecipeEditorTarget(null)}
+        />
+
+        <PricingCalculatorSheet
+          open={pricingTarget !== null}
+          recipe={pricingTarget ?? undefined}
+          quantity={scaleMultiplier >= 1 ? Math.round(scaleMultiplier) : 1}
+          onClose={() => setPricingTarget(null)}
+        />
+
+        <InventoryItemSheet
+          open={editingPriceItem !== null}
+          item={editingPriceItem}
+          onClose={() => setEditingPriceItem(null)}
+          onSaved={(saved) =>
+            showToast(`Updated ${saved.name} price across all recipes`)
+          }
+        />
+      </>
     )
   }
 
   return (
-    <div className="px-page pb-6">
-      <ScreenHeader
-        eyebrow="Reusable library"
-        title="Recipes"
-        subtitle="Yields, ingredients and versions"
-        icon={<BookOpen aria-hidden="true" size={22} />}
-      />
+    <>
+      <div className="space-y-4 pb-6">
+        <ScreenHeader
+          title="Recipes"
+          action={
+            <Button
+              size="compact"
+              leadingIcon={<Plus aria-hidden="true" size={16} />}
+              onClick={() =>
+                section === "recipes"
+                  ? setRecipeEditorTarget("new")
+                  : setProductEditorTarget("new")
+              }
+            >
+              {section === "recipes" ? "Recipe" : "Product"}
+            </Button>
+          }
+        />
 
-      <div className="mt-4">
+        <div className="flex items-center justify-between gap-2">
+          <SegmentedControl
+            label="Recipes section"
+            value={section}
+            onChange={(value) => setSection(value as RecipesTabSection)}
+            segments={[
+              { value: "recipes", label: `Recipes (${recipes.length})` },
+              { value: "products", label: `Products (${products.length})` },
+            ]}
+          />
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className="shrink-0 text-xs font-semibold text-muted hover:text-cocoa"
+          >
+            {showArchived ? "Hide archived" : "Archived"}
+          </button>
+        </div>
+
         <Field
-          label="Search recipes"
+          label="Search recipes or products"
           hideLabel
           isSearch
-          placeholder="Recipe, product or variant"
+          placeholder={
+            section === "recipes"
+              ? "Search cakes or flavors..."
+              : "Search products..."
+          }
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+
+        {section === "recipes" ? (
+          recipes.length > 0 ? (
+            <div className="space-y-3">
+              {recipes.map((recipe) => {
+                const product = state.products.find(
+                  (item) => item.id === recipe.productId,
+                )
+                const variant = product?.variants.find(
+                  (item) => item.id === recipe.variantId,
+                )
+                const cost = estimateRecipeMaterialCost(
+                  recipe,
+                  state.inventory,
+                  state.settings.defaultLabourRatePerHour,
+                )
+                const displayCost = cost.hasLivePricing
+                  ? cost.totalCost
+                  : recipe.estimatedCost
+                return (
+                  <Card
+                    key={recipe.id}
+                    className="cursor-pointer transition duration-ui hover:border-sage-border active:scale-button"
+                    onClick={() => openRecipe(recipe.id)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h2 className="text-base font-semibold text-cocoa">
+                            {recipe.name}
+                          </h2>
+                          {recipe.archived ? (
+                            <StatusBadge tone="warning">Archived</StatusBadge>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted">
+                          {product?.name ?? "Custom"}
+                          {variant ? ` · ${variant.name}` : ""} · v
+                          {recipe.version}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-sm font-bold text-cocoa">
+                          <MoneyText amount={displayCost} />
+                        </div>
+                        <div className="text-[11px] text-muted">
+                          {recipe.preparationMinutes} mins
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-warm-border/70 pt-2.5 text-xs text-muted">
+                      <span>{recipe.ingredients.length} ingredients</span>
+                      <span>·</span>
+                      <span>{recipe.packaging.length} packaging</span>
+                      <span>·</span>
+                      <span>{recipe.yieldLabel}</span>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<BookOpen aria-hidden="true" size={22} />}
+              title="No matching recipes"
+              description="Create your first recipe to track exact ingredient weights, preparation time, and live cost."
+              actionLabel="Create recipe"
+              onAction={() => setRecipeEditorTarget("new")}
+            />
+          )
+        ) : products.length > 0 ? (
+          <div className="space-y-3">
+            {products.map((product) => (
+              <Card key={product.id} className="space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-semibold text-cocoa">
+                        {product.name}
+                      </h2>
+                      {product.archived ? (
+                        <StatusBadge tone="warning">Archived</StatusBadge>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted">
+                      {product.variants.length}{" "}
+                      {product.variants.length === 1 ? "variant" : "variants"}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="compact"
+                      variant="secondary"
+                      onClick={() => setProductEditorTarget(product)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="compact"
+                      variant="ghost"
+                      onClick={() => {
+                        const nextArchived = !product.archived
+                        dispatchIfAccepted({
+                          type: "ARCHIVE_PRODUCT",
+                          productId: product.id,
+                          archived: nextArchived,
+                        })
+                        showToast(
+                          nextArchived
+                            ? "Product archived"
+                            : "Product restored",
+                        )
+                      }}
+                    >
+                      {product.archived ? "Restore" : "Archive"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {product.variants.map((variant) => (
+                    <span
+                      key={variant.id}
+                      className="rounded-full bg-ivory px-2.5 py-1 text-xs font-medium text-cocoa"
+                    >
+                      {variant.name} ({variant.unitLabel})
+                    </span>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Layers aria-hidden="true" size={22} />}
+            title="No products yet"
+            description="Add the cakes, boxes, or treats you sell so orders and recipes stay organized."
+            actionLabel="Add product"
+            onAction={() => setProductEditorTarget("new")}
+          />
+        )}
       </div>
 
-      <div className="mt-5 space-y-3">
-        {recipes.map((recipe) => {
-          const product = state.products.find(
-            (item) => item.id === recipe.productId,
-          )
-          const variant = product?.variants.find(
-            (item) => item.id === recipe.variantId,
-          )
-          return (
-            <button
-              key={recipe.id}
-              type="button"
-              onClick={() => openRecipe(recipe.id)}
-              className="w-full rounded-card border border-warm-border bg-white p-4 text-left shadow-subtle transition duration-ui hover:-translate-y-0.5 hover:border-sage-border hover:shadow-card active:translate-y-0"
-            >
-              <span className="flex items-start justify-between gap-3">
-                <span className="min-w-0">
-                  <span className="block text-base font-semibold text-cocoa">
-                    {product?.name}
-                  </span>
-                  <span className="mt-1 block text-xs font-medium text-muted">
-                    {variant?.name} · {recipe.yieldLabel}
-                  </span>
-                  <span className="mt-2 block truncate text-xs text-sage-dark">
-                    {recipe.name}
-                  </span>
-                </span>
-                <StatusBadge tone="neutral">v{recipe.version}</StatusBadge>
-              </span>
-              <span className="mt-3 grid grid-cols-2 gap-2 rounded-control bg-ivory p-3 text-xs text-muted">
-                <span>
-                  <span className="block font-semibold text-cocoa">Time</span>
-                  <span className="mt-0.5 block">
-                    {recipe.preparationMinutes} min
-                  </span>
-                </span>
-                <span>
-                  <span className="block font-semibold text-cocoa">Cost</span>
-                  <span className="mt-0.5 block">
-                    {formatLkr(recipe.estimatedCost)}
-                  </span>
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
+      <RecipeEditorSheet
+        open={recipeEditorTarget !== null}
+        recipe={recipeEditorTarget === "new" ? null : recipeEditorTarget}
+        onSave={(saved) => {
+          if (recipeEditorTarget === "new") {
+            dispatchIfAccepted({ type: "ADD_RECIPE", recipe: saved })
+            showToast("Recipe created")
+          } else {
+            dispatchIfAccepted({ type: "UPDATE_RECIPE", recipe: saved })
+            showToast(`Saved ${saved.name} v${saved.version}`)
+          }
+        }}
+        onClose={() => setRecipeEditorTarget(null)}
+      />
+
+      <ProductEditorSheet
+        open={productEditorTarget !== null}
+        product={productEditorTarget === "new" ? null : productEditorTarget}
+        onClose={() => setProductEditorTarget(null)}
+        onSaved={(saved) => showToast(`Saved ${saved.name}`)}
+      />
+    </>
   )
 }
