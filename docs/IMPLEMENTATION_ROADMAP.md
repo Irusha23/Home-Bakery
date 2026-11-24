@@ -1,8 +1,8 @@
 # Udeni's Specials — Implementation Roadmap
 
-**Status:** Part 1 (Web/PWA UI Prototype) Complete — Entering Part 2 (Backend & Full-Stack Evolution) on `feature/remaining-workflows`  
-**Stack:** React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 + Motion + Vitest (Backend & Android APK stack to be locked in Phase 12 ADRs)  
-**Target:** Offline-capable Web & Installable PWA with Dockerized Backend (Phases 11–18), followed by signed Android Mobile Application `.apk` (Phase 19)
+**Status:** Part 1 (Web/PWA UI) & Phase 12 (Architecture ADRs) Complete — Ready for Phase 13 (SQLite Schema & Repository Layer) on `feature/remaining-workflows`  
+**Stack:** React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 + Motion + Vitest → Capacitor Android `.apk` + On-Device SQLite (`@capacitor-community/sqlite`)  
+**Target:** 100% local-first, offline-capable signed Android Mobile Application (`.apk`) with on-device SQLite, local filesystem photos, 1-tap Share Sheet backups (Google Drive/WhatsApp), and zero hosting cost
 
 ---
 
@@ -10,15 +10,12 @@
 
 ```mermaid
 flowchart TD
-  P10["Phases 0–10 (Done)\nWeb/PWA UI Prototype + 265 Tests"] --> P11["Phase 11\nUI Purification & Minimal Starter Data"]
-  P11 --> P12["Phase 12\nArchitecture & Tech Stack ADRs"]
-  P12 --> P13["Phase 13\nWorkspace, Docker & CI Foundation"]
-  P13 --> P14["Phase 14\nPostgreSQL Schema (Sync-Safe) & Migrations"]
-  P14 --> P15["Phase 15\nBackend Core: Auth, Media & Sync Protocol"]
-  P15 --> P16["Phase 16\nVertical-Slice APIs (16A–16D)"]
-  P16 --> P17["Phase 17\nWeb/PWA Cutover, Offline Sync & Backup Import"]
-  P17 --> P18["Phase 18\nServer/PWA Hardening, Auto-Backups & Deploy"]
-  P18 --> P19["Phase 19 (Final)\nAndroid Mobile App (.apk) + Native SQLite"]
+  P11["Phases 0–11 (Done)\nUI Prototype + Purified Starter Slice + 270 Tests"] --> P12["Phase 12 (Done)\nArchitecture & Tech Stack ADRs (v2.0)"]
+  P12 --> P13["Phase 13\nSQLite Schema, Migrations & Repository Layer"]
+  P13 --> P14["Phase 14\nLocal Filesystem Media & Android Share Backups"]
+  P14 --> P15["Phase 15\nCapacitor Android Setup & Native Mobile UX"]
+  P15 --> P16["Phase 16\nRelease Signing, .apk Build Pipeline & CI"]
+  P16 --> P17["Phase 17\nAndroid Studio Emulator QA & v1.0.0 Release"]
 ```
 
 ---
@@ -104,153 +101,99 @@ Completed:
 - [x] Physics-based spring motion system (`src/lib/motion.ts`), OKLCH color transitions, touch ripples (`TouchRipple.tsx`), hierarchical stagger choreography, and clipped zero-pop `PushView` page transitions.
 - [x] Top-level `ErrorBoundary.tsx`, LAN-safe `createId()` (`src/lib/id.ts`), and PWA manifest/meta tags (`index.html`, `public/manifest.webmanifest`).
 
----
-
-## Part 2 — Backend, Containerization & Offline-Capable Web/PWA (Next)
-
-> [!NOTE]
-> Each phase below is executed **one at a time**, ending with a verified test/build gate and Git commit before starting the next phase. This roadmap is a living document and will be updated whenever architectural or scope decisions evolve.
-
 ### Phase 11 — UI Purification & Minimal Starter Dataset (Completed)
 
-**Goal:** Remove bloated mock/demo data from the runtime app while keeping a minimal, realistic 1-item slice to verify every UI workflow, without breaking any automated tests.
-
-Tasks:
-- [x] Split `src/data/demoData.ts` into:
-  - `src/data/defaults.ts` — pure empty production defaults (`defaultSettings`, `defaultBudgetPlan`, built-in expense categories, empty collections).
-  - `src/data/starterData.ts` — minimal UI verification seed: **1 customer, 1 product (+ 1 variant), 1 recipe (with its required ingredients & packaging), and 1 active order** (zero historical mock orders, fake expenses, or extra-stock clutter).
-  - `src/test/demoFixture.ts` — full multi-record test fixture moved under `src/test/` for unit tests (`persistence.test.ts`, `AppState.test.ts`).
-- [x] Update `SettingsScreen.tsx` copy (*"Reset demo data"* → *"Clear workspace (start empty)"* / *"Load minimal starter sample"*) and add a `VITE_STARTER_MODE=minimal|empty` flag for testing blank vs. 1-item boot.
-- [x] Harden `migrateState()` (stop injecting mock inventory into empty workspaces) and empty states (`CreateOrderFlow.tsx`, `InventoryScreen.tsx`, `PersistenceRecoveryScreen.tsx`).
-- [x] **Exit gate:** All 270 unit tests pass, `pnpm build` succeeds, and manual UI walkthrough confirms every workflow operates cleanly on empty and minimal 1-item states.
-
-### Phase 12 — Architecture & Tech Stack Decision Gate (`ARCHITECTURE_DECISIONS.md` v2.0)
-
-**Goal:** Reconcile `docs/ARCHITECTURE_DECISIONS.md` with all UI refinements and formally lock the Web/PWA + Dockerized Backend + APK-ready architecture before writing backend code.
-
-Tasks:
-- [ ] Update `docs/ARCHITECTURE_DECISIONS.md` to **v2.0** with formal Architecture Decision Records (ADRs):
-  - **ADR-001 (Delivery Sequence):** Mobile-first Web + Installable PWA with Dockerized Backend first (Phases 13–18), followed by signed Android `.apk` packaging via Capacitor in Phase 19.
-  - **ADR-002 (Expanded Food Domain & Media):** Multi-category home food & bakery catalogue + preset artwork & cloud-stored photos.
-  - **ADR-003 (Backend Stack & Shared Domain):** Backend runtime/framework (recommended: Node.js + TypeScript + Fastify/Hono) and shared `packages/domain` package for `pricing`, `financials`, `inventory`, `expenses`, `orderLifecycle`, and Zod schemas.
-  - **ADR-004 (Database & Sync-Safe Design):** PostgreSQL 17 + ORM/migration tool (Drizzle or Prisma), ACID transactions, `JSONB` immutable snapshots, and sync-safe metadata (`id` client-generated, `revision`, `updated_at`, `deleted_at`, `idempotency_keys`, append-only ledgers) so PWA offline sync and future Android SQLite require zero schema redesign.
-  - **ADR-005 (Object Storage):** S3-compatible storage (MinIO in Docker locally; Cloudflare R2 / AWS S3 in production) for item photos, customer order reference photos, and receipts.
-  - **ADR-006 (Auth & Security):** Owner authentication, session/refresh tokens, password hashing (`argon2`/`scrypt`), CORS (Web, PWA, and future Capacitor origin), and rate limiting.
-  - **ADR-007 (Dual-Layer Backups):** Automated daily server PostgreSQL backups (`pg_dump`) + user-triggered v2 JSON backup export/restore.
-  - **ADR-008 (Monetary Precision):** Reconcile §15.6 minor units vs. whole-LKR integer totals + high-precision `average_unit_cost` (`NUMERIC(12,4)`).
-- [ ] **Exit gate:** All ADRs reviewed and signed off in `docs/ARCHITECTURE_DECISIONS.md`.
-
-### Phase 13 — Workspace Restructure, Dockerization & CI Foundation
-
-**Goal:** Establish a reproducible pnpm monorepo and containerized development/production environment.
-
-Tasks:
-- [ ] Convert repository to a **pnpm workspace** preserving full Git history:
-  - `apps/web` — React + Vite Web/PWA frontend
-  - `apps/api` — Backend API server (initial `/health` and `/ready` endpoints)
-  - `packages/domain` — shared TypeScript types, Zod schemas, and pure calculators
-- [ ] Containerize services with multi-stage Dockerfiles and Compose:
-  - `apps/web/Dockerfile` (dev HMR target + prod Nginx static target)
-  - `apps/api/Dockerfile` (dev watch target + lean non-root prod Node target)
-  - `docker-compose.yml` + `docker-compose.dev.yml` orchestrating `web`, `api`, `postgres` (named volume + healthcheck), and `minio` (S3-compatible object storage + bucket init).
-- [ ] Add `.env.example`, `.dockerignore`, root convenience scripts, and GitHub Actions CI (`.github/workflows/ci.yml`) running typecheck, unit tests, and Docker build validation.
-- [ ] **Exit gate:** `docker compose up` starts all containers cleanly; `/health` and `/ready` return `200 OK`; all existing tests pass inside the workspace.
-
-### Phase 14 — Database Schema Design, Constraints & Migrations
-
-**Goal:** Design, review, and validate the normalized PostgreSQL schema with strict integrity constraints, indexes, sync-safe columns, and versioned SQL migrations.
-
-Tasks:
-- [ ] Author `docs/DATABASE_SCHEMA.md` with Mermaid ERD, table definitions, transaction boundaries, and indexing plan covering:
-  1. **Accounts & Preferences:** `users`, `sessions`, `business_settings`, `budget_plans`, `notification_preferences`
-  2. **Catalogue & Recipes:** `products`, `product_variants`, `recipes`, `recipe_versions`, `recipe_ingredients`, `recipe_packaging`, `media_assets`
-  3. **Inventory & Procurement:** `inventory_items`, `inventory_movements` (append-only), `purchases`, `shopping_trips`, `shopping_trip_items`, `shopping_selections`
-  4. **Orders & Production:** `customers`, `orders`, `order_lines` (immutable `recipe_snapshot` + `cost_snapshot` `JSONB`), `stock_reservations`, `preparation_records`, `extra_stock_plans`, `extra_stock_preparations`, `finished_stock_batches`, `finished_stock_transactions`
-  5. **Finances:** `payments` (append-only), `refunds` (append-only), `expense_categories`, `expenses`, `expense_allocation_versions`, `expense_allocations`
-  6. **Sync & Idempotency:** `idempotency_keys` + universal sync-ready columns (`id`, `revision`, `updated_at`, `deleted_at`)
-- [ ] Enforce DB-level constraints (`CHECK` non-negative stock, positive quantities, valid enums, foreign keys, archive-over-delete) and composite indexes.
-- [ ] Author initial migration (`0001_initial_schema`) + idempotent minimal starter seed script matching Phase 11.
-- [ ] Add automated migration and constraint tests against real Docker PostgreSQL.
-- [ ] **Exit gate:** Migrations apply/rollback cleanly on fresh Postgres; constraint tests reject negative stock, duplicate deductions, and orphan refunds.
-
-### Phase 15 — Backend Core Foundation (Auth, Middleware, Media & Sync Contract)
-
-**Goal:** Build the reusable backend server core, authentication, object storage uploads, idempotency, and sync endpoints.
-
-Tasks:
-- [ ] Layered API architecture (`routes → Zod validators → application services → transactional repositories → Postgres`), centralized error envelope, structured logging, CORS, security headers, rate limiting, and OpenAPI docs (`/docs`).
-- [ ] Owner authentication endpoints (`POST /api/v1/auth/setup`, `/login`, `/refresh`, `/logout`, `GET /me`).
-- [ ] Media upload pipeline (`POST /api/v1/media/upload` / presigned URLs → MinIO/S3, MIME/size validation, thumbnail optimization, orphaned file cleanup).
-- [ ] Idempotency middleware (`Idempotency-Key` header backed by `idempotency_keys`) + sync delta contract (`POST /api/v1/sync/push`, `GET /api/v1/sync/pull`) ready for offline PWA & future Android APK sync.
-- [ ] Integration test harness running against real Docker Postgres & MinIO.
-- [ ] **Exit gate:** Auth flows, media upload round-trip, idempotency replay protection, and OpenAPI docs pass automated integration tests.
-
-### Phase 16 — Backend Domain APIs (Vertical-Slice Delivery)
-
-**Goal:** Deliver all server-side domain APIs incrementally in 4 focused, independently testable slices:
-
-- [ ] **16A — Catalogue, Recipes & Inventory Master Slice:** Products, variants, recipes + immutable version history, inventory items, manual stock adjustments (atomic movement + balance), settings, and budget plan.
-- [ ] **16B — Customers, Orders & Reservations Slice (Transactional Core):** Customers, draft/confirm/edit/cancel/collect/repeat orders, atomic reservation & shortage creation, immutable cost/recipe snapshots, and cancellation settlements.
-- [ ] **16C — Shopping, Purchases, Preparation & Extra-Stock Slice:** Consolidated shopping requirements, shopping trips/invoices, purchases & corrections with atomic moving weighted-average valuation, idempotent order & extra-stock preparation completion, finished-stock batches, quick sales, and write-offs.
-- [ ] **16D — Finances, Reporting, Backup/Restore & Notifications Slice:** Partial payments, validated refunds, direct & shared expenses with versioned allocations, financial summaries & CSV exports, server-side JSON backup export & transactional restore (compatible with prototype v2 JSON backups), and synced notification preferences.
-- [ ] **Exit gate (per slice):** Integration tests against real Postgres verify every domain invariant, rollback on failure, and double-submit idempotency.
-
-### Phase 17 — Web & PWA Frontend Cutover, Offline Support & Backup Migration
-
-**Goal:** Connect the React Web/PWA frontend to the live backend behind a clean repository abstraction with genuine PWA offline usability.
-
-Tasks:
-- [ ] Introduce a typed API client + **TanStack Query** + **Storage/Repository interface** (`IndexedDB` local cache & outbox queue for Web/PWA — designed so native Android SQLite swaps in cleanly in Phase 19).
-- [ ] Add **PWA offline capability** (`vite-plugin-pwa` / Workbox service worker) for offline boot, Home Screen installation, and automatic background outbox sync with a subtle **Sync Status indicator** (`Synced` · `Pending` · `Offline` · `Retry`).
-- [ ] Add Owner Login / First-time Setup screen, Account / Sign-out controls in `SettingsScreen`, loading skeletons, and pending-mutation guards.
-- [ ] Upgrade `ImagePickerSheet` to upload photos to `/api/v1/media` (URLs instead of base64) and add the deferred **Customer Order Reference Photo** attachment on orders.
-- [ ] Build **"Import Local Backup to Cloud"** in `SettingsScreen` so existing prototype `localStorage` data or v2 JSON backup files migrate smoothly into PostgreSQL.
-- [ ] **Exit gate:** Full order → shopping → bake → payment workflow runs end-to-end across Web & installed mobile PWA, handles brief offline periods cleanly, and syncs across devices.
-
-### Phase 18 — Production Web/PWA & Server Hardening, Automated Backups & Deployment
-
-**Goal:** Deploy and harden the containerized Web/PWA + Backend stack for reliable daily business use.
-
-Tasks:
-- [ ] Production Docker Compose stack with HTTPS/TLS reverse proxy (Caddy or Nginx + Let's Encrypt), strict CORS, rate limiting, secret management, and non-root containers.
-- [ ] Automated daily encrypted PostgreSQL backups (`pg_dump` to off-box object storage with 30-day retention) + tested restore drill, alongside manual on-demand JSON backup export in `SettingsScreen`.
-- [ ] Observability: structured logs, `/health` & `/ready` probes, uptime alert, and error reporting hooked into `ErrorBoundary`.
-- [ ] End-to-end QA on real mobile browsers (Android Chrome PWA install, camera upload, offline reload, backup restore).
-- [ ] Merge verified Web/PWA + Backend milestone to `main` and tag `v1.0.0-web`.
-- [ ] **Exit gate:** Udeni can run daily operations reliably on the deployed Web/PWA with cloud persistence, automatic daily backups, and manual JSON export/restore.
+Completed:
+- [x] Split `src/data/demoData.ts` into `src/data/defaults.ts` (empty defaults), `src/data/starterData.ts` (1 customer, 1 product + 1 variant, 1 recipe with 6 inventory items, 1 order + `VITE_STARTER_MODE=minimal|empty`), and `src/test/demoFixture.ts`.
+- [x] Fixed `migrateState()` so mock inventory is never injected into empty/restored workspaces, and added **Clear workspace (start empty)** / **Load minimal starter sample** in `SettingsScreen.tsx`.
+- [x] Hardened empty states (`CreateOrderFlow.tsx`, `InventoryScreen.tsx`, `PersistenceRecoveryScreen.tsx`) and verified all 270 tests + production build.
 
 ---
 
-## Part 3 — Final Mobile Application Packaging
+## Part 2 — Local-First SQLite, Native Integration & Signed Android `.apk`
 
-### Phase 19 (Final Phase) — Android Mobile Application (`.apk`)
+> [!NOTE]
+> Each phase below is executed **one at a time**, ending with a verified test/build gate and Git commit before starting the next phase. This roadmap is a living document and will be updated whenever practical findings emerge.
 
-**Goal:** Package the proven Web/PWA application into a native, airplane-mode-capable Android `.apk` without rewriting the UI or backend.
+### Phase 12 — Architecture & Tech Stack Decision Gate (`ARCHITECTURE_DECISIONS.md` v2.0) (Completed)
+
+Completed:
+- [x] Upgraded `docs/ARCHITECTURE_DECISIONS.md` to **v2.0** locking the **Local-First Capacitor Android `.apk` + On-Device SQLite** architecture (zero cloud server/hosting cost, 100% offline usability, 100% UI reuse).
+- [x] Documented formal **ADR-001 through ADR-007** covering Capacitor packaging, local-first operation, SQLite migrations, multi-category food media, Share Sheet off-device backups, Whole LKR money precision, and consistently signed in-place `.apk` updates.
+
+### Phase 13 — SQLite Database Schema, Migrations & Repository Layer (Next)
+
+**Goal:** Design the relational SQLite schema, versioned migrations, and transactional Repository / Unit-of-Work layer so business data moves from `localStorage` to rock-solid on-device SQLite. *(Tested fast in Chrome + Vitest; Android Studio not required yet.)*
 
 Tasks:
-- [ ] Initialize **Capacitor Android** (`@capacitor/core`, `@capacitor/cli`, `@capacitor/android`) wrapping `apps/web/dist`.
-- [ ] Swap the frontend's Storage/Repository adapter (from Phase 17) to native **`@capacitor-community/sqlite`** so the Android app runs full offline transactions on a persistent on-device SQLite database synced to the Dockerized PostgreSQL backend when online.
-- [ ] Integrate native Android plugins:
-  - `@capacitor/camera` + local photo upload queue (capture/pick photos offline, upload when online).
-  - `@capacitor/filesystem` + `@capacitor/share` — **offline manual backup export & restore** directly to Android Files, WhatsApp, or Google Drive with zero internet.
-  - `@capacitor/app` — Android **hardware/gesture Back button** wired into `PushView`, `Sheet`, and `Dialog` navigation.
-  - `@capacitor/status-bar`, `@capacitor/keyboard`, `@capacitor/haptics`, `@capacitor/network` — native polish & reliable connectivity sensing.
-- [ ] Configure Android identity (`applicationId`, app name *"Udeni's Specials"*, adaptive icon, splash screen, HTTPS-only `network_security_config.xml`) and release signing keystore (stored outside Git) to produce signed `.apk` builds.
-- [ ] **Physical Android Device QA:** Airplane-mode end-to-end bake/order/payment flow, force-close recovery, online background sync without duplicates, offline backup export + wipe + restore, hardware Back button, and camera uploads.
-- [ ] Tag `v1.0.0-android` and document APK build & update steps.
-- [ ] **Exit gate:** Signed Android `.apk` runs reliably offline and online on Udeni's Android phone, synced seamlessly with the production backend.
+- [ ] Author `docs/DATABASE_SCHEMA.md` with Mermaid ERD, SQLite tables, foreign keys, `CHECK` constraints (non-negative stock, positive quantities, valid status enums), and indexes covering:
+  - Settings, budget plan, notification preferences
+  - Products, variants, recipes, immutable recipe versions, ingredients, packaging
+  - Inventory items, append-only inventory movements, purchases, shopping trips & selections
+  - Customers, orders, order lines (immutable recipe & cost snapshots), stock reservations, preparation records, extra-stock plans/batches/transactions
+  - Append-only payments & refunds, expense categories, expenses, versioned expense allocations
+- [ ] Create versioned SQL migration runner (`0001_initial_schema`) + idempotent minimal starter seed.
+- [ ] Build the Repository / Unit-of-Work layer (`@capacitor-community/sqlite` implementation for Android + clean browser adapter for fast `pnpm dev` & Vitest testing) and migrate `AppState` with automatic one-time `localStorage` → SQLite import.
+- [ ] **Exit gate:** Migration, constraint, transaction-rollback, and idempotency tests pass in Vitest; `pnpm build` succeeds.
+
+### Phase 14 — Native Local Media Storage & Android Off-Device Backups
+
+**Goal:** Replace base64 image strings with compressed local device files and enable 1-tap off-device backups to Google Drive / WhatsApp. *(Good milestone to install **Android Studio** to test real Android file/share dialogs.)*
+
+Tasks:
+- [ ] Store uploaded photos as compressed local files (`@capacitor/filesystem` + `@capacitor/camera`, with browser fallback in dev) and unlock the deferred **Customer Order Reference Photo** attachment on orders.
+- [ ] Upgrade `BackupRestorePanel` (`SettingsScreen.tsx`) to export backups via `@capacitor/filesystem` + `@capacitor/share` (1-tap save to Google Drive, WhatsApp, or Downloads) and import/validate backups via native file picker.
+- [ ] Add optional password-protected encrypted backup support (Web Crypto PBKDF2 + AES-GCM) so backups stored in Google Drive or WhatsApp stay private.
+- [ ] **Exit gate:** Photo capture/pick, customer order photo attachment, and encrypted/plain backup export + validated restore pass automated tests and work cleanly on browser + Android Emulator.
+
+### Phase 15 — Capacitor Android Setup & Native Mobile UX
+
+**Goal:** Wrap the React/Vite app in Capacitor Android and wire native hardware behavior so the app feels completely native on Android.
+
+Tasks:
+- [ ] Initialize `@capacitor/core`, `@capacitor/cli`, and `@capacitor/android` pointing at `dist/`.
+- [ ] Configure Android app identity (`applicationId`, app name *"Udeni's Specials"*, adaptive launcher icon, and splash screen).
+- [ ] Wire Android **hardware/gesture Back button** (`@capacitor/app`) into `PushView`, `Sheet`, and `Dialog` navigation (closing overlays first, popping drill-down views, confirming exit on root tab).
+- [ ] Integrate `@capacitor/status-bar`, `@capacitor/keyboard`, and `@capacitor/haptics` for safe-area insets, clean form scrolling above the soft keyboard, and subtle tactile feedback.
+- [ ] Add optional lightweight **Check for Updates** banner in Settings (fetches a static `version.json` on GitHub Releases when online and links to the new `.apk` download).
+- [ ] **Exit gate:** `pnpm build && npx cap sync android` succeeds and runs cleanly inside **Android Studio Emulator**.
+
+### Phase 16 — Release Signing, `.apk` Build Pipeline & CI
+
+**Goal:** Establish repeatable, consistently signed `.apk` builds so future bug fixes and updates upgrade Udeni's phone in place without losing data.
+
+Tasks:
+- [ ] Generate and securely back up the release signing keystore (`.jks`, stored safely outside Git) and configure Gradle release `.apk` signing + `versionCode` / `versionName` management.
+- [ ] Set up GitHub Actions CI (`.github/workflows/ci.yml`) running `npx tsc --noEmit`, `pnpm test`, and `pnpm build` on every push/PR.
+- [ ] Document the step-by-step release & update checklist (bumping `versionCode`, signing `.apk`, publishing to GitHub Releases / sending to Udeni).
+- [ ] **Exit gate:** Signed release `.apk` builds reproducibly via Gradle.
+
+### Phase 17 — Android Studio Emulator QA & `v1.0.0` Release
+
+**Goal:** Thoroughly test every offline, backup, and upgrade scenario on the Android Studio Emulator (plus a quick final check on Udeni's phone) before daily use.
+
+Tasks:
+- [ ] **Android Studio Emulator QA:**
+  1. Complete order → shopping → bake → payment flow in **Airplane Mode**.
+  2. Force-close and reopen the app — verify 100% SQLite data & photo persistence.
+  3. Export backup via Share Sheet / Files, wipe app data, restore backup — verify 100% integrity.
+  4. **In-place `.apk` upgrade drill:** Install `v1` `.apk`, create test orders/recipes, install `v2` `.apk` (`versionCode + 1`, same keystore) over it (`adb install -r`) — verify zero data loss and clean migration.
+  5. Verify hardware Back button, camera/gallery picker, soft keyboard over forms, and 60fps `PushView` transitions.
+- [ ] Quick final install & smoke check on Udeni's physical Android phone.
+- [ ] Merge verified milestone cleanly to `main` and tag `v1.0.0`.
+- [ ] **Exit gate:** Signed `v1.0.0` `.apk` runs reliably offline on Android with tested Google Drive/Share backups and verified in-place upgrade path.
 
 ---
 
 ## Development rules
 
-- Work on one phase/milestone at a time and keep this roadmap updated as decisions evolve.
+- Work on one milestone at a time and keep this roadmap updated as decisions evolve.
 - Use small, conventional Git commits at verified checkpoints and push to `origin`.
 - Require human review of architecture decisions, schema changes, and AI-generated changes.
-- Run typecheck, automated tests, and relevant integration checks before marking a phase complete.
-- Do not skip earlier exit gates to jump ahead to later features.
+- Run typecheck, automated tests, and build verification before marking a phase complete.
+- Never lose or rotate the release signing keystore (required for in-place `.apk` updates).
 - Maintain a clear record of incomplete work and known limitations.
 
 ## Definition of project completion
 
-The full-stack release is complete when Udeni can manage real orders, recipes, inventory, shopping, preparation, expenses, payments, and photos reliably on both **Web/PWA** and the **installed Android `.apk`** — working seamlessly offline or online, backed by containerized PostgreSQL, automated daily cloud backups, and tested manual JSON backup/restore.
+The release is complete when Udeni can manage real orders, recipes, inventory, shopping, preparation, expenses, payments, and photos reliably offline in an **installed, signed Android `.apk`** backed by on-device SQLite, 1-tap Google Drive/Share backups, and a verified in-place `.apk` update workflow.
