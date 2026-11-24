@@ -1,64 +1,96 @@
 export const IOS_EASE = [0.32, 0.72, 0, 1] as const
 
-export const IOS_TRANSITION = {
-  duration: 0.34,
-  ease: IOS_EASE,
-} as const
-
-export const PUSH_TRANSITION = {
-  duration: 0.34,
-  ease: IOS_EASE,
-} as const
-
-export const TAB_TRANSITION = {
-  duration: 0.2,
-  ease: IOS_EASE,
-} as const
-
-export const DISCLOSURE_TRANSITION = {
-  duration: 0.26,
-  ease: IOS_EASE,
-} as const
-
-export const SHEET_SPRING = {
+/**
+ * Critically damped UI springs (damping ratio zeta ≈ 1.0, zero overshoot).
+ * Larger/heavier elements carry more mass for slower start and settle.
+ */
+export const SPRING_MICRO = {
   type: "spring",
-  damping: 32,
-  stiffness: 380,
-  mass: 0.85,
+  stiffness: 520,
+  damping: 36,
+  mass: 0.6,
 } as const
 
-export const DIALOG_SPRING = {
+export const SPRING_CONTROL = {
   type: "spring",
-  damping: 30,
   stiffness: 420,
+  damping: 37,
   mass: 0.8,
 } as const
 
-export const PILL_SPRING = {
+export const SPRING_PANEL = {
   type: "spring",
-  stiffness: 500,
-  damping: 38,
+  stiffness: 300,
+  damping: 35,
+  mass: 1.0,
 } as const
 
-export const TACTILE_SPRING = {
+export const SPRING_SHEET = {
   type: "spring",
-  stiffness: 600,
-  damping: 32,
+  stiffness: 280,
+  damping: 37,
+  mass: 1.2,
 } as const
 
-export const MICRO_TRANSITION = {
-  duration: 0.18,
-  ease: IOS_EASE,
+export const SPRING_PAGE = {
+  type: "spring",
+  stiffness: 220,
+  damping: 35,
+  mass: 1.35,
 } as const
 
-export const INSTANT_TRANSITION = {
-  duration: 0.01,
+/**
+ * Underdamped springs (1-2 gentle oscillations) for playful or boundary cues.
+ */
+export const SPRING_ELASTIC = {
+  type: "spring",
+  stiffness: 420,
+  damping: 22,
+  mass: 0.8,
 } as const
+
+export const SPRING_NUDGE = {
+  type: "spring",
+  stiffness: 700,
+  damping: 24,
+  mass: 0.5,
+} as const
+
+/**
+ * Gentle cross-fade for reduced motion: replaces movement without popping.
+ */
+export const REDUCED_MOTION_TRANSITION = {
+  duration: 0.16,
+  ease: [0.25, 0.1, 0.25, 1],
+} as const
+
+/**
+ * Choreography stagger window (Rule 7: 30-80 ms between related siblings).
+ */
+export const STAGGER_STEP_SEC = 0.045
+export const STAGGER_MAX_DELAY_SEC = 0.27
+
+export function staggerDelay(index: number): number {
+  if (!Number.isFinite(index) || index <= 0) return 0
+  return Math.min(index, 6) * STAGGER_STEP_SEC
+}
+
+// Semantic aliases preserving backwards compatibility across the codebase
+export const IOS_TRANSITION = SPRING_PANEL
+export const PUSH_TRANSITION = SPRING_PAGE
+export const TAB_TRANSITION = SPRING_PANEL
+export const DISCLOSURE_TRANSITION = SPRING_PANEL
+export const SHEET_SPRING = SPRING_SHEET
+export const DIALOG_SPRING = SPRING_SHEET
+export const PILL_SPRING = SPRING_CONTROL
+export const TACTILE_SPRING = SPRING_MICRO
+export const MICRO_TRANSITION = SPRING_MICRO
+export const INSTANT_TRANSITION = REDUCED_MOTION_TRANSITION
 
 export const tabFadeVariants = {
-  initial: { opacity: 0, y: 6 },
+  initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -4 },
+  exit: { opacity: 0, y: -6 },
 } as const
 
 export const pushDetailVariants = {
@@ -74,13 +106,13 @@ export const pushRootVariants = {
 } as const
 
 export const dialogVariants = {
-  initial: { opacity: 0, scale: 1.05, y: 6 },
+  initial: { opacity: 0, scale: 0.94, y: 14 },
   animate: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.96, y: 4 },
+  exit: { opacity: 0, scale: 0.95, y: 10 },
 } as const
 
 export const listItemVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.98 },
+  initial: { opacity: 0, y: 10, scale: 0.98 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, scale: 0.97 },
 } as const

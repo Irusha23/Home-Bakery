@@ -15,6 +15,7 @@ import Card from "../components/ui/Card"
 import EmptyState from "../components/ui/EmptyState"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
 import ItemThumbnail from "../components/ui/ItemThumbnail"
+import { StaggerSection } from "../components/ui/MotionPrimitives"
 import StatusBadge from "../components/ui/StatusBadge"
 import { selectMonthlyBudgetReport } from "../lib/budget"
 import { outstandingOrderBalance } from "../lib/financials"
@@ -107,7 +108,8 @@ export default function HomeScreen({
         </div>
       </header>
 
-      <section aria-label="Up next">
+      <StaggerSection index={0}>
+        <section aria-label="Up next">
         {nextUp ? (
           (() => {
             const activeLine = nextUp.preparationRecord
@@ -206,29 +208,33 @@ export default function HomeScreen({
             onAction={() => onNavigate("orders", "create-order")}
           />
         )}
-      </section>
+        </section>
+      </StaggerSection>
 
-      <Button
-        fullWidth
-        variant="secondary"
-        leadingIcon={<Plus aria-hidden="true" size={17} />}
-        onClick={() => onNavigate("orders", "create-order")}
-      >
-        New order
-      </Button>
+      <StaggerSection index={1}>
+        <Button
+          fullWidth
+          variant="secondary"
+          leadingIcon={<Plus aria-hidden="true" size={17} />}
+          onClick={() => onNavigate("orders", "create-order")}
+        >
+          New order
+        </Button>
+      </StaggerSection>
 
       {dueOrders.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (dueOrders.length === 1 && onOpenOrder) {
-              onOpenOrder(dueOrders[0].order.id)
-            } else {
-              onNavigate("orders", "view-due")
-            }
-          }}
-          className="flex w-full items-center justify-between gap-3 rounded-card border border-warning-border bg-warning-soft/75 p-4 text-left shadow-subtle transition hover:border-warning active:scale-button"
-        >
+        <StaggerSection index={2}>
+          <button
+            type="button"
+            onClick={() => {
+              if (dueOrders.length === 1 && onOpenOrder) {
+                onOpenOrder(dueOrders[0].order.id)
+              } else {
+                onNavigate("orders", "view-due")
+              }
+            }}
+            className="flex w-full items-center justify-between gap-3 rounded-card border border-warning-border bg-warning-soft/75 p-4 text-left shadow-subtle transition-[border-color,background-color,box-shadow] duration-200 hover:border-warning active:scale-button"
+          >
           <div className="flex min-w-0 items-center gap-3">
             <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-warning">
               <CreditCard aria-hidden="true" size={18} />
@@ -250,11 +256,13 @@ export default function HomeScreen({
               </p>
             </div>
           </div>
-          <ArrowRight aria-hidden="true" size={16} className="shrink-0 text-warning" />
-        </button>
+            <ArrowRight aria-hidden="true" size={16} className="shrink-0 text-warning" />
+          </button>
+        </StaggerSection>
       ) : null}
 
-      <section aria-label="Snapshot">
+      <StaggerSection index={3}>
+        <section aria-label="Snapshot">
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
@@ -327,9 +335,11 @@ export default function HomeScreen({
           </button>
         </div>
       </section>
+      </StaggerSection>
 
       {upcoming.length > 0 ? (
-        <GroupedList
+        <StaggerSection index={4}>
+          <GroupedList
           title="Upcoming pickups"
           action={
             <button
@@ -353,7 +363,8 @@ export default function HomeScreen({
               }
             />
           ))}
-        </GroupedList>
+          </GroupedList>
+        </StaggerSection>
       ) : null}
     </div>
   )

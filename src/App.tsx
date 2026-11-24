@@ -231,10 +231,10 @@ function AppContent() {
               </div>
 
               <AnimatedList className="space-y-2.5">
-                {attentionItems.map((item) => {
+                {attentionItems.map((item, index) => {
                   const isRead = readIdSet.has(item.id)
                   return (
-                    <AnimatedItem key={item.id}>
+                    <AnimatedItem key={item.id} index={index}>
                       <SwipeableRow
                         actionLabel="Clear"
                         onAction={() => {

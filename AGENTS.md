@@ -41,16 +41,17 @@ This project uses **Tailwind CSS v4** through the `@tailwindcss/vite` plugin con
 - Export components as default exports.
 - Use `createId(prefix)` from `src/lib/id.ts` instead of `crypto.randomUUID()` directly so ID generation works in non-HTTPS LAN contexts on mobile devices.
 
-## Motion & iOS Transitions
+## Motion & Physics Rules
 
-All UI motion must preserve the app's native iOS feel across existing and new features:
+All UI motion must preserve physics-based continuity and immediate acknowledgment across existing and new features:
 
-- **Single source of truth:** Import all spring presets, durations, and variants from `src/lib/motion.ts` (`IOS_EASE`, `IOS_TRANSITION`, `PUSH_TRANSITION`, `TAB_TRANSITION`, `SHEET_SPRING`, `DIALOG_SPRING`, `PILL_SPRING`, `TACTILE_SPRING`, `DISCLOSURE_TRANSITION`). Do not hardcode custom animation curves in components.
-- **Navigation & views:** Wrap tab/segmented view switches in `<TabView>` and drill-down/detail flows in `<PushView>` from `src/components/ui/MotionPrimitives.tsx`.
-- **Lists & disclosures:** Use `<AnimatedList>` / `<AnimatedItem>` for dynamic or filtered lists, and `<Disclosure>` (`src/components/ui/Disclosure.tsx`) instead of raw HTML `<details>` for collapsible cards.
-- **Overlays & controls:** Build new modals and controls on top of `<Sheet>`, `<Dialog>`, `<Button>`, `<ListRow>`, `<SwipeableRow>`, and `<SegmentedControl>` so iOS physics and swipe/drag-to-dismiss are inherited automatically.
+- **Single source of truth:** Import mass-scaled springs (`SPRING_MICRO`, `SPRING_CONTROL`, `SPRING_PANEL`, `SPRING_SHEET`, `SPRING_PAGE`, `SPRING_ELASTIC`, `SPRING_NUDGE`), stagger helpers (`staggerDelay`), and `REDUCED_MOTION_TRANSITION` from `src/lib/motion.ts`. Never use linear motion or abrupt 0ms state snaps.
+- **Perceptual color continuity:** Use the `oklch(...)` tokens in `src/index.css` and `transition-colors` so colors interpolate smoothly without muddy RGB midpoints.
+- **Universal interaction acknowledgment:** Build interactive controls on top of `<Button>`, `<IconButton>`, `<Stepper>`, `<QuantityControl>`, `<CheckboxField>`, `<ListRow>`, `<Sheet>`, `<Dialog>`, and `<SwipeableRow>` (or use `useTouchRipple()` + `<TouchRippleLayer />`). Even disabled or boundary controls must respond visibly (`aria-disabled` spring nudge + `disabledReason` tooltip).
+- **Origin, destination & choreography:** Wrap tab/segmented view switches in `<TabView>`, drill-down flows in `<PushView>`, collapsible cards in `<Disclosure>`, and dynamic lists/sections in `<AnimatedList>` / `<AnimatedItem index={...}>` or `<StaggerSection index={...}>` (30–80 ms stagger).
 - **Illustrations & loading:** Use `<Illustration name="..." />` (`src/components/ui/Illustration.tsx`), `<EmptyState illustration="..." />` (`src/components/ui/EmptyState.tsx`), and `<AppLoader />` (`src/components/ui/AppLoader.tsx`) for empty states, reminders, and loading states so artwork stays cohesive.
-- **Performance & accessibility:** Animate only GPU-composited properties (`transform`, `opacity`, and `height` inside `<Disclosure>`). The root `<MotionConfig reducedMotion="user">` in `src/App.tsx` handles reduced-motion preferences automatically.
+- **Performance & accessibility:** Animate only GPU-composited properties (`transform`, `opacity`, and `height` inside `<Disclosure>`). Under `prefers-reduced-motion: reduce`, replace spatial movement with gentle ~160 ms cross-fades (`REDUCED_MOTION_TRANSITION`) — never instant pops.
+- **Rule 10 self-check:** Before finishing UI work, verify: (a) no instant property jumps, (b) clear origin & destination, (c) zero-velocity spring start/settle, (d) interruptibility, (e) smooth OKLCH color transitions, and (f) visible feedback on every interactive/disabled element.
 
 ## Git & Remote Sync
 

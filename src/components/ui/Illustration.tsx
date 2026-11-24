@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "motion/react"
-import { INSTANT_TRANSITION, IOS_TRANSITION } from "../../lib/motion"
+import { REDUCED_MOTION_TRANSITION, SPRING_ELASTIC } from "../../lib/motion"
 
 export type IllustrationName =
   | "shopping-cart"
@@ -372,9 +372,9 @@ export default function Illustration({
   return (
     <motion.div
       aria-hidden="true"
-      initial={reducedMotion ? false : { opacity: 0, scale: 0.94, y: 6 }}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9, y: 8 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={reducedMotion ? INSTANT_TRANSITION : IOS_TRANSITION}
+      transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_ELASTIC}
       className={`mx-auto select-none ${SIZE_CLASSES[size]} ${className}`.trim()}
     >
       {renderArtwork(name)}

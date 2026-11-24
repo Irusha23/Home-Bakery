@@ -2,10 +2,11 @@ import { useState, type ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
-  DISCLOSURE_TRANSITION,
-  INSTANT_TRANSITION,
-  TACTILE_SPRING,
+  REDUCED_MOTION_TRANSITION,
+  SPRING_MICRO,
+  SPRING_PANEL,
 } from "../../lib/motion"
+import { TouchRippleLayer, useTouchRipple } from "./TouchRipple"
 
 type DisclosureProps = {
   title: string
@@ -19,7 +20,7 @@ type DisclosureProps = {
 }
 
 /**
- * Animated iOS-style expandable card section replacing static HTML <details>.
+ * Physics-driven expandable card section replacing static HTML <details>.
  */
 export default function Disclosure({
   title,
@@ -33,6 +34,7 @@ export default function Disclosure({
 }: DisclosureProps) {
   const [open, setOpen] = useState(defaultOpen)
   const reducedMotion = useReducedMotion()
+  const { ripples, triggerRipple, removeRipple } = useTouchRipple()
 
   const resolvedContentClass =
     contentClassName ??
@@ -42,7 +44,7 @@ export default function Disclosure({
 
   return (
     <div
-      className={`overflow-hidden border border-warm-border ${
+      className={`overflow-hidden border border-warm-border transition-[background-color,border-color,box-shadow] duration-200 ${
         compact
           ? "rounded-control bg-ivory/60"
           : "rounded-card bg-white shadow-subtle"
@@ -51,26 +53,26 @@ export default function Disclosure({
       <motion.button
         type="button"
         aria-expanded={open}
+        onPointerDown={triggerRipple}
         onClick={() => setOpen((prev) => !prev)}
         whileTap={reducedMotion ? undefined : { scale: 0.99 }}
-        transition={TACTILE_SPRING}
-        className={`flex w-full items-center justify-between gap-3 text-left text-cocoa transition-colors duration-ui hover:bg-ivory/60 active:bg-sage-soft/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/30 ${
+        transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_MICRO}
+        className={`relative flex w-full items-center justify-between gap-3 text-left text-cocoa transition-colors duration-200 hover:bg-ivory/60 active:bg-sage-soft/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/30 ${
           compact
             ? "px-3 py-2 text-xs font-medium"
             : "min-h-touch px-4 text-sm font-semibold"
         }`}
       >
-        <span className="inline-flex min-w-0 items-center gap-1.5">
+        <TouchRippleLayer ripples={ripples} onDone={removeRipple} tone="dark" />
+        <span className="relative z-10 inline-flex min-w-0 items-center gap-1.5">
           {leadingIcon}
           <span className="truncate">{title}</span>
         </span>
-        <span className="inline-flex shrink-0 items-center gap-1.5">
+        <span className="relative z-10 inline-flex shrink-0 items-center gap-1.5">
           {trailing}
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
-            transition={
-              reducedMotion ? INSTANT_TRANSITION : DISCLOSURE_TRANSITION
-            }
+            transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_PANEL}
             className="inline-flex text-muted"
             aria-hidden="true"
           >
@@ -90,9 +92,9 @@ export default function Disclosure({
             }
             exit={reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
             transition={
-              reducedMotion ? INSTANT_TRANSITION : DISCLOSURE_TRANSITION
+              reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_PANEL
             }
-            className="overflow-hidden"
+            className="origin-top overflow-hidden"
           >
             <div className={resolvedContentClass}>{children}</div>
           </motion.div>

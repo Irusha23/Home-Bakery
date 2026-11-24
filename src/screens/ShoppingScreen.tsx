@@ -459,12 +459,12 @@ export default function ShoppingScreen({
 
         {visibleItems.length > 0 ? (
           <AnimatedList className="space-y-3">
-            {visibleItems.map((item) => {
+            {visibleItems.map((item, index) => {
               const inventoryItem = state.inventory.find(
                 (inv) => inv.inventoryId === item.inventoryId,
               )
               return (
-              <AnimatedItem key={item.inventoryId}>
+              <AnimatedItem key={item.inventoryId} index={index}>
                 <SwipeableRow
                   actionLabel="Remove"
                   disabled={!item.isManualExtra}

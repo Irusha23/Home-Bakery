@@ -1,10 +1,16 @@
 import { useRef, useState, type ChangeEvent } from "react"
 import { Check, ImagePlus, Trash2, Upload } from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
 import {
   getImagePresetsByCategory,
   type ImagePresetCategory,
 } from "../../lib/imageLibrary"
 import { compressImageFile } from "../../lib/imageUpload"
+import {
+  REDUCED_MOTION_TRANSITION,
+  SPRING_PANEL,
+  staggerDelay,
+} from "../../lib/motion"
 import Button from "./Button"
 import ItemThumbnail from "./ItemThumbnail"
 import { TabView } from "./MotionPrimitives"
@@ -98,6 +104,7 @@ export function ImagePickerSheet({
   onSelect,
   onClose,
 }: ImagePickerSheetProps) {
+  const reducedMotion = useReducedMotion()
   const [mode, setMode] = useState<"library" | "gallery">("library")
   const [category, setCategory] =
     useState<ImagePresetCategory>(defaultCategory)
@@ -156,14 +163,26 @@ export function ImagePickerSheet({
               />
 
               <div className="grid grid-cols-3 gap-2.5">
-                {presets.map((preset) => {
+                {presets.map((preset, index) => {
                   const selected = value === preset.id
                   return (
-                    <button
-                      key={preset.id}
+                    <motion.button
+                      key={`${category}-${preset.id}`}
                       type="button"
+                      initial={
+                        reducedMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: 6, scale: 0.96 }
+                      }
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      whileTap={reducedMotion ? undefined : { scale: 0.95 }}
+                      transition={
+                        reducedMotion
+                          ? REDUCED_MOTION_TRANSITION
+                          : { ...SPRING_PANEL, delay: staggerDelay(index) }
+                      }
                       onClick={() => onSelect(preset.id)}
-                      className={`relative flex flex-col items-center gap-1.5 rounded-card border p-2.5 text-center transition active:scale-button ${
+                      className={`relative flex flex-col items-center gap-1.5 rounded-card border p-2.5 text-center transition-colors duration-200 ${
                         selected
                           ? "border-sage bg-sage-soft/70 ring-2 ring-sage/25"
                           : "border-warm-border bg-white hover:border-sage-border"
@@ -182,7 +201,7 @@ export function ImagePickerSheet({
                       <span className="line-clamp-1 text-[11px] font-medium text-cocoa">
                         {preset.label}
                       </span>
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>

@@ -1,10 +1,11 @@
 import { useEffect, useRef, type ReactNode } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
-  INSTANT_TRANSITION,
   listItemVariants,
-  PUSH_TRANSITION,
-  TAB_TRANSITION,
+  REDUCED_MOTION_TRANSITION,
+  SPRING_PAGE,
+  SPRING_PANEL,
+  staggerDelay,
 } from "../../lib/motion"
 
 type TabViewProps = {
@@ -14,7 +15,7 @@ type TabViewProps = {
 }
 
 /**
- * Crisp iOS tab/segment settle without exit-wait blank gaps.
+ * Spring-settled tab/segment switch with origin fade and vertical settle.
  */
 export function TabView({ viewKey, children, className }: TabViewProps) {
   const reducedMotion = useReducedMotion()
@@ -22,9 +23,9 @@ export function TabView({ viewKey, children, className }: TabViewProps) {
   return (
     <motion.div
       key={viewKey}
-      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 5 }}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={reducedMotion ? INSTANT_TRANSITION : TAB_TRANSITION}
+      transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_PANEL}
       className={className}
     >
       {children}
@@ -56,8 +57,7 @@ type PushViewProps = {
 }
 
 /**
- * iOS-style directional horizontal push/pop container for drill-down screens.
- * Increasing `depth` pushes forward from the right; decreasing `depth` pops back.
+ * Physics-driven horizontal push/pop container for drill-down screens.
  */
 export function PushView({
   viewKey,
@@ -88,7 +88,7 @@ export function PushView({
           initial={reducedMotion ? { opacity: 0 } : "initial"}
           animate={reducedMotion ? { opacity: 1 } : "animate"}
           exit={reducedMotion ? { opacity: 0 } : "exit"}
-          transition={reducedMotion ? INSTANT_TRANSITION : PUSH_TRANSITION}
+          transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_PAGE}
           className={`w-full ${effectiveDepth > 0 ? "relative z-10 bg-ivory" : ""} ${className}`.trim()}
         >
           {children}
@@ -118,21 +118,63 @@ export function AnimatedList({ children, className = "" }: AnimatedListProps) {
 
 type AnimatedItemProps = {
   children: ReactNode
+  index?: number
   className?: string
 }
 
-export function AnimatedItem({ children, className = "" }: AnimatedItemProps) {
+export function AnimatedItem({
+  children,
+  index = 0,
+  className = "",
+}: AnimatedItemProps) {
   const reducedMotion = useReducedMotion()
+  const delay = reducedMotion ? 0 : staggerDelay(index)
 
   return (
     <motion.div
       layout={!reducedMotion}
       variants={reducedMotion ? undefined : listItemVariants}
-      initial={reducedMotion ? false : "initial"}
+      initial={reducedMotion ? { opacity: 0 } : "initial"}
       animate="animate"
       exit={reducedMotion ? { opacity: 0 } : "exit"}
-      transition={reducedMotion ? INSTANT_TRANSITION : TAB_TRANSITION}
+      transition={
+        reducedMotion
+          ? REDUCED_MOTION_TRANSITION
+          : { ...SPRING_PANEL, delay }
+      }
       className={`w-full ${className}`.trim()}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+type StaggerSectionProps = {
+  children: ReactNode
+  index: number
+  className?: string
+}
+
+/**
+ * Choreographs related screen sections with 45 ms hierarchical stagger.
+ */
+export function StaggerSection({
+  children,
+  index,
+  className = "",
+}: StaggerSectionProps) {
+  const reducedMotion = useReducedMotion()
+
+  return (
+    <motion.div
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={
+        reducedMotion
+          ? REDUCED_MOTION_TRANSITION
+          : { ...SPRING_PANEL, delay: staggerDelay(index) }
+      }
+      className={className}
     >
       {children}
     </motion.div>

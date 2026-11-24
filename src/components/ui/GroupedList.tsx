@@ -1,5 +1,8 @@
 import type { ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
+import { REDUCED_MOTION_TRANSITION, SPRING_MICRO } from "../../lib/motion"
+import { TouchRippleLayer, useTouchRipple } from "./TouchRipple"
 
 type GroupedListProps = {
   title?: string
@@ -28,7 +31,7 @@ export function GroupedList({
           {action}
         </div>
       ) : null}
-      <div className="divide-y divide-warm-border/75 overflow-hidden rounded-grouped border border-warm-border bg-white shadow-grouped">
+      <div className="divide-y divide-warm-border/75 overflow-hidden rounded-grouped border border-warm-border bg-white shadow-grouped transition-[border-color,box-shadow] duration-200">
         {children}
       </div>
     </section>
@@ -58,6 +61,9 @@ export function ListRow({
   tone = "default",
   className = "",
 }: ListRowProps) {
+  const reducedMotion = useReducedMotion()
+  const { ripples, triggerRipple, removeRipple } = useTouchRipple()
+
   const titleToneClass =
     tone === "danger"
       ? "text-error"
@@ -67,28 +73,32 @@ export function ListRow({
 
   const content = (
     <>
-      {leading ? <div className="shrink-0">{leading}</div> : null}
-      <div className="min-w-0 flex-1 text-left">
-        <div className={`line-clamp-2 text-sm font-semibold leading-snug ${titleToneClass}`}>
+      {leading ? <div className="relative z-10 shrink-0">{leading}</div> : null}
+      <div className="relative z-10 min-w-0 flex-1 text-left">
+        <div
+          className={`line-clamp-2 text-sm font-semibold leading-snug transition-colors duration-200 ${titleToneClass}`}
+        >
           {title}
         </div>
         {subtitle ? (
-          <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
+          <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted transition-colors duration-200">
             {subtitle}
           </div>
         ) : null}
       </div>
       {value !== undefined && value !== null ? (
-        <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-cocoa">
+        <div className="relative z-10 shrink-0 text-right text-sm font-semibold tabular-nums text-cocoa">
           {value}
         </div>
       ) : null}
-      {trailing ? <div className="shrink-0">{trailing}</div> : null}
+      {trailing ? (
+        <div className="relative z-10 shrink-0">{trailing}</div>
+      ) : null}
       {showChevron ? (
         <ChevronRight
           aria-hidden="true"
           size={17}
-          className="shrink-0 text-muted-light"
+          className="relative z-10 shrink-0 text-muted-light"
         />
       ) : null}
     </>
@@ -96,19 +106,23 @@ export function ListRow({
 
   if (onClick) {
     return (
-      <button
+      <motion.button
         type="button"
+        onPointerDown={triggerRipple}
         onClick={onClick}
-        className={`flex min-h-touch w-full items-center gap-3 px-4 py-3 transition duration-ui ease-out hover:bg-ivory/70 active:scale-[0.99] active:bg-sage-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/35 ${className}`}
+        whileTap={reducedMotion ? undefined : { scale: 0.985 }}
+        transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_MICRO}
+        className={`relative flex min-h-touch w-full items-center gap-3 px-4 py-3 transition-colors duration-200 ease-out hover:bg-ivory/75 active:bg-sage-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/35 ${className}`}
       >
+        <TouchRippleLayer ripples={ripples} onDone={removeRipple} tone="dark" />
         {content}
-      </button>
+      </motion.button>
     )
   }
 
   return (
     <div
-      className={`flex min-h-touch items-center gap-3 px-4 py-3 ${className}`}
+      className={`flex min-h-touch items-center gap-3 px-4 py-3 transition-colors duration-200 ${className}`}
     >
       {content}
     </div>

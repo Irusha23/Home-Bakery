@@ -471,14 +471,14 @@ export default function OrdersScreen({
 
         {filteredOrders.length ? (
           <AnimatedList className="space-y-3 pt-1">
-            {filteredOrders.map((order) => {
+            {filteredOrders.map((order, index) => {
               const quickAction = getQuickAction(order)
               const primaryLine = order.lines[0]
               const primaryProduct = state.products.find(
                 (p) => p.id === primaryLine?.productId,
               )
               return (
-                <AnimatedItem key={order.id}>
+                <AnimatedItem key={order.id} index={index}>
                   <OrderCard
                     order={order}
                     thumbnailImage={

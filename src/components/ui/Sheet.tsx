@@ -8,7 +8,7 @@ import {
   useReducedMotion,
   type PanInfo,
 } from "motion/react"
-import { INSTANT_TRANSITION, SHEET_SPRING } from "../../lib/motion"
+import { REDUCED_MOTION_TRANSITION, SPRING_SHEET } from "../../lib/motion"
 import { useBodyScrollLock } from "../../lib/useBodyScrollLock"
 import { IconButton } from "./Button"
 
@@ -68,7 +68,9 @@ export default function Sheet({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={reducedMotion ? INSTANT_TRANSITION : { duration: 0.22 }}
+            transition={
+              reducedMotion ? REDUCED_MOTION_TRANSITION : { duration: 0.24 }
+            }
             className="fixed inset-0 touch-none bg-cocoa/30 backdrop-blur-overlay"
             onClick={onClose}
             aria-hidden="true"
@@ -83,7 +85,9 @@ export default function Sheet({
             }
             animate={{ y: 0, opacity: 1 }}
             exit={reducedMotion ? { opacity: 0 } : { y: "100%", opacity: 0.9 }}
-            transition={reducedMotion ? INSTANT_TRANSITION : SHEET_SPRING}
+            transition={
+              reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_SHEET
+            }
             drag={reducedMotion ? false : "y"}
             dragControls={dragControls}
             dragListener={false}

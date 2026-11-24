@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   DIALOG_SPRING,
   dialogVariants,
-  INSTANT_TRANSITION,
+  REDUCED_MOTION_TRANSITION,
 } from "../../lib/motion"
 import { useBodyScrollLock } from "../../lib/useBodyScrollLock"
 import Button, { IconButton } from "./Button"
@@ -53,7 +53,9 @@ export default function Dialog({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={reducedMotion ? INSTANT_TRANSITION : { duration: 0.2 }}
+            transition={
+              reducedMotion ? REDUCED_MOTION_TRANSITION : { duration: 0.22 }
+            }
             className="fixed inset-0 touch-none bg-cocoa/25 backdrop-blur-overlay"
             onClick={onClose}
             aria-hidden="true"
@@ -67,7 +69,9 @@ export default function Dialog({
             initial={reducedMotion ? { opacity: 0 } : "initial"}
             animate={reducedMotion ? { opacity: 1 } : "animate"}
             exit={reducedMotion ? { opacity: 0 } : "exit"}
-            transition={reducedMotion ? INSTANT_TRANSITION : DIALOG_SPRING}
+            transition={
+              reducedMotion ? REDUCED_MOTION_TRANSITION : DIALOG_SPRING
+            }
             className="relative z-10 flex max-h-[85dvh] w-full max-w-dialog flex-col overflow-hidden rounded-sheet border border-warm-border bg-white p-5 shadow-dialog"
           >
             <div className="flex shrink-0 items-start justify-between gap-4">
