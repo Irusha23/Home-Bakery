@@ -1,3 +1,7 @@
+import { Capacitor } from "@capacitor/core"
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem"
+import { Share } from "@capacitor/share"
+
 export type BackupExportMethod = "share" | "download"
 
 export type BackupShareOptions = {
@@ -7,11 +11,20 @@ export type BackupShareOptions = {
   text: string
 }
 
+function isShareCancelError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const msg = error.message.toLowerCase()
+  return (
+    error.name === "AbortError" ||
+    msg.includes("cancel") ||
+    msg.includes("abort")
+  )
+}
+
 /**
- * Exports a backup file using the native Web Share Sheet when supported
- * (enabling 1-tap saving to Google Drive or WhatsApp on Android Chrome),
- * falling back cleanly to browser file download. Phase 15 plugs native
- * `@capacitor/filesystem` + `@capacitor/share` behind this same contract.
+ * Exports a backup file using native Android Share Sheet inside Capacitor
+ * (`@capacitor/filesystem` + `@capacitor/share`), Web Share API on mobile
+ * browsers, or direct file download fallback.
  */
 export async function shareOrDownloadBackupFile({
   filename,
@@ -22,6 +35,33 @@ export async function shareOrDownloadBackupFile({
   method: BackupExportMethod
   cancelled?: boolean
 }> {
+  if (Capacitor.isNativePlatform()) {
+    await Filesystem.writeFile({
+      path: filename,
+      data: content,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
+    })
+    const { uri } = await Filesystem.getUri({
+      path: filename,
+      directory: Directory.Cache,
+    })
+    try {
+      await Share.share({
+        title,
+        text,
+        files: [uri],
+        dialogTitle: "Save or share backup",
+      })
+      return { method: "share" }
+    } catch (error) {
+      if (isShareCancelError(error)) {
+        return { method: "share", cancelled: true }
+      }
+      throw error
+    }
+  }
+
   if (typeof File !== "undefined" && typeof navigator !== "undefined") {
     const file = new File([content], filename, { type: "application/json" })
     if (

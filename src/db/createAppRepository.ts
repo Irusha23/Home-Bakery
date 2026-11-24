@@ -1,11 +1,16 @@
+import { Capacitor } from "@capacitor/core"
+import { CapacitorSqliteEngine } from "./engines/capacitorSqliteEngine"
 import { IndexedDbAppRepository } from "./indexedDbRepository"
 import type { AppRepository } from "./repository"
+import { SqliteAppRepository } from "./sqliteRepository"
 
 /**
- * Creates the browser-safe default `AppRepository` (`IndexedDbAppRepository`).
- * In Phase 15 (Capacitor Android), native platform detection will select
- * `new SqliteAppRepository(new CapacitorSqliteEngine())` on Android devices.
+ * Selects native on-device SQLite (`@capacitor-community/sqlite`) when running
+ * inside the Capacitor Android APK, and IndexedDB when running in Chrome/Web.
  */
 export function createDefaultAppRepository(): AppRepository {
+  if (Capacitor.isNativePlatform()) {
+    return new SqliteAppRepository(new CapacitorSqliteEngine())
+  }
   return new IndexedDbAppRepository()
 }

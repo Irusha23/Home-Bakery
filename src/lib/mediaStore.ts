@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core"
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem"
 import { useEffect, useState } from "react"
 import type { AppData } from "../types"
 import { createId } from "./id"
@@ -137,6 +139,73 @@ export class IndexedDbMediaStore implements MediaStore {
 }
 
 /**
+ * Native Android Filesystem `MediaStore` persisting compressed image payloads
+ * under `Directory.Data/media/<id>.txt` so photos survive app restarts and
+ * keep SQLite records lightweight.
+ */
+export class CapacitorFilesystemMediaStore implements MediaStore {
+  readonly backendName = "capacitor-filesystem"
+
+  private toFilePath(ref: string): string {
+    const cleanId = ref
+      .slice(MEDIA_REF_PREFIX.length)
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+    return `media/${cleanId}.txt`
+  }
+
+  async saveMedia(dataUrl: string): Promise<string> {
+    const ref = `${MEDIA_REF_PREFIX}${createId("img")}`
+    resolvedCache.set(ref, dataUrl)
+    try {
+      await Filesystem.writeFile({
+        path: this.toFilePath(ref),
+        data: dataUrl,
+        directory: Directory.Data,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      })
+      return ref
+    } catch {
+      return dataUrl
+    }
+  }
+
+  async loadMedia(ref: string): Promise<string | null> {
+    if (isDataImageUrl(ref)) return ref
+    const cached = resolvedCache.get(ref)
+    if (cached) return cached
+    if (!isMediaRef(ref)) return null
+    try {
+      const result = await Filesystem.readFile({
+        path: this.toFilePath(ref),
+        directory: Directory.Data,
+        encoding: Encoding.UTF8,
+      })
+      if (typeof result.data === "string" && isDataImageUrl(result.data)) {
+        resolvedCache.set(ref, result.data)
+        return result.data
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  async deleteMedia(ref: string): Promise<void> {
+    resolvedCache.delete(ref)
+    if (!isMediaRef(ref)) return
+    try {
+      await Filesystem.deleteFile({
+        path: this.toFilePath(ref),
+        directory: Directory.Data,
+      })
+    } catch {
+      // Ignore deletion errors for missing files
+    }
+  }
+}
+
+/**
  * In-memory `MediaStore` implementation used by deterministic Vitest tests.
  */
 export class MemoryMediaStore implements MediaStore {
@@ -159,7 +228,9 @@ export class MemoryMediaStore implements MediaStore {
   }
 }
 
-export const defaultMediaStore = new IndexedDbMediaStore()
+export const defaultMediaStore: MediaStore = Capacitor.isNativePlatform()
+  ? new CapacitorFilesystemMediaStore()
+  : new IndexedDbMediaStore()
 
 /**
  * Resolves either inline `data:image/...` strings or `media:<id>` references
