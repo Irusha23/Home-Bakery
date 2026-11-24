@@ -10,7 +10,9 @@ import {
 import { demoData } from "../test/demoFixture"
 import { NodeSqliteEngine } from "./engines/nodeSqliteEngine"
 import { bootstrapAppRepository } from "./legacyImport"
+import { migration0001InitialSchema } from "./migrations/0001_initial_schema"
 import {
+  ALL_MIGRATIONS,
   getAppliedSchemaVersion,
   LATEST_DB_SCHEMA_VERSION,
   runMigrations,
@@ -329,5 +331,47 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
     })
     expect(recoveryBoot.kind).toBe("recovery")
     expect(await freshRepo.hasData()).toBe(false)
+  })
+
+  it("upgrades v1 SQLite databases cleanly to v2 and round-trips order referencePhoto", async () => {
+    const { engine, repo } = createRepo()
+    await runMigrations(engine, [migration0001InitialSchema])
+    expect(await getAppliedSchemaVersion(engine)).toBe(1)
+
+    // Seed an order directly on v1 schema before v2 migration runs
+    await engine.run(
+      `INSERT INTO app_settings (
+        id, business_name, owner_name, default_labour_rate_per_hour,
+        default_pricing_mode, default_margin_percent, default_markup_percent,
+        price_rounding_step, default_low_stock_threshold
+      ) VALUES (1, 'Udeni''s Specials', 'Udeni', 600, 'margin', 45, 80, 50, 2)`,
+    )
+    await engine.run(
+      `INSERT INTO orders (
+        id, reference, customer_id, customer_name, is_quick_order,
+        status, preparation_status, payment_status, collection_date,
+        collection_time, instructions, agreed_price, cost_snapshot_json,
+        reservations_json, shortages_json, created_at, updated_at
+      ) VALUES (
+        'v1-order', 'US-1001', NULL, 'Walk-in', 1,
+        'Draft', 'Not started', 'Unpaid', '2026-10-20',
+        '14:00', '', 5000, '{"ingredients":2000,"packaging":200,"labour":300,"estimatedTotal":2500,"suggestedPrice":5000}',
+        '[]', '[]', '2026-10-12T08:00:00.000Z', '2026-10-12T08:00:00.000Z'
+      )`,
+    )
+
+    const upgrade = await runMigrations(engine, ALL_MIGRATIONS)
+    expect(upgrade.appliedVersions).toEqual([2])
+    expect(upgrade.currentVersion).toBe(2)
+
+    const loadedV1 = await repo.loadAppData()
+    expect(loadedV1?.orders[0].id).toBe("v1-order")
+    expect(loadedV1?.orders[0].referencePhoto).toBeUndefined()
+
+    const withPhoto = migrateState(createStarterData())
+    withPhoto.orders[0].referencePhoto = "media:img-ref-123"
+    await repo.saveAppData(withPhoto)
+    const reloaded = await repo.loadAppData()
+    expect(reloaded?.orders[0].referencePhoto).toBe("media:img-ref-123")
   })
 })

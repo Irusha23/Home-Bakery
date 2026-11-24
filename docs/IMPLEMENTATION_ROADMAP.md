@@ -136,17 +136,17 @@ Tasks:
 - [x] Build the `AppRepository` / `SqliteAppRepository` / `IndexedDbAppRepository` layers (`src/db/*`) and wire `AppStateProvider` with automatic one-time `localStorage` → repository import (`bootstrapAppRepository`).
 - [x] **Exit gate:** Migration, constraint, transaction-rollback, round-trip, legacy-import, and idempotency tests pass in Vitest; `npx tsc --noEmit` and `pnpm build` succeed.
 
-### Phase 14 — Native Local Media Storage & Android Off-Device Backups (Next)
+### Phase 14 — Native Local Media Storage & Android Off-Device Backups (Completed)
 
-**Goal:** Replace base64 image strings with compressed local device files and enable 1-tap off-device backups to Google Drive / WhatsApp. *(Good milestone to install **Android Studio** to test real Android file/share dialogs.)*
+**Goal:** Store uploaded photos locally via a clean `MediaStore` abstraction, unlock customer order reference photos, and enable password-protected + 1-tap Share Sheet backups.
 
 Tasks:
-- [ ] Store uploaded photos as compressed local files (`@capacitor/filesystem` + `@capacitor/camera`, with browser fallback in dev) and unlock the deferred **Customer Order Reference Photo** attachment on orders.
-- [ ] Upgrade `BackupRestorePanel` (`SettingsScreen.tsx`) to export backups via `@capacitor/filesystem` + `@capacitor/share` (1-tap save to Google Drive, WhatsApp, or Downloads) and import/validate backups via native file picker.
-- [ ] Add optional password-protected encrypted backup support (Web Crypto PBKDF2 + AES-GCM) so backups stored in Google Drive or WhatsApp stay private.
-- [ ] **Exit gate:** Photo capture/pick, customer order photo attachment, and encrypted/plain backup export + validated restore pass automated tests and work cleanly on browser + Android Emulator.
+- [x] Implement `MediaStore` (`IndexedDbMediaStore` + `MemoryMediaStore`) in `src/lib/mediaStore.ts` with backup photo hydration (`resolveAppDataMediaForExport`) so Phase 15 Capacitor `@capacitor/filesystem` swaps in cleanly.
+- [x] Unlock **Customer Order Reference Photo** attachment across `CreateOrderFlow.tsx`, `OrderDetailScreen.tsx`, `ImagePickerSheet.tsx`, `AppState.tsx`, and SQLite migration `0002_order_reference_photo`.
+- [x] Upgrade `BackupRestorePanel.tsx` with 1-tap Share Sheet export (`src/lib/backupShare.ts` → Google Drive / WhatsApp / Download fallback) and optional password-protected AES-256-GCM encrypted backups (`src/lib/backupCrypto.ts`).
+- [x] **Exit gate:** MediaStore, backup encryption/decryption, v2 migration upgrade, and full order photo workflow pass automated tests (`npx tsc --noEmit`, `pnpm test`, `pnpm build`).
 
-### Phase 15 — Capacitor Android Setup & Native Mobile UX
+### Phase 15 — Capacitor Android Setup & Native Mobile UX (Next)
 
 **Goal:** Wrap the React/Vite app in Capacitor Android and wire native hardware behavior so the app feels completely native on Android.
 
