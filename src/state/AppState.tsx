@@ -9,7 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { defaultBudgetPlan, defaultSettings, demoData } from "../data/demoData"
+import {
+  createEmptyAppData,
+  defaultBudgetPlan,
+  defaultSettings,
+} from "../data/defaults"
+import { createStarterData, getInitialAppData } from "../data/starterData"
 import PersistenceRecoveryScreen from "../components/PersistenceRecoveryScreen"
 import { createId } from "../lib/id"
 import {
@@ -111,7 +116,8 @@ type AppAction =
       variantId: string
       inventoryId: string | null
     }
-  | { type: "RESET_DEMO" }
+  | { type: "CLEAR_WORKSPACE" }
+  | { type: "LOAD_STARTER_SAMPLE" }
   | { type: "RESTORE_DATA"; data: AppData }
   | { type: "UPSERT_EXTRA_STOCK_PLAN"; plan: ExtraStockPlan }
   | { type: "REMOVE_EXTRA_STOCK_PLAN"; planId: string }
@@ -280,8 +286,12 @@ function isValidTimestamp(value: string) {
 
 const AppStateContext = createContext<AppStateValue | null>(null)
 
-function cloneDemoData(): AppData {
-  return migrateState(structuredClone(demoData))
+function cloneStarterData(): AppData {
+  return migrateState(createStarterData())
+}
+
+function cloneEmptyData(): AppData {
+  return migrateState(createEmptyAppData())
 }
 
 function scopeRequirementsToLines(
@@ -442,26 +452,15 @@ function normalizeSettings(raw?: Partial<AppSettings> | null): AppSettings {
 }
 
 export function migrateState(source: AppData): AppData {
-  const defaults = structuredClone(demoData)
+  const defaults = createEmptyAppData()
   const sourceInventory = Array.isArray(source.inventory)
     ? source.inventory
     : []
-  const inventory = sourceInventory.map((item) => {
-    const mergedItem = {
-      ...(defaults.inventory.find(
-        (candidate) => candidate.inventoryId === item.inventoryId,
-      ) ?? {}),
-      ...item,
-    }
-    return mergedItem.category === "finished" &&
-      item.unbatchedLegacyQuantity === undefined
-      ? { ...mergedItem, unbatchedLegacyQuantity: mergedItem.physical }
-      : mergedItem
-  })
-  for (const defaultItem of defaults.inventory) {
-    if (!inventory.some((item) => item.inventoryId === defaultItem.inventoryId))
-      inventory.push(defaultItem)
-  }
+  const inventory = sourceInventory.map((item) =>
+    item.category === "finished" && item.unbatchedLegacyQuantity === undefined
+      ? { ...item, unbatchedLegacyQuantity: item.physical }
+      : item,
+  )
 
   const recipes = (source.recipes ?? defaults.recipes).map((recipe) => ({
     ...recipe,
@@ -480,7 +479,7 @@ export function migrateState(source: AppData): AppData {
         unit: item.unit,
         balanceAfter: item.physical,
         date: "2025-04-01",
-        reason: "Opening demo balance",
+        reason: "Opening balance",
         createdAt: "2025-04-01T08:00:00.000Z",
       }))
 
@@ -2457,8 +2456,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
     }
 
-    case "RESET_DEMO":
-      return cloneDemoData()
+    case "CLEAR_WORKSPACE":
+      return cloneEmptyData()
+    case "LOAD_STARTER_SAMPLE":
+      return cloneStarterData()
     case "RESTORE_DATA":
       return action.data
 
@@ -2828,7 +2829,11 @@ export default function AppStateProvider({
   children: ReactNode
 }) {
   const [bootstrap, setBootstrap] = useState<PersistenceBootstrap>(() =>
-    readPersistedState(() => window.localStorage, demoData, migrateState),
+    readPersistedState(
+      () => window.localStorage,
+      getInitialAppData(),
+      migrateState,
+    ),
   )
 
   if (bootstrap.kind === "recovery") {
@@ -2839,7 +2844,7 @@ export default function AppStateProvider({
           setBootstrap(
             readPersistedState(
               () => window.localStorage,
-              demoData,
+              getInitialAppData(),
               migrateState,
             ),
           )
@@ -2850,7 +2855,7 @@ export default function AppStateProvider({
             startFreshPreservingRaw(
               bootstrap,
               () => window.localStorage,
-              demoData,
+              getInitialAppData(),
               migrateState,
               recoveryId,
             ),

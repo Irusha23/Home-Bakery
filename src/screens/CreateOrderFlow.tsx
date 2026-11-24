@@ -76,7 +76,11 @@ export default function CreateOrderFlow({
   const [showNotes, setShowNotes] = useState(Boolean(order?.instructions))
   const [draftId] = useState(() => order?.id ?? createId("order"))
   const [customerMode, setCustomerMode] = useState<CustomerMode>(
-    order?.isQuickOrder ? "quick" : "existing",
+    order?.isQuickOrder
+      ? "quick"
+      : !order && !initialCustomerId && state.customers.length === 0
+        ? "new"
+        : "existing",
   )
   const [customerId, setCustomerId] = useState(
     order?.customerId ?? initialCustomerId ?? state.customers[0]?.id ?? "",
@@ -514,10 +518,14 @@ export default function CreateOrderFlow({
               <SelectField
                 label="Product"
                 value={line.productId}
-                options={activeProducts.map((item) => ({
-                  value: item.id,
-                  label: item.name,
-                }))}
+                options={
+                  activeProducts.length > 0
+                    ? activeProducts.map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                      }))
+                    : [{ value: "", label: "No products yet — tap + Product below" }]
+                }
                 onChange={(event) => {
                   const nextProduct = activeProducts.find(
                     (item) => item.id === event.target.value,
@@ -539,10 +547,14 @@ export default function CreateOrderFlow({
                 <SelectField
                   label="Size"
                   value={line.variantId}
-                  options={variants.map((item) => ({
-                    value: item.id,
-                    label: item.name,
-                  }))}
+                  options={
+                    variants.length > 0
+                      ? variants.map((item) => ({
+                          value: item.id,
+                          label: item.name,
+                        }))
+                      : [{ value: "", label: "Add a product first" }]
+                  }
                   onChange={(event) =>
                     setLine(line.id, {
                       variantId: event.target.value,

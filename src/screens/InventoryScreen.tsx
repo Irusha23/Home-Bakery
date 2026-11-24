@@ -19,6 +19,7 @@ import InventoryItemSheet from "../components/domain/InventoryItemSheet"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
 import Dialog from "../components/ui/Dialog"
+import EmptyState from "../components/ui/EmptyState"
 import Field from "../components/ui/Field"
 import ItemThumbnail from "../components/ui/ItemThumbnail"
 import SegmentedControl from "../components/ui/SegmentedControl"
@@ -248,16 +249,44 @@ export default function InventoryScreen({
           />
         ))}
         {!visibleItems.length ? (
-          <Card className="py-8 text-center">
-            <CircleCheck
-              aria-hidden="true"
-              className="mx-auto text-success"
-              size={25}
+          filter === "all" && !search.trim() ? (
+            <EmptyState
+              illustration={category === "finished" ? "cake-box" : "shopping-cart"}
+              title={
+                category === "ingredient"
+                  ? "No ingredients yet"
+                  : category === "packaging"
+                    ? "No packaging items yet"
+                    : "No finished stock yet"
+              }
+              description={
+                category === "finished"
+                  ? "Extra-stock bakes you finish will appear here for quick sales."
+                  : `Add your first ${category === "packaging" ? "box or board" : "ingredient"} to track stock and costs.`
+              }
+              actionLabel={
+                category === "finished"
+                  ? undefined
+                  : category === "packaging"
+                    ? "Add packaging"
+                    : "Add ingredient"
+              }
+              onAction={
+                category === "finished" ? undefined : () => setNewItemOpen(true)
+              }
             />
-            <p className="mt-3 text-sm font-semibold text-cocoa">
-              No stock matches this filter
-            </p>
-          </Card>
+          ) : (
+            <Card className="py-8 text-center">
+              <CircleCheck
+                aria-hidden="true"
+                className="mx-auto text-success"
+                size={25}
+              />
+              <p className="mt-3 text-sm font-semibold text-cocoa">
+                No stock matches this filter
+              </p>
+            </Card>
+          )
         ) : null}
       </div>
       <InventoryItemSheet

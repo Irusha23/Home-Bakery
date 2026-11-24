@@ -42,7 +42,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     state.settings.priceRoundingStep,
   )
   const [error, setError] = useState("")
-  const [resetOpen, setResetOpen] = useState(false)
+  const [resetMode, setResetMode] = useState<"empty" | "starter" | null>(null)
 
   useEffect(() => {
     setBusinessName(state.settings.businessName)
@@ -351,20 +351,30 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
               Reset workspace
             </h2>
             <p className="mt-0.5 text-xs text-muted">
-              Replaces your current bakery records with the clean sample
-              dataset. Export a backup first if you want to keep your changes.
+              Start with a completely blank workspace or load the minimal
+              1-item starter sample. Export a backup first if you want to keep
+              your changes.
             </p>
           </div>
         </div>
-        <Button
-          fullWidth
-          variant="secondary"
-          className="border-error/30 text-error hover:bg-error-soft"
-          leadingIcon={<RotateCcw aria-hidden="true" size={16} />}
-          onClick={() => setResetOpen(true)}
-        >
-          Reset demo data
-        </Button>
+        <div className="space-y-2">
+          <Button
+            fullWidth
+            variant="secondary"
+            className="border-error/30 text-error hover:bg-error-soft"
+            leadingIcon={<RotateCcw aria-hidden="true" size={16} />}
+            onClick={() => setResetMode("empty")}
+          >
+            Clear workspace (start empty)
+          </Button>
+          <Button
+            fullWidth
+            variant="ghost"
+            onClick={() => setResetMode("starter")}
+          >
+            Load minimal starter sample
+          </Button>
+        </div>
       </Card>
 
       <GroupedList title="About">
@@ -374,31 +384,45 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       </GroupedList>
 
       <Dialog
-        open={resetOpen}
-        title="Reset to sample bakery data?"
+        open={resetMode !== null}
+        title={
+          resetMode === "empty"
+            ? "Clear workspace and start empty?"
+            : "Load minimal starter sample?"
+        }
         description="This action cannot be undone unless you have saved a backup file."
-        onClose={() => setResetOpen(false)}
+        onClose={() => setResetMode(null)}
         footer={
           <div className="space-y-2">
             <Button
               fullWidth
               className="bg-error text-white hover:bg-error/90"
               onClick={() => {
-                dispatch({ type: "RESET_DEMO" })
-                setResetOpen(false)
-                showToast({
-                  message: "Sample demo data restored",
-                  tone: "info",
-                })
+                if (resetMode === "empty") {
+                  dispatch({ type: "CLEAR_WORKSPACE" })
+                  showToast({
+                    message: "Workspace cleared",
+                    tone: "info",
+                  })
+                } else {
+                  dispatch({ type: "LOAD_STARTER_SAMPLE" })
+                  showToast({
+                    message: "Minimal starter sample loaded",
+                    tone: "info",
+                  })
+                }
+                setResetMode(null)
                 onBack()
               }}
             >
-              Yes, reset demo data
+              {resetMode === "empty"
+                ? "Yes, clear workspace"
+                : "Yes, load starter sample"}
             </Button>
             <Button
               fullWidth
               variant="ghost"
-              onClick={() => setResetOpen(false)}
+              onClick={() => setResetMode(null)}
             >
               Cancel
             </Button>
@@ -406,9 +430,9 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         }
       >
         <p className="text-sm leading-relaxed text-muted">
-          All custom orders, recipes, customers, expenses, budget goals, and
-          stock adjustments on this device will be replaced by the clean sample
-          data.
+          {resetMode === "empty"
+            ? "All orders, recipes, products, customers, expenses, and stock records on this device will be cleared so you can start completely fresh."
+            : "All current records on this device will be replaced with the minimal 1-customer, 1-product, 1-recipe, 1-order starter sample."}
         </p>
       </Dialog>
     </div>

@@ -1,34 +1,11 @@
 import type {
   AppData,
-  AppSettings,
-  BudgetPlan,
   Order,
   Recipe,
   RecipeSnapshot,
 } from "../types"
+import { defaultBudgetPlan, defaultSettings } from "../data/defaults"
 import { BUILT_IN_EXPENSE_CATEGORIES } from "../lib/expenses"
-
-export const defaultBudgetPlan: BudgetPlan = {
-  monthlySalesTarget: 150000,
-  monthlyProfitTarget: 60000,
-  ingredientSpendLimit: 75000,
-  categoryLimits: {},
-  updatedAt: "2026-01-01T00:00:00.000Z",
-}
-
-export const defaultSettings: AppSettings = {
-  businessName: "Udeni's Specials",
-  ownerName: "Udeni",
-  defaultLabourRatePerHour: 600,
-  defaultPricingMode: "margin",
-  defaultMarginPercent: 45,
-  defaultMarkupPercent: 80,
-  priceRoundingStep: 50,
-  defaultLowStockThreshold: 2,
-  backupReminderDismissedAt: null,
-  backupReminderSnoozedUntil: null,
-  lastBackupAt: null,
-}
 
 export const demoRecipes: Recipe[] = [
   {

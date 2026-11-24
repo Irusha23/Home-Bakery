@@ -7,7 +7,7 @@ import type {
   RecipeSnapshot,
   StockRequirement,
 } from "../types"
-import { defaultBudgetPlan, defaultSettings } from "../data/demoData"
+import { defaultBudgetPlan, defaultSettings } from "../data/defaults"
 import { BUILT_IN_EXPENSE_CATEGORIES } from "../lib/expenses"
 
 export function createTestAppData(overrides: Partial<AppData> = {}): AppData {

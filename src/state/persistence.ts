@@ -1,4 +1,4 @@
-import { defaultBudgetPlan, defaultSettings } from "../data/demoData"
+import { defaultBudgetPlan, defaultSettings } from "../data/defaults"
 
 import { derivePaymentStatus } from "../lib/financials"
 
@@ -1766,7 +1766,7 @@ export function readPersistedState(
 
         raw: null,
 
-        message: `Demo data could not be initialized: ${errorMessage(error)}`,
+        message: `Workspace data could not be initialized: ${errorMessage(error)}`,
       }
     }
   }
@@ -2049,7 +2049,7 @@ export function startFreshPreservingRaw(
     return {
       ...recovery,
 
-      message: `Demo data could not be initialized. ${errorMessage(error)}`,
+      message: `Workspace data could not be initialized. ${errorMessage(error)}`,
     }
   }
 
@@ -2064,7 +2064,7 @@ export function startFreshPreservingRaw(
       persistenceEnabled: false,
 
       persistenceError:
-        "Fresh demo data is available for this session, but storage access failed. It will not be saved, and existing data was not changed.",
+        "A fresh workspace is available for this session, but storage access failed. It will not be saved, and existing data was not changed.",
     }
   }
 

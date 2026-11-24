@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { demoData } from "../data/demoData"
+import { demoData } from "../test/demoFixture"
 
 import { migrateState } from "./AppState"
 

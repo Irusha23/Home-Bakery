@@ -79,7 +79,7 @@ export default function PersistenceRecoveryScreen({
         </h1>
         <p className="mt-3 leading-relaxed text-muted">
           The original saved value has been preserved. The application is paused
-          so it cannot replace that data with demo information.
+          so it cannot replace that data.
         </p>
         <p
           role="alert"
@@ -122,7 +122,7 @@ export default function PersistenceRecoveryScreen({
               onClick={() => setConfirmFresh(true)}
               fullWidth
             >
-              Start fresh with demo data
+              Start with a fresh workspace
             </Button>
           ) : (
             <div
@@ -131,9 +131,9 @@ export default function PersistenceRecoveryScreen({
               className="rounded-card border border-warm-border bg-ivory p-4"
             >
               <p className="text-sm leading-relaxed">
-                Start with demo data? Your preserved saved value will not be
-                deleted. Fresh data will be saved separately only after the
-                original value has been safely preserved.
+                Start with a fresh workspace? Your preserved saved value will
+                not be deleted. Fresh data will be saved separately only after
+                the original value has been safely preserved.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <Button onClick={onStartFresh}>Confirm fresh start</Button>

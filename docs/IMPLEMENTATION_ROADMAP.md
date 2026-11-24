@@ -111,18 +111,18 @@ Completed:
 > [!NOTE]
 > Each phase below is executed **one at a time**, ending with a verified test/build gate and Git commit before starting the next phase. This roadmap is a living document and will be updated whenever architectural or scope decisions evolve.
 
-### Phase 11 — UI Purification & Minimal Starter Dataset
+### Phase 11 — UI Purification & Minimal Starter Dataset (Completed)
 
 **Goal:** Remove bloated mock/demo data from the runtime app while keeping a minimal, realistic 1-item slice to verify every UI workflow, without breaking any automated tests.
 
 Tasks:
-- [ ] Split `src/data/demoData.ts` into:
+- [x] Split `src/data/demoData.ts` into:
   - `src/data/defaults.ts` — pure empty production defaults (`defaultSettings`, `defaultBudgetPlan`, built-in expense categories, empty collections).
   - `src/data/starterData.ts` — minimal UI verification seed: **1 customer, 1 product (+ 1 variant), 1 recipe (with its required ingredients & packaging), and 1 active order** (zero historical mock orders, fake expenses, or extra-stock clutter).
   - `src/test/demoFixture.ts` — full multi-record test fixture moved under `src/test/` for unit tests (`persistence.test.ts`, `AppState.test.ts`).
-- [ ] Update `SettingsScreen.tsx` copy (*"Reset demo data"* → *"Load starter sample"* / *"Clear workspace"*) and add a `VITE_STARTER_MODE=minimal|empty` flag for testing blank vs. 1-item boot.
-- [ ] Verify every screen's empty state (`Home`, `Orders`, `Shopping`, `Recipes`, `Inventory`, `Money`, `Customers`, `Notifications`) renders cleanly on empty and minimal data.
-- [ ] **Exit gate:** All 265+ unit tests pass, `pnpm build` succeeds, and manual UI walkthrough confirms every workflow operates cleanly on empty and minimal 1-item states.
+- [x] Update `SettingsScreen.tsx` copy (*"Reset demo data"* → *"Clear workspace (start empty)"* / *"Load minimal starter sample"*) and add a `VITE_STARTER_MODE=minimal|empty` flag for testing blank vs. 1-item boot.
+- [x] Harden `migrateState()` (stop injecting mock inventory into empty workspaces) and empty states (`CreateOrderFlow.tsx`, `InventoryScreen.tsx`, `PersistenceRecoveryScreen.tsx`).
+- [x] **Exit gate:** All 270 unit tests pass, `pnpm build` succeeds, and manual UI walkthrough confirms every workflow operates cleanly on empty and minimal 1-item states.
 
 ### Phase 12 — Architecture & Tech Stack Decision Gate (`ARCHITECTURE_DECISIONS.md` v2.0)
 
