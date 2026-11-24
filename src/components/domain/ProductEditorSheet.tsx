@@ -170,7 +170,7 @@ export default function ProductEditorSheet({
       <div className="space-y-4">
         <Field
           label="Product name"
-          placeholder="e.g., Ribbon cake, Chocolate brownies"
+          placeholder="e.g., Chocolate cake, Chicken pizza, Chili paste"
           value={name}
           onChange={(e) => {
             setName(e.target.value)

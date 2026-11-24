@@ -665,21 +665,31 @@ export default function OrderDetailScreen({
                               prepRecord,
                               usage,
                             )
+                            const invItem = state.inventory.find(
+                              (inv) => inv.inventoryId === usage.inventoryId,
+                            )
                             return (
                               <div
                                 key={usage.inventoryId}
                                 className="flex items-center justify-between gap-2 py-2 first:pt-1 last:pb-0"
                               >
-                                <div className="min-w-0">
-                                  <span className="block truncate text-xs font-medium text-cocoa">
-                                    {usage.name}
-                                  </span>
-                                  <span className="block text-[11px] text-muted">
-                                    {formatQuantity(
-                                      usage.plannedQuantity,
-                                      usage.unit,
-                                    )}
-                                  </span>
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <ItemThumbnail
+                                    image={invItem?.image}
+                                    alt={usage.name}
+                                    size="xs"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-xs font-medium text-cocoa">
+                                      {usage.name}
+                                    </span>
+                                    <span className="block text-[11px] text-muted">
+                                      {formatQuantity(
+                                        usage.plannedQuantity,
+                                        usage.unit,
+                                      )}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="inline-flex shrink-0 rounded-full border border-warm-border bg-white p-0.5 text-[11px] font-semibold">
                                   <button
@@ -746,20 +756,34 @@ export default function OrderDetailScreen({
                         }
                         contentClassName="divide-y divide-warm-border/70 border-t border-warm-border px-3 pb-2 pt-1"
                       >
-                        {prepRecord.actualUsage.map((usage) => (
-                          <div
-                            key={usage.inventoryId}
-                            className="flex items-center justify-between py-1.5 text-xs"
-                          >
-                            <span className="text-cocoa">{usage.name}</span>
-                            <span className="text-muted">
-                              {formatQuantity(
-                                usage.plannedQuantity,
-                                usage.unit,
-                              )}
-                            </span>
-                          </div>
-                        ))}
+                        {prepRecord.actualUsage.map((usage) => {
+                          const invItem = state.inventory.find(
+                            (inv) => inv.inventoryId === usage.inventoryId,
+                          )
+                          return (
+                            <div
+                              key={usage.inventoryId}
+                              className="flex items-center justify-between gap-2 py-1.5 text-xs"
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                <ItemThumbnail
+                                  image={invItem?.image}
+                                  alt={usage.name}
+                                  size="xs"
+                                />
+                                <span className="truncate text-cocoa">
+                                  {usage.name}
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-muted">
+                                {formatQuantity(
+                                  usage.plannedQuantity,
+                                  usage.unit,
+                                )}
+                              </span>
+                            </div>
+                          )
+                        })}
                       </Disclosure>
                     )
                   ) : null}

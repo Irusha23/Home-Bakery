@@ -481,7 +481,7 @@ export default function RecipeEditorSheet({
             <>
               <Field
                 label="Recipe name"
-                placeholder="e.g., Signature ribbon cake"
+                placeholder="e.g., Signature chocolate cake, Devilled chili paste"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value)

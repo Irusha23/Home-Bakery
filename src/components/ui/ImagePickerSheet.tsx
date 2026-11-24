@@ -126,7 +126,7 @@ export function ImagePickerSheet({
     <Sheet
       open={open}
       title="Choose image"
-      subtitle="Pick a bakery icon or upload from your phone gallery"
+      subtitle="Pick a food icon or upload from your phone gallery"
       onClose={onClose}
     >
       <div className="space-y-4">
@@ -149,6 +149,7 @@ export function ImagePickerSheet({
                 onChange={(next) => setCategory(next as ImagePresetCategory)}
                 segments={[
                   { value: "bakes", label: "Bakes" },
+                  { value: "savories", label: "Savories" },
                   { value: "ingredients", label: "Ingredients" },
                   { value: "packaging", label: "Packaging" },
                 ]}

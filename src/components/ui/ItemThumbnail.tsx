@@ -16,10 +16,10 @@ type ItemThumbnailProps = {
 }
 
 const SIZE_CLASSES: Record<ThumbnailSize, string> = {
-  xs: "size-8 rounded-lg",
-  sm: "size-11 rounded-xl",
-  md: "size-14 rounded-2xl",
-  lg: "size-20 rounded-2xl",
+  xs: "size-10 rounded-lg",
+  sm: "size-[52px] rounded-xl",
+  md: "size-[68px] rounded-2xl",
+  lg: "size-[92px] rounded-2xl",
 }
 
 function PresetArtwork({ preset }: { preset: ImagePreset }) {
@@ -100,6 +100,162 @@ function PresetArtwork({ preset }: { preset: ImagePreset }) {
           />
           <path d="M24 25l3 18M40 25l-3 18" stroke={ink} strokeWidth="2" strokeLinecap="round" />
         </>
+      ) : motif === "pizza" ? (
+        <>
+          <path
+            d="M32 14L14 48c11 5 25 5 36 0L32 14Z"
+            fill="#FBBF24"
+            stroke={ink}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M14 47c11 5 25 5 36 0"
+            stroke="#D97706"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <circle cx="32" cy="31" r="3.5" fill={accent} />
+          <circle cx="25" cy="40" r="3" fill={accent} />
+          <circle cx="38" cy="41" r="3" fill={accent} />
+        </>
+      ) : motif === "chili-paste" || motif === "pickle-jar" || motif === "glass-jar" ? (
+        <>
+          <rect
+            x="20"
+            y="22"
+            width="24"
+            height="28"
+            rx="6"
+            fill="#FFFFFF"
+            stroke={ink}
+            strokeWidth="2.4"
+          />
+          <rect
+            x="22"
+            y="14"
+            width="20"
+            height="8"
+            rx="3"
+            fill="#FBBF24"
+            stroke={ink}
+            strokeWidth="2.2"
+          />
+          <rect x="23" y="29" width="18" height="17" rx="3" fill={accent} />
+          <path d="M26 36h12" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" />
+        </>
+      ) : motif === "short-eats" ? (
+        <>
+          <rect
+            x="14"
+            y="28"
+            width="26"
+            height="14"
+            rx="7"
+            transform="rotate(-15 14 28)"
+            fill={accent}
+            stroke={ink}
+            strokeWidth="2.4"
+          />
+          <path
+            d="M28 45c0-7 6-12 12-12s12 5 12 12H28Z"
+            fill="#FBBF24"
+            stroke={ink}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : motif === "burger" ? (
+        <>
+          <path
+            d="M16 30c0-8 7-13 16-13s16 5 16 13H16Z"
+            fill="#FBBF24"
+            stroke={ink}
+            strokeWidth="2.4"
+          />
+          <rect x="14" y="32" width="36" height="6" rx="3" fill="#78350F" stroke={ink} strokeWidth="2" />
+          <rect x="16" y="40" width="32" height="8" rx="4" fill="#FBBF24" stroke={ink} strokeWidth="2.4" />
+        </>
+      ) : motif === "rice-bowl" || motif === "noodles" || motif === "curry-pot" ? (
+        <>
+          <path
+            d="M14 32h36c0 11-7 18-18 18s-18-7-18-18Z"
+            fill={accent}
+            stroke={ink}
+            strokeWidth="2.4"
+          />
+          <path
+            d="M19 31c2-6 7-9 13-9s11 3 13 9"
+            fill="#FFFFFF"
+            stroke={ink}
+            strokeWidth="2.2"
+          />
+          <path d="M26 16l-2 5M33 15v5M40 16l2 5" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" />
+        </>
+      ) : motif === "sandwich" ? (
+        <>
+          <path
+            d="M14 42L34 18l16 24H14Z"
+            fill="#FDE68A"
+            stroke={ink}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path d="M19 37h26" stroke={accent} strokeWidth="4" strokeLinecap="round" />
+        </>
+      ) : motif === "sauce-bottle" || motif === "oil" ? (
+        <>
+          <rect
+            x="23"
+            y="24"
+            width="18"
+            height="26"
+            rx="5"
+            fill={accent}
+            stroke={ink}
+            strokeWidth="2.4"
+          />
+          <rect x="27" y="14" width="10" height="10" rx="2" fill="#FFFFFF" stroke={ink} strokeWidth="2.2" />
+          <rect x="26" y="32" width="12" height="10" rx="2" fill="#FFFFFF" />
+        </>
+      ) : motif === "spices" ? (
+        <>
+          <path
+            d="M22 44c4-14 14-22 24-24-2 10-8 22-24 24Z"
+            fill={accent}
+            stroke={ink}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path d="M44 20c2-3 4-4 6-4" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" />
+        </>
+      ) : motif === "veggies" || motif === "tomato" ? (
+        <>
+          <circle cx="32" cy="35" r="14" fill={accent} stroke={ink} strokeWidth="2.4" />
+          <path d="M32 17l4 5-4 2-4-2 4-5Z" fill="#10B981" stroke={ink} strokeWidth="2" />
+        </>
+      ) : motif === "cheese" ? (
+        <>
+          <path
+            d="M14 42l34-16v20H14v-4Z"
+            fill={accent}
+            stroke={ink}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <circle cx="33" cy="39" r="3" fill="#FFFFFF" />
+          <circle cx="42" cy="35" r="2.5" fill="#FFFFFF" />
+        </>
+      ) : motif === "meat" || motif === "seafood" ? (
+        <>
+          <ellipse cx="30" cy="35" rx="14" ry="11" fill={accent} stroke={ink} strokeWidth="2.4" />
+          <circle cx="27" cy="35" r="4" fill="#FFFFFF" stroke={ink} strokeWidth="2" />
+        </>
+      ) : motif === "grains" ? (
+        <>
+          <ellipse cx="26" cy="36" rx="5" ry="9" transform="rotate(-25 26 36)" fill="#FFFFFF" stroke={ink} strokeWidth="2.2" />
+          <ellipse cx="36" cy="32" rx="5" ry="9" transform="rotate(20 36 32)" fill="#FDE68A" stroke={ink} strokeWidth="2.2" />
+        </>
       ) : motif === "flour" || motif === "sugar" || motif === "cocoa" ? (
         <>
           <path
@@ -157,11 +313,26 @@ function PresetArtwork({ preset }: { preset: ImagePreset }) {
           <ellipse cx="26" cy="36" rx="7" ry="10" transform="rotate(-20 26 36)" fill={accent} stroke={ink} strokeWidth="2.4" />
           <ellipse cx="38" cy="34" rx="7" ry="10" transform="rotate(20 38 34)" fill="#FBBF24" stroke={ink} strokeWidth="2.4" />
         </>
-      ) : motif === "cake-box" || motif === "cupcake-box" || motif === "box-assorted" ? (
+      ) : motif === "cake-box" || motif === "cupcake-box" || motif === "box-assorted" || motif === "pizza-box" ? (
         <>
           <rect x="16" y="26" width="32" height="22" rx="5" fill="#FFFFFF" stroke={ink} strokeWidth="2.4" />
           <rect x="13" y="20" width="38" height="9" rx="4" fill={accent} stroke={ink} strokeWidth="2.4" />
           <rect x="29" y="20" width="6" height="28" fill="#E11D48" />
+        </>
+      ) : motif === "food-container" ? (
+        <>
+          <path
+            d="M17 28h30l-4 19c-.3 1.7-1.8 3-3.5 3h-15c-1.7 0-3.2-1.3-3.5-3l-4-19Z"
+            fill="#FFFFFF"
+            stroke={ink}
+            strokeWidth="2.4"
+          />
+          <rect x="14" y="22" width="36" height="6" rx="3" fill={accent} stroke={ink} strokeWidth="2.4" />
+        </>
+      ) : motif === "foil-wrap" ? (
+        <>
+          <rect x="15" y="25" width="34" height="16" rx="8" fill={accent} stroke={ink} strokeWidth="2.4" />
+          <circle cx="44" cy="33" r="4" fill="#FFFFFF" stroke={ink} strokeWidth="2" />
         </>
       ) : motif === "board" ? (
         <>
@@ -216,7 +387,7 @@ export default function ItemThumbnail({
         aria-hidden="true"
         className={`flex shrink-0 items-center justify-center border border-dashed border-warm-border bg-ivory text-muted ${SIZE_CLASSES[size]} ${className}`.trim()}
       >
-        <ImageIcon size={size === "xs" ? 14 : 18} />
+        <ImageIcon size={size === "xs" ? 16 : 20} />
       </div>
     )
   }

@@ -143,7 +143,7 @@ export default function InventoryItemSheet({
       <div className="space-y-4">
         <Field
           label="Name"
-          placeholder="e.g., Unsalted butter, Cake board 10-inch"
+          placeholder="e.g., Mozzarella, Dried chili, Glass jar 250g"
           value={name}
           onChange={(e) => {
             setName(e.target.value)

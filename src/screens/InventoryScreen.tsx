@@ -20,6 +20,7 @@ import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
 import Dialog from "../components/ui/Dialog"
 import Field from "../components/ui/Field"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import StatusBadge from "../components/ui/StatusBadge"
@@ -304,14 +305,17 @@ function InventoryRow({
       className="w-full rounded-card border border-warm-border bg-white p-4 text-left shadow-subtle transition duration-ui hover:border-sage-border"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-cocoa">
-            {item.name}
-          </span>
-          <span className="mt-0.5 block text-xs text-muted">
-            {formatQuantity(availability.available, item.unit)} available ·{" "}
-            {formatStockCost(item)}
-          </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <ItemThumbnail image={item.image} alt={item.name} size="sm" />
+          <div className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-cocoa">
+              {item.name}
+            </span>
+            <span className="mt-0.5 block text-xs text-muted">
+              {formatQuantity(availability.available, item.unit)} available ·{" "}
+              {formatStockCost(item)}
+            </span>
+          </div>
         </div>
         <StatusBadge tone={shortage ? "warning" : low ? "progress" : "success"}>
           {shortage ? "Short" : low ? "Low" : "In stock"}

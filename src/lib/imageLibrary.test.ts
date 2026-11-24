@@ -7,9 +7,10 @@ import {
 } from "./imageLibrary"
 
 describe("imageLibrary", () => {
-  it("provides presets across bakes, ingredients, and packaging", () => {
-    expect(IMAGE_PRESETS.length).toBeGreaterThanOrEqual(24)
+  it("provides presets across bakes, savories, ingredients, and packaging", () => {
+    expect(IMAGE_PRESETS.length).toBeGreaterThanOrEqual(45)
     expect(getImagePresetsByCategory("bakes").length).toBeGreaterThan(0)
+    expect(getImagePresetsByCategory("savories").length).toBeGreaterThan(0)
     expect(getImagePresetsByCategory("ingredients").length).toBeGreaterThan(0)
     expect(getImagePresetsByCategory("packaging").length).toBeGreaterThan(0)
   })
@@ -18,6 +19,9 @@ describe("imageLibrary", () => {
     expect(getImagePreset("preset:chocolate-cake")?.label).toBe(
       "Chocolate cake",
     )
+    expect(getImagePreset("preset:pizza")?.label).toBe("Pizza")
+    expect(getImagePreset("preset:chili-paste")?.label).toBe("Chili paste")
+    expect(getImagePreset("preset:glass-jar")?.label).toBe("Glass jar")
     expect(isValidImageValue("preset:flour")).toBe(true)
     expect(
       isValidImageValue("data:image/webp;base64,UklGRh4AAABXRUJQVlA4"),

@@ -1,4 +1,8 @@
-export type ImagePresetCategory = "bakes" | "ingredients" | "packaging"
+export type ImagePresetCategory =
+  | "bakes"
+  | "savories"
+  | "ingredients"
+  | "packaging"
 
 export type ImagePreset = {
   id: string
@@ -17,6 +21,16 @@ export type ImagePreset = {
     | "muffin"
     | "loaf"
     | "box-assorted"
+    | "pizza"
+    | "chili-paste"
+    | "pickle-jar"
+    | "short-eats"
+    | "burger"
+    | "rice-bowl"
+    | "curry-pot"
+    | "noodles"
+    | "sandwich"
+    | "sauce-bottle"
     | "flour"
     | "butter"
     | "sugar"
@@ -27,12 +41,24 @@ export type ImagePreset = {
     | "berries"
     | "vanilla"
     | "nuts"
+    | "spices"
+    | "oil"
+    | "veggies"
+    | "cheese"
+    | "meat"
+    | "seafood"
+    | "tomato"
+    | "grains"
     | "cake-box"
     | "cupcake-box"
     | "board"
     | "ribbon"
     | "bag"
     | "tag"
+    | "pizza-box"
+    | "glass-jar"
+    | "food-container"
+    | "foil-wrap"
 }
 
 export const IMAGE_PRESETS: ImagePreset[] = [
@@ -128,7 +154,99 @@ export const IMAGE_PRESETS: ImagePreset[] = [
     motif: "box-assorted",
   },
 
-  // Ingredients (10)
+  // Savories & Jars (10)
+  {
+    id: "preset:pizza",
+    label: "Pizza",
+    category: "savories",
+    bg: "#FEF3C7",
+    accent: "#E11D48",
+    ink: "#0F172A",
+    motif: "pizza",
+  },
+  {
+    id: "preset:chili-paste",
+    label: "Chili paste",
+    category: "savories",
+    bg: "#FFF1F2",
+    accent: "#DC2626",
+    ink: "#0F172A",
+    motif: "chili-paste",
+  },
+  {
+    id: "preset:pickle-jar",
+    label: "Pickle / Achcharu",
+    category: "savories",
+    bg: "#ECFDF5",
+    accent: "#D97706",
+    ink: "#0F172A",
+    motif: "pickle-jar",
+  },
+  {
+    id: "preset:short-eats",
+    label: "Rolls & patties",
+    category: "savories",
+    bg: "#FEF3C7",
+    accent: "#D97706",
+    ink: "#0F172A",
+    motif: "short-eats",
+  },
+  {
+    id: "preset:burger",
+    label: "Burger / Bun",
+    category: "savories",
+    bg: "#FFF1F2",
+    accent: "#F59E0B",
+    ink: "#0F172A",
+    motif: "burger",
+  },
+  {
+    id: "preset:rice-bowl",
+    label: "Rice / Biriyani",
+    category: "savories",
+    bg: "#FEF3C7",
+    accent: "#F59E0B",
+    ink: "#0F172A",
+    motif: "rice-bowl",
+  },
+  {
+    id: "preset:curry-pot",
+    label: "Curry / Stew",
+    category: "savories",
+    bg: "#FFF1F2",
+    accent: "#B91C1C",
+    ink: "#0F172A",
+    motif: "curry-pot",
+  },
+  {
+    id: "preset:noodles",
+    label: "Noodles / Pasta",
+    category: "savories",
+    bg: "#EFF6FF",
+    accent: "#F59E0B",
+    ink: "#0F172A",
+    motif: "noodles",
+  },
+  {
+    id: "preset:sandwich",
+    label: "Sandwich / Wrap",
+    category: "savories",
+    bg: "#ECFDF5",
+    accent: "#10B981",
+    ink: "#0F172A",
+    motif: "sandwich",
+  },
+  {
+    id: "preset:sauce-bottle",
+    label: "Sauce / Chutney",
+    category: "savories",
+    bg: "#FFF1F2",
+    accent: "#E11D48",
+    ink: "#0F172A",
+    motif: "sauce-bottle",
+  },
+
+  // Ingredients (18)
   {
     id: "preset:flour",
     label: "Flour",
@@ -219,8 +337,80 @@ export const IMAGE_PRESETS: ImagePreset[] = [
     ink: "#0F172A",
     motif: "nuts",
   },
+  {
+    id: "preset:spices",
+    label: "Chili & spices",
+    category: "ingredients",
+    bg: "#FFF1F2",
+    accent: "#DC2626",
+    ink: "#0F172A",
+    motif: "spices",
+  },
+  {
+    id: "preset:oil",
+    label: "Cooking oil",
+    category: "ingredients",
+    bg: "#FEF3C7",
+    accent: "#F59E0B",
+    ink: "#0F172A",
+    motif: "oil",
+  },
+  {
+    id: "preset:veggies",
+    label: "Onion & veg",
+    category: "ingredients",
+    bg: "#ECFDF5",
+    accent: "#10B981",
+    ink: "#0F172A",
+    motif: "veggies",
+  },
+  {
+    id: "preset:cheese",
+    label: "Cheese",
+    category: "ingredients",
+    bg: "#FEF3C7",
+    accent: "#FBBF24",
+    ink: "#0F172A",
+    motif: "cheese",
+  },
+  {
+    id: "preset:meat",
+    label: "Chicken / Meat",
+    category: "ingredients",
+    bg: "#FFF1F2",
+    accent: "#E11D48",
+    ink: "#0F172A",
+    motif: "meat",
+  },
+  {
+    id: "preset:seafood",
+    label: "Seafood / Prawns",
+    category: "ingredients",
+    bg: "#EFF6FF",
+    accent: "#FB7185",
+    ink: "#0F172A",
+    motif: "seafood",
+  },
+  {
+    id: "preset:tomato",
+    label: "Tomato & sauce",
+    category: "ingredients",
+    bg: "#FFF1F2",
+    accent: "#EF4444",
+    ink: "#0F172A",
+    motif: "tomato",
+  },
+  {
+    id: "preset:grains",
+    label: "Rice & grains",
+    category: "ingredients",
+    bg: "#F1F5F9",
+    accent: "#D97706",
+    ink: "#0F172A",
+    motif: "grains",
+  },
 
-  // Packaging (6)
+  // Packaging (10)
   {
     id: "preset:cake-box",
     label: "Cake box",
@@ -274,6 +464,42 @@ export const IMAGE_PRESETS: ImagePreset[] = [
     accent: "#64748B",
     ink: "#0F172A",
     motif: "tag",
+  },
+  {
+    id: "preset:pizza-box",
+    label: "Pizza box",
+    category: "packaging",
+    bg: "#FEF3C7",
+    accent: "#E11D48",
+    ink: "#0F172A",
+    motif: "pizza-box",
+  },
+  {
+    id: "preset:glass-jar",
+    label: "Glass jar",
+    category: "packaging",
+    bg: "#ECFDF5",
+    accent: "#059669",
+    ink: "#0F172A",
+    motif: "glass-jar",
+  },
+  {
+    id: "preset:food-container",
+    label: "Food tub",
+    category: "packaging",
+    bg: "#EFF6FF",
+    accent: "#60A5FA",
+    ink: "#0F172A",
+    motif: "food-container",
+  },
+  {
+    id: "preset:foil-wrap",
+    label: "Foil & wrap",
+    category: "packaging",
+    bg: "#F1F5F9",
+    accent: "#94A3B8",
+    ink: "#0F172A",
+    motif: "foil-wrap",
   },
 ]
 

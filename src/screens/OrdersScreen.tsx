@@ -457,7 +457,7 @@ export default function OrdersScreen({
           label="Search orders"
           hideLabel
           isSearch
-          placeholder="Search customer or cake..."
+          placeholder="Search customer or food item..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />

@@ -171,17 +171,24 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
 
           <div className="space-y-4">
             <Card className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone="neutral">
-                  {selectedRecipe.yieldLabel}
-                </StatusBadge>
-                <StatusBadge tone="progress">
-                  <Clock3 aria-hidden="true" size={12} />{" "}
-                  {selectedRecipe.preparationMinutes} mins
-                </StatusBadge>
-                {selectedRecipe.archived ? (
-                  <StatusBadge tone="warning">Archived</StatusBadge>
-                ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge tone="neutral">
+                    {selectedRecipe.yieldLabel}
+                  </StatusBadge>
+                  <StatusBadge tone="progress">
+                    <Clock3 aria-hidden="true" size={12} />{" "}
+                    {selectedRecipe.preparationMinutes} mins
+                  </StatusBadge>
+                  {selectedRecipe.archived ? (
+                    <StatusBadge tone="warning">Archived</StatusBadge>
+                  ) : null}
+                </div>
+                <ItemThumbnail
+                  image={selectedRecipe.image ?? product?.image}
+                  alt={selectedRecipe.name}
+                  size="md"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3 border-t border-warm-border pt-3">
@@ -249,6 +256,13 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                 return (
                   <ListRow
                     key={`${item.inventoryId}-${item.name}`}
+                    leading={
+                      <ItemThumbnail
+                        image={invItem?.image}
+                        alt={invItem?.name ?? item.name}
+                        size="sm"
+                      />
+                    }
                     title={invItem?.name ?? item.name}
                     subtitle={
                       unitPrice !== undefined
@@ -290,11 +304,19 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                     <ListRow
                       key={`${item.inventoryId}-${item.name}`}
                       leading={
-                        <Package
-                          aria-hidden="true"
-                          size={16}
-                          className="text-muted"
-                        />
+                        invItem?.image ? (
+                          <ItemThumbnail
+                            image={invItem.image}
+                            alt={invItem.name}
+                            size="sm"
+                          />
+                        ) : (
+                          <Package
+                            aria-hidden="true"
+                            size={16}
+                            className="text-muted"
+                          />
+                        )
                       }
                       title={invItem?.name ?? item.name}
                       subtitle={
@@ -460,7 +482,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
           isSearch
           placeholder={
             section === "recipes"
-              ? "Search cakes or flavors..."
+              ? "Search recipes, pizzas, pastes..."
               : "Search products..."
           }
           value={search}
