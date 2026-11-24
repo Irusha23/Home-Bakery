@@ -3,7 +3,6 @@ import {
   Archive,
   BookOpen,
   Calculator,
-  Clock3,
   Copy,
   History,
   Layers,
@@ -177,7 +176,6 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                     {selectedRecipe.yieldLabel}
                   </StatusBadge>
                   <StatusBadge tone="progress">
-                    <Clock3 aria-hidden="true" size={12} />{" "}
                     {selectedRecipe.preparationMinutes} mins
                   </StatusBadge>
                   {selectedRecipe.archived ? (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Check } from "lucide-react"
 import { MotionConfig } from "motion/react"
 import AppShell from "./components/AppShell"
+import ErrorBoundary from "./components/ErrorBoundary"
 import Illustration from "./components/ui/Illustration"
 import {
   AnimatedItem,
@@ -345,12 +346,14 @@ function AppContent() {
 
 export default function App() {
   return (
-    <MotionConfig reducedMotion="user" transition={IOS_TRANSITION}>
-      <AppStateProvider>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </AppStateProvider>
-    </MotionConfig>
+    <ErrorBoundary>
+      <MotionConfig reducedMotion="user" transition={IOS_TRANSITION}>
+        <AppStateProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </AppStateProvider>
+      </MotionConfig>
+    </ErrorBoundary>
   )
 }

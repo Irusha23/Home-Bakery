@@ -1,0 +1,17 @@
+{
+  "name": "Udeni's Specials — Home Bakery",
+  "short_name": "Udeni's Specials",
+  "description": "Home bakery order, recipe, inventory, and finance manager.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
