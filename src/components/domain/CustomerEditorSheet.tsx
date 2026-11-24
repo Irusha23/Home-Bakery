@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import Button from "../ui/Button"
 import Field from "../ui/Field"
 import Sheet from "../ui/Sheet"
+import { createId } from "../../lib/id"
 import { useAppState } from "../../state/AppState"
 import type { Customer } from "../../types"
 
@@ -37,7 +38,7 @@ export default function CustomerEditorSheet({
       return
     }
     const nextCustomer: Customer = {
-      id: customer?.id ?? `customer-${crypto.randomUUID().slice(0, 8)}`,
+      id: customer?.id ?? createId("customer"),
       name: trimmedName,
       phone: phone.trim(),
     }

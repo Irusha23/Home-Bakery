@@ -15,6 +15,7 @@ import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
 import CountdownBadge from "../components/ui/CountdownBadge"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import StatusBadge from "../components/ui/StatusBadge"
 import { useToast } from "../components/ui/Toast"
 import { getBakeTargetMs } from "../lib/countdown"
@@ -227,14 +228,24 @@ export function PreparationProductScreen({
 
         <Card tone="sage">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-cocoa">
-                {record.recipeSnapshot.name}
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                {record.recipeSnapshot.preparationMinutes} mins prep ·{" "}
-                {record.actualUsage.length} items
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <ItemThumbnail
+                image={
+                  record.recipeSnapshot.image ??
+                  state.products.find((p) => p.id === line.productId)?.image
+                }
+                alt={line.productName}
+                size="md"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-cocoa">
+                  {record.recipeSnapshot.name}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {record.recipeSnapshot.preparationMinutes} mins prep ·{" "}
+                  {record.actualUsage.length} items
+                </p>
+              </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">
               <StatusBadge tone={preparationTone(record.status)}>
@@ -269,19 +280,31 @@ export function PreparationProductScreen({
                   </span>
                 </div>
                 <Card className="divide-y divide-warm-border p-0">
-                  {record.actualUsage.map((usage) => (
-                    <div
-                      key={usage.inventoryId}
-                      className="flex items-center justify-between gap-3 px-3.5 py-2.5"
-                    >
-                      <span className="text-sm font-medium text-cocoa">
-                        {usage.name}
-                      </span>
-                      <span className="text-xs font-semibold tabular-nums text-muted">
-                        {formatQuantity(usage.plannedQuantity, usage.unit)}
-                      </span>
-                    </div>
-                  ))}
+                  {record.actualUsage.map((usage) => {
+                    const invItem = state.inventory.find(
+                      (inv) => inv.inventoryId === usage.inventoryId,
+                    )
+                    return (
+                      <div
+                        key={usage.inventoryId}
+                        className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <ItemThumbnail
+                            image={invItem?.image}
+                            alt={usage.name}
+                            size="sm"
+                          />
+                          <span className="truncate text-sm font-medium text-cocoa">
+                            {usage.name}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-muted">
+                          {formatQuantity(usage.plannedQuantity, usage.unit)}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </Card>
               </section>
             ) : (
@@ -357,17 +380,27 @@ export function PreparationProductScreen({
                 <Card className="divide-y divide-warm-border p-0">
                   {record.actualUsage.map((usage) => {
                     const inPantry = isUsageInPantry(order, record, usage)
+                    const invItem = state.inventory.find(
+                      (inv) => inv.inventoryId === usage.inventoryId,
+                    )
                     return (
                       <div
                         key={usage.inventoryId}
                         className="flex items-center justify-between gap-3 p-3.5"
                       >
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-cocoa">
-                            {usage.name}
-                          </div>
-                          <div className="text-xs text-muted">
-                            {formatQuantity(usage.plannedQuantity, usage.unit)}
+                        <div className="flex min-w-0 items-center gap-3">
+                          <ItemThumbnail
+                            image={invItem?.image}
+                            alt={usage.name}
+                            size="sm"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-cocoa">
+                              {usage.name}
+                            </div>
+                            <div className="text-xs text-muted">
+                              {formatQuantity(usage.plannedQuantity, usage.unit)}
+                            </div>
                           </div>
                         </div>
 

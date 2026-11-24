@@ -143,7 +143,7 @@ export default function RecipeEditorSheet({
       setPrepMinutes(String(source.preparationMinutes || 60))
       setIngredients(
         source.ingredients.map((item) => ({
-          key: `ing-${crypto.randomUUID().slice(0, 8)}`,
+          key: createId("ing"),
           inventoryId: item.inventoryId,
           quantity: String(item.quantity),
           unit: item.unit,
@@ -151,7 +151,7 @@ export default function RecipeEditorSheet({
       )
       setPackaging(
         source.packaging.map((item) => ({
-          key: `pkg-${crypto.randomUUID().slice(0, 8)}`,
+          key: createId("pkg"),
           inventoryId: item.inventoryId,
           quantity: String(item.quantity),
         })),
@@ -185,7 +185,7 @@ export default function RecipeEditorSheet({
         firstIng
           ? [
               {
-                key: `ing-${crypto.randomUUID().slice(0, 8)}`,
+                key: createId("ing"),
                 inventoryId: firstIng.inventoryId,
                 quantity: "250",
                 unit: firstIng.unit,
@@ -295,7 +295,7 @@ export default function RecipeEditorSheet({
     setIngredients((current) => [
       ...current,
       {
-        key: `ing-${crypto.randomUUID().slice(0, 8)}`,
+        key: createId("ing"),
         inventoryId: unused.inventoryId,
         quantity: unused.unit === "unit" ? "1" : "100",
         unit: unused.unit,
@@ -316,7 +316,7 @@ export default function RecipeEditorSheet({
     setPackaging((current) => [
       ...current,
       {
-        key: `pkg-${crypto.randomUUID().slice(0, 8)}`,
+        key: createId("pkg"),
         inventoryId: unused.inventoryId,
         quantity: "1",
       },
@@ -1176,7 +1176,7 @@ export default function RecipeEditorSheet({
             setPackaging((current) => [
               ...current,
               {
-                key: `pkg-${crypto.randomUUID().slice(0, 8)}`,
+                key: createId("pkg"),
                 inventoryId: newItem.inventoryId,
                 quantity: "1",
               },
@@ -1185,7 +1185,7 @@ export default function RecipeEditorSheet({
             setIngredients((current) => [
               ...current,
               {
-                key: `ing-${crypto.randomUUID().slice(0, 8)}`,
+                key: createId("ing"),
                 inventoryId: newItem.inventoryId,
                 quantity: newItem.unit === "unit" ? "1" : "100",
                 unit: newItem.unit,

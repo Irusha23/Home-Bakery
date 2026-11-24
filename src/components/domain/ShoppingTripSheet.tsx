@@ -9,6 +9,7 @@ import Sheet from "../ui/Sheet"
 import { useToast } from "../ui/Toast"
 import { validateExpense } from "../../lib/expenses"
 import { formatLkr, formatQuantity } from "../../lib/format"
+import { createId } from "../../lib/id"
 import { toBaseQuantity } from "../../lib/inventory"
 import { getColomboTodayIso } from "../../lib/selectors/todaySelectors"
 import { useAppState } from "../../state/AppState"
@@ -146,7 +147,7 @@ export default function ShoppingTripSheet({
         return
       }
       pendingExpense = {
-        id: `expense-${crypto.randomUUID()}`,
+        id: createId("expense"),
         amount: Number(expenseAmount.trim()),
         paidDate: date,
         categoryId: expenseCategoryId,
@@ -174,7 +175,7 @@ export default function ShoppingTripSheet({
       const accepted = dispatchIfAccepted({
         type: "RECORD_PURCHASE",
         purchase: {
-          id: `purchase-${crypto.randomUUID()}`,
+          id: createId("purchase"),
           inventoryId: row.inventoryId,
           purchasedQuantity: qty,
           purchasedUnit: row.baseUnit,
