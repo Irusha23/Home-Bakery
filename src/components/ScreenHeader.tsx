@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { ArrowLeft } from "lucide-react"
+import { useBackHandler } from "../lib/backStack"
 import { IconButton } from "./ui/Button"
 
 type ScreenHeaderProps = {
@@ -23,6 +24,8 @@ export default function ScreenHeader({
   backLabel = "Go back",
   compact = false,
 }: ScreenHeaderProps) {
+  useBackHandler(onBack, Boolean(onBack))
+
   return (
     <header
       className={`screen-header border-b border-warm-border/75 ${

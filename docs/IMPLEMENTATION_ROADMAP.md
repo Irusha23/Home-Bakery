@@ -146,19 +146,19 @@ Tasks:
 - [x] Upgrade `BackupRestorePanel.tsx` with 1-tap Share Sheet export (`src/lib/backupShare.ts` → Google Drive / WhatsApp / Download fallback) and optional password-protected AES-256-GCM encrypted backups (`src/lib/backupCrypto.ts`).
 - [x] **Exit gate:** MediaStore, backup encryption/decryption, v2 migration upgrade, and full order photo workflow pass automated tests (`npx tsc --noEmit`, `pnpm test`, `pnpm build`).
 
-### Phase 15 — Capacitor Android Setup & Native Mobile UX (Next)
+### Phase 15 — Capacitor Android Setup & Native Mobile UX (Implemented — Pending Emulator Smoke Check)
 
 **Goal:** Wrap the React/Vite app in Capacitor Android and wire native hardware behavior so the app feels completely native on Android.
 
 Tasks:
-- [ ] Initialize `@capacitor/core`, `@capacitor/cli`, and `@capacitor/android` pointing at `dist/`.
-- [ ] Configure Android app identity (`applicationId`, app name *"Udeni's Specials"*, adaptive launcher icon, and splash screen).
-- [ ] Wire Android **hardware/gesture Back button** (`@capacitor/app`) into `PushView`, `Sheet`, and `Dialog` navigation (closing overlays first, popping drill-down views, confirming exit on root tab).
-- [ ] Integrate `@capacitor/status-bar`, `@capacitor/keyboard`, and `@capacitor/haptics` for safe-area insets, clean form scrolling above the soft keyboard, and subtle tactile feedback.
-- [ ] Add optional lightweight **Check for Updates** banner in Settings (fetches a static `version.json` on GitHub Releases when online and links to the new `.apk` download).
-- [ ] **Exit gate:** `pnpm build && npx cap sync android` succeeds and runs cleanly inside **Android Studio Emulator**.
+- [x] Initialize `@capacitor/core`, `@capacitor/cli`, `@capacitor/android`, `@capacitor-community/sqlite`, and native plugins pointing at `dist/`.
+- [x] Configure Android app identity (`lk.udenisspecials.bakery`, app name *"Udeni's Specials"*), splash/icon resources, and `usesCleartextTraffic="false"`.
+- [x] Implement `CapacitorSqliteEngine`, `CapacitorFilesystemMediaStore`, and native Share Sheet backup export (`src/db/engines/capacitorSqliteEngine.ts`, `src/lib/mediaStore.ts`, `src/lib/backupShare.ts`).
+- [x] Wire Android **hardware/gesture Back button** (`src/lib/backStack.ts`, `src/lib/nativeBridge.ts`) into `Dialog`, `Sheet`, `ScreenHeader`, and root tab/exit flow, plus `StatusBar` & `Haptics`.
+- [x] Add lightweight **Check for Updates** card in `SettingsScreen.tsx` (`src/lib/appVersion.ts` reading `VITE_UPDATE_FEED_URL`).
+- [ ] Verify live boot inside **Android Studio Emulator** once Android Studio SDK is installed on your machine (paired with Phase 16 APK build & Phase 17 QA).
 
-### Phase 16 — Release Signing, `.apk` Build Pipeline & CI
+### Phase 16 — Release Signing, `.apk` Build Pipeline & CI (Next)
 
 **Goal:** Establish repeatable, consistently signed `.apk` builds so future bug fixes and updates upgrade Udeni's phone in place without losing data.
 

@@ -8,6 +8,7 @@ import {
   REDUCED_MOTION_TRANSITION,
 } from "../../lib/motion"
 import { useBodyScrollLock } from "../../lib/useBodyScrollLock"
+import { useBackHandler } from "../../lib/backStack"
 import Button, { IconButton } from "./Button"
 
 type DialogProps = {
@@ -30,6 +31,7 @@ export default function Dialog({
   const reducedMotion = useReducedMotion()
 
   useBodyScrollLock(open)
+  useBackHandler(onClose, open)
 
   useEffect(() => {
     if (!open) return

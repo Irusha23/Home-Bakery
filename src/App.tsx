@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Check } from "lucide-react"
 import { MotionConfig } from "motion/react"
 import AppShell from "./components/AppShell"
@@ -14,6 +14,7 @@ import Sheet from "./components/ui/Sheet"
 import SwipeableRow from "./components/ui/SwipeableRow"
 import { ToastProvider, useToast } from "./components/ui/Toast"
 import { IOS_TRANSITION } from "./lib/motion"
+import { exitNativeApp, initNativeAndroidChrome } from "./lib/nativeBridge"
 import {
   clearAllNotifications,
   dismissNotification,
@@ -112,6 +113,36 @@ function AppContent() {
 
   const consumeOrderIntent = useCallback(() => {
     setOrderIntent(undefined)
+  }, [])
+
+  const lastBackPressRef = useRef(0)
+  const rootBackRef = useRef<() => void>(() => {})
+  rootBackRef.current = () => {
+    if (isUpdatesOpen) {
+      setIsUpdatesOpen(false)
+      return
+    }
+    if (isSettingsOpen) {
+      setIsSettingsOpen(false)
+      return
+    }
+    if (activeTab !== "today") {
+      navigate("today")
+      return
+    }
+    const now = Date.now()
+    if (now - lastBackPressRef.current < 2000) {
+      exitNativeApp()
+      return
+    }
+    lastBackPressRef.current = now
+    showToast({ message: "Press back again to exit", tone: "info" })
+  }
+
+  useEffect(() => {
+    return initNativeAndroidChrome({
+      onRootBack: () => rootBackRef.current(),
+    })
   }, [])
 
   const renderTabScreen = () => {

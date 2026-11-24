@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react"
-import { BellOff, RotateCcw, Save, ShieldAlert } from "lucide-react"
+import { Capacitor } from "@capacitor/core"
+import {
+  BellOff,
+  Download,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  ShieldAlert,
+} from "lucide-react"
 import BackupRestorePanel from "../components/BackupRestorePanel"
 import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
@@ -10,6 +18,12 @@ import { GroupedList, ListRow } from "../components/ui/GroupedList"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import { useToast } from "../components/ui/Toast"
+import {
+  APP_VERSION,
+  checkForAppUpdate,
+  type UpdateCheckResult,
+} from "../lib/appVersion"
+import { LATEST_DB_SCHEMA_VERSION } from "../db/migrator"
 import { formatDate, formatLkr } from "../lib/format"
 import { calculateSuggestedPrice } from "../lib/pricing"
 import { useAppState } from "../state/AppState"
@@ -43,6 +57,24 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   )
   const [error, setError] = useState("")
   const [resetMode, setResetMode] = useState<"empty" | "starter" | null>(null)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(
+    null,
+  )
+
+  const handleCheckUpdate = async () => {
+    if (checkingUpdate) return
+    setCheckingUpdate(true)
+    const result = await checkForAppUpdate()
+    setCheckingUpdate(false)
+    setUpdateResult(result)
+    if (result.status === "up-to-date") {
+      showToast({
+        message: `You're on the latest version (v${result.currentVersion})`,
+        tone: "success",
+      })
+    }
+  }
 
   useEffect(() => {
     setBusinessName(state.settings.businessName)
@@ -378,10 +410,75 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       </Card>
 
       <GroupedList title="About">
+        <ListRow title="App version" value={`v${APP_VERSION}`} />
+        <ListRow
+          title="Storage engine"
+          value={
+            Capacitor.isNativePlatform()
+              ? "SQLite (Android)"
+              : "IndexedDB (Browser)"
+          }
+        />
+        <ListRow
+          title="Database schema"
+          value={`v${LATEST_DB_SCHEMA_VERSION}`}
+        />
         <ListRow title="Currency & precision" value="Whole LKR" />
         <ListRow title="Business timezone" value="Asia/Colombo" />
-        <ListRow title="Schema version" value="v7" />
+        <ListRow
+          leading={
+            <RefreshCw
+              aria-hidden="true"
+              size={16}
+              className={checkingUpdate ? "animate-spin text-sage-dark" : "text-muted"}
+            />
+          }
+          title={checkingUpdate ? "Checking for updates..." : "Check for updates"}
+          value={
+            updateResult?.status === "update-available"
+              ? `v${updateResult.latestVersion} available`
+              : updateResult?.status === "up-to-date"
+                ? "Up to date"
+                : undefined
+          }
+          onClick={() => void handleCheckUpdate()}
+        />
       </GroupedList>
+
+      {updateResult && updateResult.status !== "up-to-date" ? (
+        <Card
+          tone={
+            updateResult.status === "update-available" ? "sage" : "default"
+          }
+          className="space-y-2.5"
+        >
+          {updateResult.status === "update-available" ? (
+            <>
+              <p className="text-sm font-semibold text-cocoa">
+                Update v{updateResult.latestVersion} is available
+              </p>
+              {updateResult.notes ? (
+                <p className="text-xs leading-relaxed text-muted">
+                  {updateResult.notes}
+                </p>
+              ) : null}
+              <a
+                href={updateResult.downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-touch items-center justify-center gap-2 rounded-control bg-sage px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+              >
+                <Download aria-hidden="true" size={16} />
+                Download updated APK
+              </a>
+            </>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted">
+              {updateResult.message}
+            </p>
+          )}
+        </Card>
+      ) : null}
 
       <Dialog
         open={resetMode !== null}

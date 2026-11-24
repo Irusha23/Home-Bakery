@@ -9,6 +9,7 @@ import {
   type PanInfo,
 } from "motion/react"
 import { REDUCED_MOTION_TRANSITION, SPRING_SHEET } from "../../lib/motion"
+import { useBackHandler } from "../../lib/backStack"
 import { useBodyScrollLock } from "../../lib/useBodyScrollLock"
 import { IconButton } from "./Button"
 
@@ -36,6 +37,7 @@ export default function Sheet({
   const dragControls = useDragControls()
 
   useBodyScrollLock(open)
+  useBackHandler(onClose, open)
 
   useEffect(() => {
     if (!open) return
