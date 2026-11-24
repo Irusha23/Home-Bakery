@@ -15,7 +15,11 @@ import {
   defaultSettings,
 } from "../data/defaults"
 import { createStarterData, getInitialAppData } from "../data/starterData"
+import AppLoader from "../components/ui/AppLoader"
 import PersistenceRecoveryScreen from "../components/PersistenceRecoveryScreen"
+import { createDefaultAppRepository } from "../db/createAppRepository"
+import { bootstrapAppRepository } from "../db/legacyImport"
+import type { AppRepository } from "../db/repository"
 import { createId } from "../lib/id"
 import {
   getUsageToBuyQuantity,
@@ -2828,42 +2832,85 @@ export default function AppStateProvider({
 }: {
   children: ReactNode
 }) {
-  const [bootstrap, setBootstrap] = useState<PersistenceBootstrap>(() =>
-    readPersistedState(
-      () => window.localStorage,
-      getInitialAppData(),
-      migrateState,
-    ),
-  )
+  const repositoryRef = useRef<AppRepository | null>(null)
+  if (!repositoryRef.current) {
+    repositoryRef.current = createDefaultAppRepository()
+  }
+  const [bootstrap, setBootstrap] = useState<PersistenceBootstrap | null>(null)
+  const [activeRepository, setActiveRepository] =
+    useState<AppRepository | null>(null)
+
+  const runBootstrap = useCallback(async () => {
+    const repository = repositoryRef.current!
+    try {
+      const next = await bootstrapAppRepository({
+        repository,
+        getLegacyStorage: () => window.localStorage,
+        getFallbackData: getInitialAppData,
+        normalize: migrateState,
+      })
+      setActiveRepository(repository)
+      setBootstrap(next)
+    } catch {
+      setActiveRepository(null)
+      setBootstrap(
+        readPersistedState(
+          () => window.localStorage,
+          getInitialAppData(),
+          migrateState,
+        ),
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    void runBootstrap()
+  }, [runBootstrap])
+
+  if (!bootstrap) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-ivory px-4 text-cocoa">
+        <AppLoader label="Opening your bakery records..." />
+      </main>
+    )
+  }
 
   if (bootstrap.kind === "recovery") {
     return (
       <PersistenceRecoveryScreen
         recovery={bootstrap}
-        onRetry={() =>
-          setBootstrap(
-            readPersistedState(
-              () => window.localStorage,
-              getInitialAppData(),
-              migrateState,
-            ),
-          )
-        }
+        onRetry={() => {
+          setBootstrap(null)
+          void runBootstrap()
+        }}
         onStartFresh={() => {
           const recoveryId = createId()
-          setBootstrap(
-            startFreshPreservingRaw(
-              bootstrap,
-              () => window.localStorage,
-              getInitialAppData(),
-              migrateState,
-              recoveryId,
-            ),
+          const next = startFreshPreservingRaw(
+            bootstrap,
+            () => window.localStorage,
+            getInitialAppData(),
+            migrateState,
+            recoveryId,
           )
+          if (next.kind === "ready" && repositoryRef.current) {
+            void repositoryRef.current
+              .init()
+              .then(() => repositoryRef.current!.saveAppData(next.data))
+              .then(() => setActiveRepository(repositoryRef.current))
+              .catch(() => undefined)
+          }
+          setBootstrap(next)
         }}
         onRestore={(raw, source) => {
           const result = restoreBackup(() => window.localStorage, raw, source)
           if (result.ok) {
+            if (repositoryRef.current) {
+              void repositoryRef.current
+                .init()
+                .then(() => repositoryRef.current!.saveAppData(result.data))
+                .then(() => setActiveRepository(repositoryRef.current))
+                .catch(() => undefined)
+            }
             setBootstrap({
               kind: "ready",
               data: result.data,
@@ -2878,7 +2925,7 @@ export default function AppStateProvider({
   }
 
   return (
-    <ReadyAppStateProvider bootstrap={bootstrap}>
+    <ReadyAppStateProvider bootstrap={bootstrap} repository={activeRepository}>
       {children}
     </ReadyAppStateProvider>
   )
@@ -2886,40 +2933,67 @@ export default function AppStateProvider({
 
 function ReadyAppStateProvider({
   bootstrap,
+  repository,
   children,
 }: {
   bootstrap: PersistenceReady
+  repository: AppRepository | null
   children: ReactNode
 }) {
   const [state, dispatch] = useReducer(reducer, bootstrap.data)
   const latestStateRef = useRef(state)
   latestStateRef.current = state
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve())
+  const lastPersistedStateRef = useRef<AppData>(bootstrap.data)
   const [persistenceError, setPersistenceError] = useState(
     bootstrap.persistenceError ?? null,
   )
 
+  const enqueuePersist = useCallback(
+    (snapshot: AppData) => {
+      writeChainRef.current = writeChainRef.current.then(async () => {
+        if (repository) {
+          try {
+            await repository.saveAppData(snapshot)
+            try {
+              persistAppData(() => window.localStorage, snapshot)
+            } catch {
+              // Secondary localStorage mirror is best-effort once repository succeeds
+            }
+            setPersistenceError(null)
+            return
+          } catch (error) {
+            setPersistenceError(
+              `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
+            )
+            return
+          }
+        }
+
+        try {
+          persistAppData(() => window.localStorage, snapshot)
+          setPersistenceError(null)
+        } catch (error) {
+          setPersistenceError(
+            `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
+          )
+        }
+      })
+    },
+    [repository],
+  )
+
   useEffect(() => {
     if (!bootstrap.persistenceEnabled || persistenceError) return
-    try {
-      persistAppData(() => window.localStorage, state)
-    } catch (error) {
-      setPersistenceError(
-        `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
-      )
-    }
-  }, [bootstrap.persistenceEnabled, persistenceError, state])
+    if (state === lastPersistedStateRef.current) return
+    lastPersistedStateRef.current = state
+    enqueuePersist(state)
+  }, [bootstrap.persistenceEnabled, enqueuePersist, persistenceError, state])
 
   const retryPersistence = useCallback(() => {
     if (!bootstrap.persistenceEnabled) return
-    try {
-      persistAppData(() => window.localStorage, state)
-      setPersistenceError(null)
-    } catch (error) {
-      setPersistenceError(
-        `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
-      )
-    }
-  }, [bootstrap.persistenceEnabled, state])
+    enqueuePersist(latestStateRef.current)
+  }, [bootstrap.persistenceEnabled, enqueuePersist])
 
   const handleRestore = useCallback((raw: string, source?: RecoverySource) => {
     const result = restoreBackup(() => window.localStorage, raw, source)

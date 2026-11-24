@@ -121,22 +121,22 @@ Completed:
 - [x] Upgraded `docs/ARCHITECTURE_DECISIONS.md` to **v2.0** locking the **Local-First Capacitor Android `.apk` + On-Device SQLite** architecture (zero cloud server/hosting cost, 100% offline usability, 100% UI reuse).
 - [x] Documented formal **ADR-001 through ADR-007** covering Capacitor packaging, local-first operation, SQLite migrations, multi-category food media, Share Sheet off-device backups, Whole LKR money precision, and consistently signed in-place `.apk` updates.
 
-### Phase 13 — SQLite Database Schema, Migrations & Repository Layer (Next)
+### Phase 13 — SQLite Database Schema, Migrations & Repository Layer (Completed)
 
 **Goal:** Design the relational SQLite schema, versioned migrations, and transactional Repository / Unit-of-Work layer so business data moves from `localStorage` to rock-solid on-device SQLite. *(Tested fast in Chrome + Vitest; Android Studio not required yet.)*
 
 Tasks:
-- [ ] Author `docs/DATABASE_SCHEMA.md` with Mermaid ERD, SQLite tables, foreign keys, `CHECK` constraints (non-negative stock, positive quantities, valid status enums), and indexes covering:
+- [x] Author `docs/DATABASE_SCHEMA.md` with Mermaid ERD, SQLite tables, foreign keys, `CHECK` constraints (non-negative stock, positive quantities, valid status enums), and indexes covering:
   - Settings, budget plan, notification preferences
   - Products, variants, recipes, immutable recipe versions, ingredients, packaging
   - Inventory items, append-only inventory movements, purchases, shopping trips & selections
   - Customers, orders, order lines (immutable recipe & cost snapshots), stock reservations, preparation records, extra-stock plans/batches/transactions
   - Append-only payments & refunds, expense categories, expenses, versioned expense allocations
-- [ ] Create versioned SQL migration runner (`0001_initial_schema`) + idempotent minimal starter seed.
-- [ ] Build the Repository / Unit-of-Work layer (`@capacitor-community/sqlite` implementation for Android + clean browser adapter for fast `pnpm dev` & Vitest testing) and migrate `AppState` with automatic one-time `localStorage` → SQLite import.
-- [ ] **Exit gate:** Migration, constraint, transaction-rollback, and idempotency tests pass in Vitest; `pnpm build` succeeds.
+- [x] Create versioned SQL migration runner (`0001_initial_schema`) in `src/db/migrator.ts` with idempotency-key support.
+- [x] Build the `AppRepository` / `SqliteAppRepository` / `IndexedDbAppRepository` layers (`src/db/*`) and wire `AppStateProvider` with automatic one-time `localStorage` → repository import (`bootstrapAppRepository`).
+- [x] **Exit gate:** Migration, constraint, transaction-rollback, round-trip, legacy-import, and idempotency tests pass in Vitest; `npx tsc --noEmit` and `pnpm build` succeed.
 
-### Phase 14 — Native Local Media Storage & Android Off-Device Backups
+### Phase 14 — Native Local Media Storage & Android Off-Device Backups (Next)
 
 **Goal:** Replace base64 image strings with compressed local device files and enable 1-tap off-device backups to Google Drive / WhatsApp. *(Good milestone to install **Android Studio** to test real Android file/share dialogs.)*
 
