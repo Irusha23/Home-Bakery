@@ -19,3 +19,14 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+
+# Android / Capacitor build artifacts & signing secrets
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+*.jks
+*.keystore
+keystore.properties
