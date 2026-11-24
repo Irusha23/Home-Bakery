@@ -4,12 +4,14 @@ import Button, { IconButton } from "../ui/Button"
 import Card from "../ui/Card"
 import CheckboxField from "../ui/CheckboxField"
 import Field from "../ui/Field"
+import { ImagePickerField } from "../ui/ImagePickerSheet"
 import MoneyText from "../ui/MoneyText"
 import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
 import InventoryItemSheet from "./InventoryItemSheet"
 import PricingCalculatorSheet from "./PricingCalculatorSheet"
 import { formatLkr } from "../../lib/format"
+import { createId } from "../../lib/id"
 import { compatibleUnits } from "../../lib/inventory"
 import {
   estimateRecipeMaterialCost,
@@ -83,6 +85,7 @@ export default function RecipeEditorSheet({
   )
 
   const [name, setName] = useState("")
+  const [image, setImage] = useState<string | undefined>(undefined)
   const [productId, setProductId] = useState("")
   const [variantId, setVariantId] = useState("")
   const [yieldCount, setYieldCount] = useState("1")
@@ -118,6 +121,7 @@ export default function RecipeEditorSheet({
 
     const source = recipe ?? baseRecipe
     if (source) {
+      setImage(source.image)
       setName(
         recipe
           ? recipe.name
@@ -162,6 +166,7 @@ export default function RecipeEditorSheet({
         defaultProduct?.variants.find((v) => v.id === initialVariantId) ??
         defaultProduct?.variants[0]
       const firstIng = ingredientItems[0]
+      setImage(undefined)
       setName(
         isOrderCustomMode
           ? defaultProduct
@@ -393,8 +398,9 @@ export default function RecipeEditorSheet({
         : Math.max(500, liveCost.labourCost)
 
     const nextRecipe: Recipe = {
-      id: recipe?.id ?? `recipe-${crypto.randomUUID().slice(0, 8)}`,
+      id: recipe?.id ?? createId("recipe"),
       name: trimmedName,
+      ...(image ? { image } : {}),
       productId: productId || activeProducts[0]?.id || "custom-product",
       variantId:
         variantId ||
@@ -481,6 +487,13 @@ export default function RecipeEditorSheet({
                   setName(e.target.value)
                   setError("")
                 }}
+              />
+
+              <ImagePickerField
+                label="Recipe photo"
+                value={image}
+                defaultCategory="bakes"
+                onChange={setImage}
               />
 
               {activeProducts.length > 0 ? (

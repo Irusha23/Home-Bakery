@@ -473,10 +473,17 @@ export default function OrdersScreen({
           <AnimatedList className="space-y-3 pt-1">
             {filteredOrders.map((order) => {
               const quickAction = getQuickAction(order)
+              const primaryLine = order.lines[0]
+              const primaryProduct = state.products.find(
+                (p) => p.id === primaryLine?.productId,
+              )
               return (
                 <AnimatedItem key={order.id}>
                   <OrderCard
                     order={order}
+                    thumbnailImage={
+                      primaryLine?.recipeSnapshot.image ?? primaryProduct?.image
+                    }
                     balanceDue={outstandingOrderBalance(order, state.refunds)}
                     retainedAmount={
                       order.status === "Cancelled"

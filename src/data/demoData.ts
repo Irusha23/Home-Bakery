@@ -34,6 +34,7 @@ export const demoRecipes: Recipe[] = [
   {
     id: "recipe-chocolate-15",
     name: "Signature chocolate celebration cake",
+    image: "preset:chocolate-cake",
     productId: "product-cake",
     variantId: "cake-15kg",
     version: 3,
@@ -82,6 +83,7 @@ export const demoRecipes: Recipe[] = [
   {
     id: "recipe-vanilla-cupcakes-12",
     name: "Vanilla buttercream cupcakes",
+    image: "preset:cupcake",
     productId: "product-cupcakes",
     variantId: "cupcakes-12",
     version: 2,
@@ -123,6 +125,7 @@ export const demoRecipes: Recipe[] = [
   {
     id: "recipe-butter-cake-1kg",
     name: "Classic Sri Lankan butter cake",
+    image: "preset:loaf-cake",
     productId: "product-butter-cake",
     variantId: "butter-cake-1kg",
     version: 4,
@@ -503,6 +506,7 @@ export const demoData: AppData = {
     {
       id: "product-cake",
       name: "Chocolate celebration cake",
+      image: "preset:chocolate-cake",
       variants: [
         { id: "cake-1kg", name: "1 kg · 8 inch", unitLabel: "cake" },
         { id: "cake-15kg", name: "1.5 kg · 10 inch", unitLabel: "cake" },
@@ -511,6 +515,7 @@ export const demoData: AppData = {
     {
       id: "product-cupcakes",
       name: "Vanilla cupcakes",
+      image: "preset:cupcake",
       variants: [
         { id: "cupcakes-6", name: "Box of 6", unitLabel: "box" },
         { id: "cupcakes-12", name: "Box of 12", unitLabel: "box" },
@@ -519,6 +524,7 @@ export const demoData: AppData = {
     {
       id: "product-butter-cake",
       name: "Butter cake",
+      image: "preset:loaf-cake",
       variants: [
         { id: "butter-cake-500g", name: "500 g loaf", unitLabel: "loaf" },
         { id: "butter-cake-1kg", name: "1 kg loaf", unitLabel: "loaf" },
@@ -531,6 +537,7 @@ export const demoData: AppData = {
     {
       inventoryId: "flour",
       name: "All-purpose flour",
+      image: "preset:flour",
       physical: 500,
       unit: "g",
       category: "ingredient",
@@ -540,6 +547,7 @@ export const demoData: AppData = {
     {
       inventoryId: "sugar",
       name: "Caster sugar",
+      image: "preset:sugar",
       physical: 1600,
       unit: "g",
       category: "ingredient",
@@ -549,6 +557,7 @@ export const demoData: AppData = {
     {
       inventoryId: "butter",
       name: "Unsalted butter",
+      image: "preset:butter",
       physical: 900,
       unit: "g",
       category: "ingredient",
@@ -558,6 +567,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cocoa",
       name: "Cocoa powder",
+      image: "preset:cocoa",
       physical: 90,
       unit: "g",
       category: "ingredient",
@@ -567,6 +577,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cake-box-large",
       name: "Large cake box",
+      image: "preset:cake-box",
       physical: 1,
       unit: "unit",
       category: "packaging",
@@ -576,6 +587,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cake-board-12",
       name: "12-inch cake board",
+      image: "preset:cake-board",
       physical: 2,
       unit: "unit",
       category: "packaging",
@@ -585,6 +597,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cupcake-box-12",
       name: "12-cupcake window box",
+      image: "preset:cupcake-box",
       physical: 5,
       unit: "unit",
       category: "packaging",
@@ -594,6 +607,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cake-box-medium",
       name: "Medium cake box",
+      image: "preset:cake-box",
       physical: 4,
       unit: "unit",
       category: "packaging",

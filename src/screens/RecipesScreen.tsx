@@ -23,6 +23,7 @@ import Card from "../components/ui/Card"
 import EmptyState from "../components/ui/EmptyState"
 import Field from "../components/ui/Field"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import MoneyText from "../components/ui/MoneyText"
 import { PushView, TabView } from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
@@ -492,20 +493,27 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                     onClick={() => openRecipe(recipe.id)}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <h2 className="text-base font-semibold text-cocoa">
-                            {recipe.name}
-                          </h2>
-                          {recipe.archived ? (
-                            <StatusBadge tone="warning">Archived</StatusBadge>
-                          ) : null}
+                      <div className="flex min-w-0 items-start gap-3">
+                        <ItemThumbnail
+                          image={recipe.image ?? product?.image}
+                          alt={recipe.name}
+                          size="sm"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h2 className="text-base font-semibold text-cocoa">
+                              {recipe.name}
+                            </h2>
+                            {recipe.archived ? (
+                              <StatusBadge tone="warning">Archived</StatusBadge>
+                            ) : null}
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted">
+                            {product?.name ?? "Custom"}
+                            {variant ? ` · ${variant.name}` : ""} · v
+                            {recipe.version}
+                          </p>
                         </div>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {product?.name ?? "Custom"}
-                          {variant ? ` · ${variant.name}` : ""} · v
-                          {recipe.version}
-                        </p>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="text-sm font-bold text-cocoa">
@@ -541,19 +549,26 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             {products.map((product) => (
               <Card key={product.id} className="space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold leading-snug text-cocoa">
-                        {product.name}
-                      </h2>
-                      {product.archived ? (
-                        <StatusBadge tone="warning">Archived</StatusBadge>
-                      ) : null}
+                  <div className="flex min-w-0 items-start gap-3">
+                    <ItemThumbnail
+                      image={product.image}
+                      alt={product.name}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold leading-snug text-cocoa">
+                          {product.name}
+                        </h2>
+                        {product.archived ? (
+                          <StatusBadge tone="warning">Archived</StatusBadge>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {product.variants.length}{" "}
+                        {product.variants.length === 1 ? "variant" : "variants"}
+                      </p>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {product.variants.length}{" "}
-                      {product.variants.length === 1 ? "variant" : "variants"}
-                    </p>
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     <Button

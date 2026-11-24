@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
 import Button from "../ui/Button"
 import Field from "../ui/Field"
+import { ImagePickerField } from "../ui/ImagePickerSheet"
 import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
+import { createId } from "../../lib/id"
 import {
   fromDisplayUnitPrice,
   getDisplayPriceUnitLabel,
@@ -28,6 +30,7 @@ export default function InventoryItemSheet({
 }: InventoryItemSheetProps) {
   const { dispatchIfAccepted } = useAppState()
   const [name, setName] = useState("")
+  const [image, setImage] = useState<string | undefined>(undefined)
   const [category, setCategory] = useState<Exclude<InventoryCategory, "finished">>(
     defaultCategory,
   )
@@ -40,12 +43,14 @@ export default function InventoryItemSheet({
     setError("")
     if (item) {
       setName(item.name)
+      setImage(item.image)
       setCategory(item.category === "packaging" ? "packaging" : "ingredient")
       setUnit(item.unit)
       const priceVal = toDisplayUnitPrice(item.averageUnitCost, item.unit)
       setDisplayPrice(priceVal !== undefined ? String(priceVal) : "")
     } else {
       setName("")
+      setImage(undefined)
       setCategory(defaultCategory)
       setUnit(defaultCategory === "ingredient" ? "g" : "unit")
       setDisplayPrice("")
@@ -81,6 +86,7 @@ export default function InventoryItemSheet({
         inventoryId: item.inventoryId,
         patch: {
           name: trimmedName,
+          image: image ?? null,
           ...(baseCost !== undefined ? { averageUnitCost: baseCost } : {}),
         },
       })
@@ -91,6 +97,7 @@ export default function InventoryItemSheet({
       onSaved?.({
         ...item,
         name: trimmedName,
+        image,
         ...(baseCost !== undefined ? { averageUnitCost: baseCost } : {}),
       })
       onClose()
@@ -98,8 +105,9 @@ export default function InventoryItemSheet({
     }
 
     const newItem: InventoryItem = {
-      inventoryId: `${category}-${crypto.randomUUID().slice(0, 8)}`,
+      inventoryId: createId(category),
       name: trimmedName,
+      ...(image ? { image } : {}),
       physical: 0,
       unit,
       category,
@@ -141,6 +149,13 @@ export default function InventoryItemSheet({
             setName(e.target.value)
             setError("")
           }}
+        />
+
+        <ImagePickerField
+          label={category === "packaging" ? "Packaging photo" : "Ingredient photo"}
+          value={image}
+          defaultCategory={category === "packaging" ? "packaging" : "ingredients"}
+          onChange={setImage}
         />
 
         <div className="grid grid-cols-2 gap-3">

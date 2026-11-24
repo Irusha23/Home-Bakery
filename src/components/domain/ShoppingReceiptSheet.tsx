@@ -1,6 +1,8 @@
 import Card from "../ui/Card"
+import ItemThumbnail from "../ui/ItemThumbnail"
 import Sheet from "../ui/Sheet"
 import { formatDate, formatLkr, formatQuantity } from "../../lib/format"
+import { useAppState } from "../../state/AppState"
 import type { ShoppingTripRecord } from "../../types"
 
 type ShoppingReceiptSheetProps = {
@@ -12,6 +14,7 @@ export default function ShoppingReceiptSheet({
   trip,
   onClose,
 }: ShoppingReceiptSheetProps) {
+  const { state } = useAppState()
   if (!trip) return null
 
   return (
@@ -40,16 +43,27 @@ export default function ShoppingReceiptSheet({
         </Card>
 
         <div className="divide-y divide-warm-border rounded-card border border-warm-border bg-white">
-          {trip.items.map((item) => (
+          {trip.items.map((item) => {
+            const invItem = state.inventory.find(
+              (inv) => inv.inventoryId === item.inventoryId,
+            )
+            return (
             <div key={item.inventoryId} className="space-y-1.5 px-4 py-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-cocoa">
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {formatQuantity(item.quantity, item.unit)}
-                  </p>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <ItemThumbnail
+                    image={invItem?.image}
+                    alt={item.name}
+                    size="xs"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-cocoa">
+                      {item.name}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {formatQuantity(item.quantity, item.unit)}
+                    </p>
+                  </div>
                 </div>
                 <span className="shrink-0 text-sm font-semibold tabular-nums text-cocoa">
                   {item.estimatedCost !== null
@@ -81,7 +95,8 @@ export default function ShoppingReceiptSheet({
                 </div>
               ) : null}
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </Sheet>

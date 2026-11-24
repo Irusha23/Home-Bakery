@@ -14,6 +14,7 @@ import Button, { IconButton } from "../components/ui/Button"
 import Card from "../components/ui/Card"
 import EmptyState from "../components/ui/EmptyState"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import StatusBadge from "../components/ui/StatusBadge"
 import { selectMonthlyBudgetReport } from "../lib/budget"
 import { outstandingOrderBalance } from "../lib/financials"
@@ -135,19 +136,32 @@ export default function HomeScreen({
                   </StatusBadge>
                 </div>
 
-                <h2 className="mt-3 text-lg font-bold leading-snug tracking-tight text-cocoa">
-                  {activeLine ? activeLine.productName : nextUp.itemTitle}
-                  {extraCount > 0 ? (
-                    <span className="ml-1.5 text-sm font-semibold text-muted">
-                      +{extraCount}
-                    </span>
-                  ) : null}
-                </h2>
-                <p className="mt-1 text-sm leading-snug text-muted">
-                  {activeLine
-                    ? `${nextUp.customerName} · ${activeLine.variantName} · Qty ${activeLine.quantity}`
-                    : nextUp.customerName}
-                </p>
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold leading-snug tracking-tight text-cocoa">
+                      {activeLine ? activeLine.productName : nextUp.itemTitle}
+                      {extraCount > 0 ? (
+                        <span className="ml-1.5 text-sm font-semibold text-muted">
+                          +{extraCount}
+                        </span>
+                      ) : null}
+                    </h2>
+                    <p className="mt-1 text-sm leading-snug text-muted">
+                      {activeLine
+                        ? `${nextUp.customerName} · ${activeLine.variantName} · Qty ${activeLine.quantity}`
+                        : nextUp.customerName}
+                    </p>
+                  </div>
+                  <ItemThumbnail
+                    image={
+                      activeLine?.recipeSnapshot.image ??
+                      state.products.find((p) => p.id === activeLine?.productId)
+                        ?.image
+                    }
+                    alt={activeLine ? activeLine.productName : nextUp.itemTitle}
+                    size="md"
+                  />
+                </div>
                 <p
                   className={`mt-2 inline-flex items-center gap-1.5 text-xs font-medium ${
                     nextUp.dueLabel.startsWith("Overdue")

@@ -16,6 +16,7 @@ import Card from "../components/ui/Card"
 import Field from "../components/ui/Field"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
 import Illustration from "../components/ui/Illustration"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import {
   AnimatedItem,
   AnimatedList,
@@ -458,7 +459,11 @@ export default function ShoppingScreen({
 
         {visibleItems.length > 0 ? (
           <AnimatedList className="space-y-3">
-            {visibleItems.map((item) => (
+            {visibleItems.map((item) => {
+              const inventoryItem = state.inventory.find(
+                (inv) => inv.inventoryId === item.inventoryId,
+              )
+              return (
               <AnimatedItem key={item.inventoryId}>
                 <SwipeableRow
                   actionLabel="Remove"
@@ -502,6 +507,11 @@ export default function ShoppingScreen({
                         />
                       )}
                     </span>
+                    <ItemThumbnail
+                      image={inventoryItem?.image}
+                      alt={item.name}
+                      size="sm"
+                    />
                     <span className="min-w-0">
                       <span
                         className={`block text-sm font-semibold text-cocoa ${
@@ -604,7 +614,8 @@ export default function ShoppingScreen({
               </Card>
               </SwipeableRow>
               </AnimatedItem>
-            ))}
+              )
+            })}
           </AnimatedList>
         ) : (
           <Card className="px-5 py-8 text-center">

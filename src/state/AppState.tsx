@@ -201,6 +201,7 @@ type AppAction =
       inventoryId: string
       patch: {
         name?: string
+        image?: string | null
         lowStockThreshold?: number
         averageUnitCost?: number
         archived?: boolean
@@ -1458,6 +1459,9 @@ export function reducer(state: AppData, action: AppAction): AppData {
               ...item,
               ...(patch.name !== undefined
                 ? { name: patch.name.trim() }
+                : {}),
+              ...(patch.image !== undefined
+                ? { image: patch.image ?? undefined }
                 : {}),
               ...(patch.lowStockThreshold !== undefined
                 ? { lowStockThreshold: patch.lowStockThreshold }

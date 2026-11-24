@@ -12,6 +12,7 @@ import { getCollectionTargetMs } from "../../lib/countdown"
 import { formatDate, formatLkr, formatTime } from "../../lib/format"
 import type { Order, OrderStatus, PaymentStatus } from "../../types"
 import CountdownBadge from "../ui/CountdownBadge"
+import ItemThumbnail from "../ui/ItemThumbnail"
 import StatusBadge from "../ui/StatusBadge"
 
 function quickActionIcon(label: string) {
@@ -49,6 +50,7 @@ function paymentTone(status: PaymentStatus) {
 
 type OrderCardProps = {
   order: Order
+  thumbnailImage?: string
   balanceDue?: number
   retainedAmount?: number
   profitLkr?: number
@@ -59,6 +61,7 @@ type OrderCardProps = {
 
 export default function OrderCard({
   order,
+  thumbnailImage,
   balanceDue,
   retainedAmount,
   profitLkr,
@@ -80,12 +83,19 @@ export default function OrderCard({
         className="w-full p-4 text-left transition-transform duration-ui ease-out active:scale-[0.988] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/20"
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-cocoa">
-              {order.customerName}
-            </div>
-            <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
-              {productSummary || "No items yet"}
+          <div className="flex min-w-0 items-start gap-3">
+            <ItemThumbnail
+              image={thumbnailImage}
+              alt={order.customerName}
+              size="sm"
+            />
+            <div className="min-w-0">
+              <div className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-cocoa">
+                {order.customerName}
+              </div>
+              <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
+                {productSummary || "No items yet"}
+              </div>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

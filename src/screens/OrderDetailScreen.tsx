@@ -24,6 +24,7 @@ import CheckboxField from "../components/ui/CheckboxField"
 import CountdownBadge from "../components/ui/CountdownBadge"
 import Dialog from "../components/ui/Dialog"
 import Disclosure from "../components/ui/Disclosure"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import Field from "../components/ui/Field"
 import SelectField from "../components/ui/SelectField"
 import StatusBadge from "../components/ui/StatusBadge"
@@ -592,7 +593,17 @@ export default function OrderDetailScreen({
               return (
                 <div key={line.id} className="py-3 first:pt-0 last:pb-0">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                  <div className="flex items-start gap-3">
+                    <ItemThumbnail
+                      image={
+                        line.recipeSnapshot.image ??
+                        state.products.find((p) => p.id === line.productId)
+                          ?.image
+                      }
+                      alt={line.productName}
+                      size="sm"
+                    />
+                    <div className="min-w-0 flex-1">
                       <p className="text-base font-semibold text-cocoa">
                         {line.productName}
                       </p>
@@ -614,6 +625,7 @@ export default function OrderDetailScreen({
                         </div>
                       ) : null}
                     </div>
+                  </div>
                   </div>
 
                   {order.status !== "Draft" &&

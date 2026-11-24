@@ -2,8 +2,10 @@ import { useEffect, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import Button, { IconButton } from "../ui/Button"
 import Field from "../ui/Field"
+import { ImagePickerField } from "../ui/ImagePickerSheet"
 import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
+import { createId } from "../../lib/id"
 import { useAppState } from "../../state/AppState"
 import type { Product, ProductVariant, Recipe } from "../../types"
 
@@ -31,6 +33,7 @@ export default function ProductEditorSheet({
   const { state, dispatchIfAccepted } = useAppState()
   const activeRecipes = state.recipes.filter((r) => !r.archived)
   const [name, setName] = useState("")
+  const [image, setImage] = useState<string | undefined>(undefined)
   const [variants, setVariants] = useState<VariantDraft[]>([])
   const [sourceRecipeId, setSourceRecipeId] = useState("")
   const [error, setError] = useState("")
@@ -41,6 +44,7 @@ export default function ProductEditorSheet({
     setSourceRecipeId("")
     if (product) {
       setName(product.name)
+      setImage(product.image)
       setVariants(
         product.variants.map((v) => ({
           id: v.id,
@@ -52,9 +56,10 @@ export default function ProductEditorSheet({
       )
     } else {
       setName("")
+      setImage(undefined)
       setVariants([
         {
-          id: `variant-${crypto.randomUUID().slice(0, 8)}`,
+          id: createId("variant"),
           name: "Standard size",
           unitLabel: "unit",
           finishedInventoryId: "",
@@ -67,7 +72,7 @@ export default function ProductEditorSheet({
     setVariants((current) => [
       ...current,
       {
-        id: `variant-${crypto.randomUUID().slice(0, 8)}`,
+        id: createId("variant"),
         name: "",
         unitLabel: "unit",
         finishedInventoryId: "",
@@ -99,8 +104,9 @@ export default function ProductEditorSheet({
     }
 
     const nextProduct: Product = {
-      id: product?.id ?? `product-${crypto.randomUUID().slice(0, 8)}`,
+      id: product?.id ?? createId("product"),
       name: trimmedName,
+      ...(image ? { image } : {}),
       variants: cleanVariants,
       ...(product?.archived ? { archived: product.archived } : {}),
     }
@@ -122,7 +128,7 @@ export default function ProductEditorSheet({
       if (sourceRecipe && primaryVariant) {
         const candidate: Recipe = {
           ...structuredClone(sourceRecipe),
-          id: `recipe-${crypto.randomUUID().slice(0, 8)}`,
+          id: createId("recipe"),
           name:
             cleanVariants.length === 1
               ? trimmedName
@@ -170,6 +176,13 @@ export default function ProductEditorSheet({
             setName(e.target.value)
             setError("")
           }}
+        />
+
+        <ImagePickerField
+          label="Product photo"
+          value={image}
+          defaultCategory="bakes"
+          onChange={setImage}
         />
 
         {!product && activeRecipes.length > 0 ? (

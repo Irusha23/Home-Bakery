@@ -42,6 +42,7 @@ export type ProductVariant = {
 export type Product = {
   id: string
   name: string
+  image?: string
   variants: ProductVariant[]
   archived?: boolean
 }
@@ -63,6 +64,7 @@ export type PackagingRequirement = {
 export type RecipeSnapshot = {
   id: string
   name: string
+  image?: string
   productId: string
   variantId: string
   version: number
@@ -207,6 +209,7 @@ export type Order = {
 export type InventoryItem = {
   inventoryId: string
   name: string
+  image?: string
   physical: number
   unit: BaseUnit
   category?: InventoryCategory
