@@ -33,18 +33,20 @@ export function TabView({ viewKey, children, className }: TabViewProps) {
   )
 }
 
-const directionalPushVariants = {
+export const directionalPushVariants = {
   initial: (direction: number) => ({
-    x: direction >= 0 ? "100%" : "-16%",
-    opacity: direction >= 0 ? 1 : 0.88,
+    x: direction >= 0 ? "100%" : "-18%",
+    opacity: direction >= 0 ? 1 : 0.45,
   }),
   animate: {
     x: 0,
     opacity: 1,
+    pointerEvents: "auto" as const,
   },
   exit: (direction: number) => ({
-    x: direction >= 0 ? "-16%" : "100%",
-    opacity: direction >= 0 ? 0.88 : 0.96,
+    x: direction >= 0 ? "-18%" : "100%",
+    opacity: direction >= 0 ? 0 : 1,
+    pointerEvents: "none" as const,
   }),
 }
 
@@ -79,7 +81,7 @@ export function PushView({
   }, [effectiveDepth, viewKey])
 
   return (
-    <div className="relative w-full">
+    <div className="relative -mx-5 overflow-x-clip">
       <AnimatePresence mode="popLayout" initial={false} custom={direction}>
         <motion.div
           key={viewKey}
@@ -89,7 +91,12 @@ export function PushView({
           animate={reducedMotion ? { opacity: 1 } : "animate"}
           exit={reducedMotion ? { opacity: 0 } : "exit"}
           transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_PAGE}
-          className={`w-full ${effectiveDepth > 0 ? "relative z-10 bg-ivory" : ""} ${className}`.trim()}
+          style={{ zIndex: effectiveDepth * 10 }}
+          className={`relative w-full px-5 ${
+            effectiveDepth > 0
+              ? "min-h-dvh bg-ivory shadow-[-12px_0_28px_rgb(15_23_42/0.08)]"
+              : "bg-ivory"
+          } ${className}`.trim()}
         >
           {children}
         </motion.div>

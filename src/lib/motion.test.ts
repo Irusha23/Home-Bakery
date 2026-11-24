@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { directionalPushVariants } from "../components/ui/MotionPrimitives"
 import {
   REDUCED_MOTION_TRANSITION,
   SPRING_CONTROL,
@@ -62,5 +63,36 @@ describe("motion physics tokens", () => {
     expect(staggerDelay(0)).toBe(0)
     expect(staggerDelay(2)).toBeCloseTo(STAGGER_STEP_SEC * 2)
     expect(staggerDelay(20)).toBe(STAGGER_MAX_DELAY_SEC)
+  })
+})
+
+describe("directionalPushVariants", () => {
+  it("fades out and disables pointer events on forward push exit to avoid unmount pops", () => {
+    expect(directionalPushVariants.initial(1)).toEqual({
+      x: "100%",
+      opacity: 1,
+    })
+    expect(directionalPushVariants.exit(1)).toEqual({
+      x: "-18%",
+      opacity: 0,
+      pointerEvents: "none",
+    })
+  })
+
+  it("slides detail off-screen to the right and reveals root on backward pop", () => {
+    expect(directionalPushVariants.initial(-1)).toEqual({
+      x: "-18%",
+      opacity: 0.45,
+    })
+    expect(directionalPushVariants.exit(-1)).toEqual({
+      x: "100%",
+      opacity: 1,
+      pointerEvents: "none",
+    })
+    expect(directionalPushVariants.animate).toEqual({
+      x: 0,
+      opacity: 1,
+      pointerEvents: "auto",
+    })
   })
 })
