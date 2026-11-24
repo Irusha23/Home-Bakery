@@ -7,6 +7,7 @@ import Field from "../components/ui/Field"
 import QuantityControl from "../components/ui/QuantityControl"
 import SelectField from "../components/ui/SelectField"
 import { formatQuantity } from "../lib/format"
+import { createId } from "../lib/id"
 import { snapshotRecipe, useAppState } from "../state/AppState"
 import type { ExtraStockPlan } from "../types"
 
@@ -85,7 +86,7 @@ export default function ExtraStockPlanForm({
     dispatch({
       type: "UPSERT_EXTRA_STOCK_PLAN",
       plan: {
-        id: plan?.id ?? `extra-plan-${crypto.randomUUID()}`,
+        id: plan?.id ?? createId("extra-plan"),
         productId,
         variantId,
         recipeId: recipe.id,

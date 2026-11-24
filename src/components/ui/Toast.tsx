@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react"
 import { Check, Info, AlertTriangle } from "lucide-react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { AnimatePresence, motion, useReducedMotion, type PanInfo } from "motion/react"
 import { INSTANT_TRANSITION, PILL_SPRING } from "../../lib/motion"
 
 type ToastTone = "success" | "info" | "warning"
@@ -86,6 +86,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   : { opacity: 0, y: 8, scale: 0.96 }
               }
               transition={reducedMotion ? INSTANT_TRANSITION : PILL_SPRING}
+              drag={reducedMotion ? false : "y"}
+              dragConstraints={{ top: 0, bottom: 72 }}
+              dragElastic={{ top: 0.05, bottom: 0.35 }}
+              dragSnapToOrigin
+              onDragEnd={(
+                _event: MouseEvent | TouchEvent | PointerEvent,
+                info: PanInfo,
+              ) => {
+                if (info.offset.y > 28 || info.velocity.y > 260) {
+                  setToast(null)
+                }
+              }}
               className="pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-full border border-warm-border bg-cocoa px-4 py-2.5 text-sm text-white shadow-dialog"
             >
               {toast.tone === "warning" ? (

@@ -32,7 +32,7 @@ export default function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
 
   return (
     <nav
-      className="bottom-nav-safe fixed left-1/2 z-40 w-nav -translate-x-1/2 rounded-nav border border-warm-border/90 bg-white/95 p-1.5 shadow-nav backdrop-blur-nav"
+      className="pointer-events-auto w-nav rounded-nav border border-warm-border/90 bg-white/95 p-1.5 shadow-nav backdrop-blur-nav"
       aria-label="Primary navigation"
     >
       <div className="grid grid-cols-4 gap-1">

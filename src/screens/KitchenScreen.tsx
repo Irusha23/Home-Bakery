@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { TabView } from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import { selectManualShoppingList } from "../lib/inventory"
 import { useAppState } from "../state/AppState"
@@ -68,14 +69,16 @@ export default function KitchenScreen({
         </div>
       ) : null}
 
-      {section === "shopping" ? (
-        <ShoppingScreen
-          starterAction={starterAction}
-          onConsumeStarterAction={onConsumeStarterAction}
-        />
-      ) : (
-        <RecipesScreen onFocusedChange={handleFocusedChange} />
-      )}
+      <TabView viewKey={section}>
+        {section === "shopping" ? (
+          <ShoppingScreen
+            starterAction={starterAction}
+            onConsumeStarterAction={onConsumeStarterAction}
+          />
+        ) : (
+          <RecipesScreen onFocusedChange={handleFocusedChange} />
+        )}
+      </TabView>
     </div>
   )
 }

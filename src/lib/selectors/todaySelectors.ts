@@ -133,14 +133,22 @@ function compareCollectionSchedule(a: Order, b: Order): number {
   return keyA.localeCompare(keyB)
 }
 
+function formatShortDate(date: string): string {
+  if (!date) return "Date not set"
+  return new Intl.DateTimeFormat("en-LK", {
+    day: "numeric",
+    month: "short",
+  }).format(new Date(`${date}T00:00:00`))
+}
+
 function formatDueRelative(order: Order, todayIso: string): string {
   if (order.collectionDate < todayIso) {
-    return `Overdue · ${formatDate(order.collectionDate)} · ${formatTime(order.collectionTime)}`
+    return `Overdue · ${formatShortDate(order.collectionDate)} · ${formatTime(order.collectionTime)}`
   }
   if (order.collectionDate === todayIso) {
     return `Today · ${formatTime(order.collectionTime)}`
   }
-  return `${formatDate(order.collectionDate)} · ${formatTime(order.collectionTime)}`
+  return `${formatShortDate(order.collectionDate)} · ${formatTime(order.collectionTime)}`
 }
 
 function summarizeOrderLines(order: Order): string {

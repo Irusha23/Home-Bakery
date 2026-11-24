@@ -23,7 +23,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 
 const sizeClasses: Record<ButtonSize, string> = {
   default: "min-h-touch rounded-control px-5 py-3 text-sm",
-  compact: "min-h-touch rounded-control px-3 py-2 text-sm",
+  compact: "min-h-touch rounded-control px-3.5 py-1.5 text-xs",
 }
 
 export default function Button({
@@ -40,7 +40,7 @@ export default function Button({
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 font-semibold transition duration-ui ease-out focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 disabled:pointer-events-none disabled:opacity-45 ${variantClasses[variant]} ${sizeClasses[size]} ${
+      className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition duration-ui ease-out focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 disabled:pointer-events-none disabled:opacity-45 ${variantClasses[variant]} ${sizeClasses[size]} ${
         fullWidth ? "w-full" : ""
       } ${className}`}
       {...props}

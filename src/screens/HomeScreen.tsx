@@ -2,6 +2,7 @@ import {
   ArrowRight,
   Bell,
   ChefHat,
+  Clock3,
   CreditCard,
   Plus,
   Settings,
@@ -36,6 +37,7 @@ type HomeScreenProps = {
   onOpenUpdates: () => void
   onOpenSettings?: () => void
   onOpenOrder?: (orderId: string) => void
+  unreadAlertCount?: number
 }
 
 export default function HomeScreen({
@@ -43,6 +45,7 @@ export default function HomeScreen({
   onOpenUpdates,
   onOpenSettings,
   onOpenOrder,
+  unreadAlertCount,
 }: HomeScreenProps) {
   const { state } = useAppState()
   const now = new Date()
@@ -54,6 +57,7 @@ export default function HomeScreen({
   const attentionItems = selectAttentionItems(state, now).filter(
     (item) => item.kind !== "low-stock",
   )
+  const badgeCount = unreadAlertCount ?? attentionItems.length
   const budget = selectMonthlyBudgetReport(state, now)
   const dueOrders = state.orders
     .filter((order) => order.status !== "Draft" && order.status !== "Cancelled")
@@ -85,12 +89,12 @@ export default function HomeScreen({
             <IconButton label="Notifications" onClick={onOpenUpdates}>
               <Bell aria-hidden="true" size={18} />
             </IconButton>
-            {attentionItems.length > 0 ? (
+            {badgeCount > 0 ? (
               <span
-                aria-label={`${attentionItems.length} alerts`}
+                aria-label={`${badgeCount} unread alerts`}
                 className="pointer-events-none absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose px-1.5 text-[10px] font-bold leading-none text-white"
               >
-                {attentionItems.length}
+                {badgeCount}
               </span>
             ) : null}
           </div>
@@ -104,63 +108,84 @@ export default function HomeScreen({
 
       <section aria-label="Up next">
         {nextUp ? (
-          <Card className="border-warm-border bg-white p-5 shadow-card">
-            <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-soft px-2.5 py-1 text-xs font-semibold text-rose">
-                <Sparkles aria-hidden="true" size={12} />
-                Up next · {nextUp.dueLabel}
-              </span>
-              <StatusBadge
-                tone={
-                  nextUp.kind === "prep-in-progress"
-                    ? "progress"
-                    : nextUp.kind === "ready-collection"
-                      ? "success"
-                      : "warning"
-                }
-              >
-                {nextUp.statusLabel}
-              </StatusBadge>
-            </div>
+          (() => {
+            const activeLine = nextUp.preparationRecord
+              ? nextUp.order.lines.find(
+                  (line) => line.id === nextUp.preparationRecord!.orderLineId,
+                )
+              : nextUp.order.lines[0]
+            const extraCount = Math.max(0, nextUp.order.lines.length - 1)
+            return (
+              <Card className="border-warm-border bg-white p-5 shadow-card">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-rose">
+                    <Sparkles aria-hidden="true" size={12} className="shrink-0" />
+                    <span>Up next</span>
+                  </span>
+                  <StatusBadge
+                    tone={
+                      nextUp.kind === "prep-in-progress"
+                        ? "progress"
+                        : nextUp.kind === "ready-collection"
+                          ? "success"
+                          : "warning"
+                    }
+                  >
+                    {nextUp.statusLabel}
+                  </StatusBadge>
+                </div>
 
-            <h2 className="mt-3.5 text-xl font-bold leading-snug tracking-tight text-cocoa">
-              {nextUp.itemTitle}
-            </h2>
-            <p className="mt-1 text-sm text-muted">{nextUp.customerName}</p>
-
-            <div className="mt-5 flex items-center gap-2.5">
-              <Button
-                className="flex-1"
-                trailingIcon={<ArrowRight aria-hidden="true" size={16} />}
-                onClick={() => {
-                  if (
-                    (nextUp.kind === "ready-collection" ||
-                      orderHasUnpurchasedItems(state, nextUp.order)) &&
-                    onOpenOrder
-                  ) {
-                    onOpenOrder(nextUp.order.id)
-                  } else {
-                    onNavigate("orders", "continue-preparation")
-                  }
-                }}
-              >
-                {orderHasUnpurchasedItems(state, nextUp.order)
-                  ? "Shop first"
-                  : nextUp.ctaLabel}
-              </Button>
-              {onOpenOrder ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => onOpenOrder(nextUp.order.id)}
+                <h2 className="mt-3 text-lg font-bold leading-snug tracking-tight text-cocoa">
+                  {activeLine ? activeLine.productName : nextUp.itemTitle}
+                  {extraCount > 0 ? (
+                    <span className="ml-1.5 text-sm font-semibold text-muted">
+                      +{extraCount}
+                    </span>
+                  ) : null}
+                </h2>
+                <p className="mt-1 text-sm leading-snug text-muted">
+                  {activeLine
+                    ? `${nextUp.customerName} · ${activeLine.variantName} · Qty ${activeLine.quantity}`
+                    : nextUp.customerName}
+                </p>
+                <p
+                  className={`mt-2 inline-flex items-center gap-1.5 text-xs font-medium ${
+                    nextUp.dueLabel.startsWith("Overdue")
+                      ? "text-rose"
+                      : "text-muted"
+                  }`}
                 >
-                  Open
-                </Button>
-              ) : null}
-            </div>
-          </Card>
+                  <Clock3 aria-hidden="true" size={13} className="shrink-0" />
+                  <span>{nextUp.dueLabel}</span>
+                </p>
+
+                <div className="mt-4">
+                  <Button
+                    fullWidth
+                    trailingIcon={<ArrowRight aria-hidden="true" size={16} />}
+                    onClick={() => {
+                      if (
+                        (nextUp.kind === "ready-collection" ||
+                          orderHasUnpurchasedItems(state, nextUp.order)) &&
+                        onOpenOrder
+                      ) {
+                        onOpenOrder(nextUp.order.id)
+                      } else {
+                        onNavigate("orders", "continue-preparation")
+                      }
+                    }}
+                  >
+                    {orderHasUnpurchasedItems(state, nextUp.order)
+                      ? "Shop first"
+                      : nextUp.ctaLabel}
+                  </Button>
+                </div>
+              </Card>
+            )
+          })()
         ) : (
           <EmptyState
-            icon={<ChefHat aria-hidden="true" size={22} />}
+            illustration="caught-up-cupcake"
             title="All caught up"
             description="No bakes queued right now."
             actionLabel="New order"
@@ -195,7 +220,7 @@ export default function HomeScreen({
               <CreditCard aria-hidden="true" size={18} />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-cocoa">
+              <p className="text-sm font-semibold leading-snug text-cocoa">
                 {collectedDueCount > 0
                   ? `${collectedDueCount} collected ${
                       collectedDueCount === 1 ? "order" : "orders"
@@ -204,7 +229,7 @@ export default function HomeScreen({
                       dueOrders.length === 1 ? "order" : "orders"
                     } with balance due`}
               </p>
-              <p className="mt-0.5 truncate text-xs text-muted">
+              <p className="mt-0.5 text-xs leading-snug text-muted">
                 {dueOrders.length === 1
                   ? `${dueOrders[0].order.customerName} · ${formatLkr(totalDueLkr)} due`
                   : `${dueOrders.length} orders · ${formatLkr(totalDueLkr)} total due`}
@@ -279,13 +304,11 @@ export default function HomeScreen({
               This month
               <TrendingUp aria-hidden="true" size={14} className="text-success" />
             </span>
-            <span className="mt-2 block truncate text-lg font-bold tabular-nums text-cocoa">
+            <span className="mt-2 block text-lg font-bold leading-tight tabular-nums text-cocoa">
               {formatLkr(budget.sales.actual)}
             </span>
             <span className="mt-0.5 block text-xs text-muted">
-              {budget.sales.target
-                ? `${budget.sales.progressPct}% of goal`
-                : "Sales collected"}
+              Sales collected
             </span>
           </button>
         </div>
@@ -307,8 +330,8 @@ export default function HomeScreen({
           {upcoming.map((item) => (
             <ListRow
               key={item.orderId}
-              title={`${item.customerName} · ${item.itemSummary}`}
-              subtitle={item.timeLabel}
+              title={item.customerName}
+              subtitle={`${item.timeLabel} · ${item.itemSummary}`}
               value={formatLkr(item.agreedPrice)}
               showChevron
               onClick={() =>

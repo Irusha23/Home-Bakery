@@ -16,9 +16,10 @@ import SelectField from "../components/ui/SelectField"
 import TextAreaField from "../components/ui/TextAreaField"
 import { useToast } from "../components/ui/Toast"
 import { formatLkr } from "../lib/format"
+import { createId } from "../lib/id"
 import { PAYMENT_METHOD_OPTIONS, isValidMoneyAmount } from "../lib/financials"
 import { calculateCostSnapshot, getRecipeUnitIssues } from "../lib/orders"
-import { snapshotRecipe, useAppState } from "../state/AppState"
+import { makeReference, snapshotRecipe, useAppState } from "../state/AppState"
 import type {
   Order,
   OrderDraftInput,
@@ -73,18 +74,18 @@ export default function CreateOrderFlow({
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showNotes, setShowNotes] = useState(Boolean(order?.instructions))
-  const [draftId] = useState(() => order?.id ?? `order-${crypto.randomUUID()}`)
+  const [draftId] = useState(() => order?.id ?? createId("order"))
   const [customerMode, setCustomerMode] = useState<CustomerMode>(
     order?.isQuickOrder ? "quick" : "existing",
   )
   const [customerId, setCustomerId] = useState(
     order?.customerId ?? initialCustomerId ?? state.customers[0]?.id ?? "",
   )
-  const [newCustomer, setNewCustomer] = useState({
-    id: `customer-${crypto.randomUUID()}`,
+  const [newCustomer, setNewCustomer] = useState(() => ({
+    id: createId("customer"),
     name: "",
     phone: "",
-  })
+  }))
 
   const findDefaultRecipeId = (productId: string, variantId: string) =>
     activeRecipes.find(
@@ -113,7 +114,7 @@ export default function CreateOrderFlow({
     const defaultVariant = defaultProduct?.variants[0]
     return [
       {
-        id: `line-${crypto.randomUUID()}`,
+        id: createId("line"),
         productId: defaultProduct?.id ?? "",
         variantId: defaultVariant?.id ?? "",
         quantity: 1,
@@ -193,7 +194,7 @@ export default function CreateOrderFlow({
     setLines((current) => [
       ...current,
       {
-        id: `line-${crypto.randomUUID()}`,
+        id: createId("line"),
         productId: product?.id ?? "",
         variantId: variant?.id ?? "",
         quantity: 1,
@@ -239,6 +240,23 @@ export default function CreateOrderFlow({
     if (!Number.isFinite(effectiveAgreedPrice) || effectiveAgreedPrice <= 0) {
       setError("Enter a selling price greater than zero.")
       return false
+    }
+    if (unitIssues.length) {
+      setError(
+        `Order cannot be confirmed until recipe units match inventory: ${unitIssues.join(" ")}`,
+      )
+      return false
+    }
+    if (recordDeposit) {
+      const amountNum = Number(depositAmount)
+      if (!isValidMoneyAmount(amountNum)) {
+        setError("Deposit must be a positive whole LKR amount.")
+        return false
+      }
+      if (amountNum > Math.round(effectiveAgreedPrice)) {
+        setError("Deposit cannot exceed the agreed selling price.")
+        return false
+      }
     }
     setError("")
     return true
@@ -303,37 +321,42 @@ export default function CreateOrderFlow({
         setShowConfirmDialog(false)
         return
       }
+      if (amountNum > effectiveAgreedPrice) {
+        setError("Deposit cannot exceed the agreed selling price.")
+        setShowConfirmDialog(false)
+        return
+      }
     }
     const draft = buildDraft()
     if (!draft) {
       setShowConfirmDialog(false)
       return
     }
+    const resolvedReference = order?.reference ?? makeReference(state.orders)
     dispatch({ type: "UPSERT_DRAFT", payload: draft })
     const confirmed = dispatchIfAccepted({
       type: "CONFIRM_ORDER",
       orderId: draftId,
     })
-    if (confirmed) {
-      for (const line of draft.lines) {
-        dispatch({
-          type: "MARK_ALL_PANTRY_CHECKLIST",
-          preparationId: `preparation-${draftId}-${line.id}`,
-          inPantry: true,
-        })
-      }
+    if (!confirmed) {
+      setShowConfirmDialog(false)
+      setError("Could not confirm order. Check item details and try again.")
+      return
     }
-    if (
-      confirmed &&
-      recordDeposit &&
-      isValidMoneyAmount(Number(depositAmount))
-    ) {
+    for (const line of draft.lines) {
+      dispatch({
+        type: "MARK_ALL_PANTRY_CHECKLIST",
+        preparationId: `preparation-${draftId}-${line.id}`,
+        inPantry: true,
+      })
+    }
+    if (recordDeposit && isValidMoneyAmount(Number(depositAmount))) {
       dispatchIfAccepted({
         type: "RECORD_PAYMENT",
         orderId: draftId,
-        orderReference: order?.reference ?? "New order",
+        orderReference: resolvedReference,
         payment: {
-          id: `pay-${crypto.randomUUID()}`,
+          id: createId("pay"),
           date: new Date().toISOString().slice(0, 10),
           amount: Number(depositAmount),
           method:
@@ -782,6 +805,12 @@ export default function CreateOrderFlow({
       <RecipeEditorSheet
         open={customEditorLineId !== null}
         recipe={editingCustomLine?.customRecipe ?? null}
+        baseRecipe={
+          !editingCustomLine?.customRecipe && editingCustomLine?.recipeId
+            ? (state.recipes.find((r) => r.id === editingCustomLine.recipeId) ??
+              null)
+            : null
+        }
         initialProductId={editingCustomLine?.productId}
         initialVariantId={editingCustomLine?.variantId}
         isOrderCustomMode

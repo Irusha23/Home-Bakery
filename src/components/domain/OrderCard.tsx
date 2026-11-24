@@ -5,6 +5,7 @@ import {
   ChevronRight,
   CreditCard,
   Flame,
+  RotateCcw,
   ShoppingBag,
 } from "lucide-react"
 import { getCollectionTargetMs } from "../../lib/countdown"
@@ -17,6 +18,7 @@ function quickActionIcon(label: string) {
   if (label === "Confirm") return <Check aria-hidden="true" size={14} />
   if (label === "Collected") return <CheckCircle2 aria-hidden="true" size={14} />
   if (label === "Add payment") return <CreditCard aria-hidden="true" size={14} />
+  if (label === "Record refund") return <RotateCcw aria-hidden="true" size={14} />
   if (label === "To buy") return <ShoppingBag aria-hidden="true" size={14} />
   return <Flame aria-hidden="true" size={14} />
 }
@@ -48,6 +50,8 @@ function paymentTone(status: PaymentStatus) {
 type OrderCardProps = {
   order: Order
   balanceDue?: number
+  retainedAmount?: number
+  profitLkr?: number
   quickActionLabel?: string
   onQuickAction?: () => void
   onClick: () => void
@@ -56,6 +60,8 @@ type OrderCardProps = {
 export default function OrderCard({
   order,
   balanceDue,
+  retainedAmount,
+  profitLkr,
   quickActionLabel,
   onQuickAction,
   onClick,
@@ -67,18 +73,18 @@ export default function OrderCard({
   const statusText = orderLabel(order.status, order.preparationStatus)
 
   return (
-    <div className="rounded-card border border-warm-border bg-white shadow-subtle transition duration-ui hover:border-sage-border hover:shadow-card">
+    <div className="rounded-card border border-warm-border bg-white shadow-subtle transition duration-ui ease-out hover:border-sage-border hover:shadow-card">
       <button
         type="button"
         onClick={onClick}
-        className="w-full p-4 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/20"
+        className="w-full p-4 text-left transition-transform duration-ui ease-out active:scale-[0.988] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/20"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-base font-semibold tracking-tight text-cocoa">
+            <div className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-cocoa">
               {order.customerName}
             </div>
-            <div className="mt-0.5 truncate text-xs text-muted">
+            <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
               {productSummary || "No items yet"}
             </div>
           </div>
@@ -93,6 +99,21 @@ export default function OrderCard({
               order.status !== "Cancelled" ? (
                 <span className="block text-[11px] font-semibold tabular-nums text-warning">
                   Due {formatLkr(balanceDue)}
+                </span>
+              ) : order.status === "Cancelled" &&
+                retainedAmount !== undefined &&
+                retainedAmount > 0 ? (
+                <span className="block text-[11px] font-semibold tabular-nums text-warning">
+                  Held {formatLkr(retainedAmount)}
+                </span>
+              ) : order.status === "Completed" && profitLkr !== undefined ? (
+                <span
+                  className={`block text-[11px] font-semibold tabular-nums ${
+                    profitLkr >= 0 ? "text-success" : "text-error"
+                  }`}
+                >
+                  Profit {profitLkr >= 0 ? "+" : "−"}
+                  {formatLkr(Math.abs(profitLkr))}
                 </span>
               ) : null}
             </div>
@@ -121,10 +142,17 @@ export default function OrderCard({
             <StatusBadge tone={orderTone(order.status, order.preparationStatus)}>
               {statusText}
             </StatusBadge>
-            {order.status !== "Draft" && order.status !== "Cancelled" ? (
-              <StatusBadge tone={paymentTone(order.paymentStatus)}>
-                {order.paymentStatus}
-              </StatusBadge>
+            {order.status !== "Draft" &&
+            (order.status !== "Cancelled" || order.payments.length > 0) ? (
+              order.status === "Cancelled" &&
+              retainedAmount === 0 &&
+              order.paymentStatus !== "Refunded" ? (
+                <StatusBadge tone="success">Settled</StatusBadge>
+              ) : (
+                <StatusBadge tone={paymentTone(order.paymentStatus)}>
+                  {order.paymentStatus}
+                </StatusBadge>
+              )
             ) : null}
           </div>
         </div>

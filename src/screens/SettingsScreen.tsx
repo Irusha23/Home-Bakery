@@ -10,7 +10,8 @@ import { GroupedList, ListRow } from "../components/ui/GroupedList"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import { useToast } from "../components/ui/Toast"
-import { formatDate } from "../lib/format"
+import { formatDate, formatLkr } from "../lib/format"
+import { calculateSuggestedPrice } from "../lib/pricing"
 import { useAppState } from "../state/AppState"
 import type { PricingMode } from "../types"
 
@@ -213,40 +214,71 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           value={pricingMode}
           onChange={(value) => setPricingMode(value as PricingMode)}
           segments={[
-            { value: "margin", label: "Gross margin %" },
-            { value: "markup", label: "Cost markup %" },
+            { value: "margin", label: "% of price" },
+            { value: "markup", label: "% on cost" },
           ]}
         />
-        {pricingMode === "margin" ? (
-          <Field
-            label="Default profit margin (%)"
-            type="number"
-            min="0"
-            max="99"
-            step="1"
-            inputMode="decimal"
-            value={marginPercent}
-            onChange={(event) => {
-              setMarginPercent(event.target.value)
-              setError("")
-            }}
-            helperText="Selling price = Total cost ÷ (1 − Margin %)"
-          />
-        ) : (
-          <Field
-            label="Default cost markup (%)"
-            type="number"
-            min="0"
-            step="1"
-            inputMode="decimal"
-            value={markupPercent}
-            onChange={(event) => {
-              setMarkupPercent(event.target.value)
-              setError("")
-            }}
-            helperText="Selling price = Total cost × (1 + Markup %)"
-          />
-        )}
+        {(() => {
+          const parsedMargin = Number(marginPercent)
+          const parsedMarkup = Number(markupPercent)
+          const example = calculateSuggestedPrice(
+            1000,
+            pricingMode === "margin"
+              ? {
+                  mode: "margin",
+                  marginPercent: Number.isFinite(parsedMargin) ? parsedMargin : 0,
+                  markupPercent: 0,
+                  roundingStep,
+                }
+              : {
+                  mode: "markup",
+                  marginPercent: 0,
+                  markupPercent: Number.isFinite(parsedMarkup) ? parsedMarkup : 0,
+                  roundingStep,
+                },
+          )
+          if (pricingMode === "margin") {
+            return (
+              <Field
+                label="Profit out of selling price (%)"
+                type="number"
+                min="0"
+                max="99"
+                step="1"
+                inputMode="decimal"
+                value={marginPercent}
+                onChange={(event) => {
+                  setMarginPercent(event.target.value)
+                  setError("")
+                }}
+                helperText={
+                  example.valid
+                    ? `Example: Rs. 1,000 cost → sell at ${formatLkr(example.suggestedPrice)} (${Number.isFinite(parsedMargin) ? parsedMargin : 0}% of price is profit)`
+                    : "Enter a percentage below 100%."
+                }
+              />
+            )
+          }
+          return (
+            <Field
+              label="Extra added on cost (%)"
+              type="number"
+              min="0"
+              step="1"
+              inputMode="decimal"
+              value={markupPercent}
+              onChange={(event) => {
+                setMarkupPercent(event.target.value)
+                setError("")
+              }}
+              helperText={
+                example.valid
+                  ? `Example: Rs. 1,000 cost → sell at ${formatLkr(example.suggestedPrice)} (+${Number.isFinite(parsedMarkup) ? parsedMarkup : 0}% added on top)`
+                  : "Enter 0% or higher."
+              }
+            />
+          )
+        })()}
         <SelectField
           label="Round suggested prices to nearest"
           value={String(roundingStep)}

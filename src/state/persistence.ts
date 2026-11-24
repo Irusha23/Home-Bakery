@@ -747,6 +747,12 @@ function validateBackupData(
     "Backup refunds collection must be an array.",
   )
 
+  requireValue(
+    data.shoppingTrips === undefined || Array.isArray(data.shoppingTrips),
+
+    "Backup shoppingTrips collection must be an array.",
+  )
+
   const expenseCollections = validateExpenseCollections(
     data,
 
@@ -933,6 +939,15 @@ function validateBackupData(
           isValidTimestamp(order.collectedAt),
 
         "Order collection timestamp is invalid.",
+      )
+    }
+
+    if (order.cancellationFee !== undefined) {
+      requireValue(
+        typeof order.cancellationFee === "number" &&
+          Number.isSafeInteger(order.cancellationFee) &&
+          order.cancellationFee >= 0,
+        "Order cancellation fee is invalid.",
       )
     }
 
@@ -1421,6 +1436,8 @@ function validateBackupData(
 
     refunds,
 
+    shoppingTrips: Array.isArray(data.shoppingTrips) ? data.shoppingTrips : [],
+
     settings,
 
     budgetPlan,
@@ -1504,7 +1521,11 @@ function isSupportedDataShape(value: unknown): value is PersistedAppData {
         (order.collectedAt !== undefined &&
           order.collectedAt !== null &&
           (typeof order.collectedAt !== "string" ||
-            !isValidTimestamp(order.collectedAt))),
+            !isValidTimestamp(order.collectedAt))) ||
+        (order.cancellationFee !== undefined &&
+          (typeof order.cancellationFee !== "number" ||
+            !Number.isSafeInteger(order.cancellationFee) ||
+            order.cancellationFee < 0)),
     ) ||
     value.recipes.some(
       (recipe) =>

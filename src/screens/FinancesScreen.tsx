@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState } from "react"
 import {
-  ChevronDown,
+  ChevronRight,
   Plus,
   ReceiptText,
   Save,
   Split,
   WalletCards,
 } from "lucide-react"
+import ShoppingReceiptSheet from "../components/domain/ShoppingReceiptSheet"
 import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
+import Disclosure from "../components/ui/Disclosure"
 import Field from "../components/ui/Field"
+import Illustration from "../components/ui/Illustration"
 import SelectField from "../components/ui/SelectField"
 import Sheet from "../components/ui/Sheet"
 import StatusBadge from "../components/ui/StatusBadge"
@@ -24,11 +27,13 @@ import {
   validateExpense,
 } from "../lib/expenses"
 import { formatDate, formatLkr } from "../lib/format"
+import { createId } from "../lib/id"
 import { useAppState } from "../state/AppState"
 import type {
   Expense,
   ExpenseAllocationVersion,
   ExpenseCategory,
+  ShoppingTripRecord,
   StarterAction,
 } from "../types"
 
@@ -47,7 +52,7 @@ function today() {
 }
 
 function newId(prefix: string) {
-  return `${prefix}-${crypto.randomUUID()}`
+  return createId(prefix)
 }
 
 export default function FinancesScreen({
@@ -85,6 +90,9 @@ export default function FinancesScreen({
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
   const [allocationRows, setAllocationRows] = useState<AllocationDraftRow[]>([])
   const [allocationError, setAllocationError] = useState("")
+  const [selectedTrip, setSelectedTrip] = useState<ShoppingTripRecord | null>(
+    null,
+  )
 
   useEffect(() => {
     if (starterAction === "add-expense") {
@@ -324,11 +332,9 @@ export default function FinancesScreen({
         )}
 
         {sortedExpenses.length === 0 ? (
-          <Card className="px-5 py-10 text-center">
-            <span className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-sage-soft text-cocoa">
-              <ReceiptText aria-hidden="true" size={22} />
-            </span>
-            <p className="mt-3 text-base font-semibold text-cocoa">
+          <Card className="px-5 py-8 text-center">
+            <Illustration name="money-jar" size="md" />
+            <p className="mt-2 text-base font-semibold text-cocoa">
               No expenses yet
             </p>
             <p className="mx-auto mt-1 max-w-empty text-xs text-muted">
@@ -367,22 +373,26 @@ export default function FinancesScreen({
                         (expense.attribution as { orderId: string }).orderId,
                     )
                   : undefined
+              const linkedTrip = (state.shoppingTrips ?? []).find(
+                (trip) => trip.expenseId === expense.id,
+              )
               const isEditing = editingExpenseId === expense.id
 
-              return (
-                <Card key={expense.id} className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-sm font-semibold text-cocoa">
-                        {expense.description}
-                      </h3>
-                      <p className="mt-0.5 text-xs text-muted">
-                        {formatDate(expense.paidDate)} ·{" "}
-                        {category?.name ?? "Other"}
-                        {directOrder ? ` · ${directOrder.reference}` : ""}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
+              const summaryHeader = (
+                <>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-cocoa">
+                      {expense.description}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {formatDate(expense.paidDate)} ·{" "}
+                      {category?.name ?? "Other"}
+                      {directOrder ? ` · ${directOrder.reference}` : ""}
+                      {linkedTrip ? ` · ${linkedTrip.reference}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 text-right">
+                    <div>
                       <div className="text-sm font-bold tabular-nums text-cocoa">
                         {formatLkr(expense.amount)}
                       </div>
@@ -398,7 +408,32 @@ export default function FinancesScreen({
                           : "Direct"}
                       </StatusBadge>
                     </div>
+                    {linkedTrip ? (
+                      <ChevronRight
+                        aria-hidden="true"
+                        size={16}
+                        className="text-muted"
+                      />
+                    ) : null}
                   </div>
+                </>
+              )
+
+              return (
+                <Card key={expense.id} className="space-y-3">
+                  {linkedTrip ? (
+                    <button
+                      type="button"
+                      className="flex w-full items-start justify-between gap-3 text-left transition-opacity hover:opacity-80"
+                      onClick={() => setSelectedTrip(linkedTrip)}
+                    >
+                      {summaryHeader}
+                    </button>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      {summaryHeader}
+                    </div>
+                  )}
 
                   {expense.attribution.type === "shared" &&
                   allocated > 0 &&
@@ -523,7 +558,8 @@ export default function FinancesScreen({
                       </div>
                     </div>
                   ) : expense.attribution.type === "shared" &&
-                    customerOrders.length > 0 ? (
+                    customerOrders.length > 0 &&
+                    !linkedTrip ? (
                     <Button
                       variant="soft"
                       size="compact"
@@ -540,50 +576,47 @@ export default function FinancesScreen({
           </div>
         )}
 
-        <details className="rounded-card border border-warm-border bg-white shadow-subtle">
-          <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-cocoa">
-            <span>Categories ({state.expenseCategories.length})</span>
-            <ChevronDown aria-hidden="true" size={16} className="text-muted" />
-          </summary>
-          <div className="space-y-3 border-t border-warm-border p-4">
-            <div className="flex gap-2">
-              <div className="min-w-0 flex-1">
-                <Field
-                  label="New category"
-                  hideLabel
-                  placeholder="e.g., Delivery"
-                  value={categoryName}
-                  onChange={(event) => {
-                    setCategoryName(event.target.value)
-                    setCategoryError("")
-                  }}
-                />
-              </div>
-              <Button
-                size="compact"
-                leadingIcon={<Plus aria-hidden="true" size={15} />}
-                onClick={addCategory}
-              >
-                Add
-              </Button>
+        <Disclosure
+          title={`Categories (${state.expenseCategories.length})`}
+          contentClassName="space-y-3 border-t border-warm-border p-4"
+        >
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <Field
+                label="New category"
+                hideLabel
+                placeholder="e.g., Delivery"
+                value={categoryName}
+                onChange={(event) => {
+                  setCategoryName(event.target.value)
+                  setCategoryError("")
+                }}
+              />
             </div>
-            {categoryError ? (
-              <p role="alert" className="text-xs text-error">
-                {categoryError}
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-1.5">
-              {state.expenseCategories.map((category) => (
-                <span
-                  key={category.id}
-                  className="rounded-full bg-sage-soft px-2.5 py-1 text-xs font-medium text-cocoa"
-                >
-                  {category.name}
-                </span>
-              ))}
-            </div>
+            <Button
+              size="compact"
+              leadingIcon={<Plus aria-hidden="true" size={15} />}
+              onClick={addCategory}
+            >
+              Add
+            </Button>
           </div>
-        </details>
+          {categoryError ? (
+            <p role="alert" className="text-xs text-error">
+              {categoryError}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-1.5">
+            {state.expenseCategories.map((category) => (
+              <span
+                key={category.id}
+                className="rounded-full bg-sage-soft px-2.5 py-1 text-xs font-medium text-cocoa"
+              >
+                {category.name}
+              </span>
+            ))}
+          </div>
+        </Disclosure>
       </div>
 
       <Sheet
@@ -685,6 +718,11 @@ export default function FinancesScreen({
           ) : null}
         </div>
       </Sheet>
+
+      <ShoppingReceiptSheet
+        trip={selectedTrip}
+        onClose={() => setSelectedTrip(null)}
+      />
     </>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowDown, ArrowUp, Calculator, Plus, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Calculator, ChevronDown, Plus, Trash2 } from "lucide-react"
 import Button, { IconButton } from "../ui/Button"
 import Card from "../ui/Card"
 import CheckboxField from "../ui/CheckboxField"
@@ -9,6 +9,7 @@ import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
 import InventoryItemSheet from "./InventoryItemSheet"
 import PricingCalculatorSheet from "./PricingCalculatorSheet"
+import { formatLkr } from "../../lib/format"
 import { compatibleUnits } from "../../lib/inventory"
 import {
   estimateRecipeMaterialCost,
@@ -29,6 +30,7 @@ import type {
 type RecipeEditorSheetProps = {
   open: boolean
   recipe?: Recipe | null
+  baseRecipe?: Recipe | null
   initialProductId?: string
   initialVariantId?: string
   isOrderCustomMode?: boolean
@@ -52,6 +54,7 @@ type PackagingRowDraft = {
 export default function RecipeEditorSheet({
   open,
   recipe,
+  baseRecipe,
   initialProductId,
   initialVariantId,
   isOrderCustomMode = false,
@@ -91,6 +94,7 @@ export default function RecipeEditorSheet({
   const [steps, setSteps] = useState<string[]>([])
   const [newStep, setNewStep] = useState("")
   const [saveToLibrary, setSaveToLibrary] = useState(!isOrderCustomMode)
+  const [showCustomPrices, setShowCustomPrices] = useState(false)
   const [error, setError] = useState("")
 
   const [quickItemCat, setQuickItemCat] = useState<
@@ -102,6 +106,7 @@ export default function RecipeEditorSheet({
     if (!open) return
     setError("")
     setNewStep("")
+    setShowCustomPrices(false)
     const initialPrices: Record<string, string> = {}
     for (const item of state.inventory) {
       const displayVal = toDisplayUnitPrice(item.averageUnitCost, item.unit)
@@ -111,21 +116,29 @@ export default function RecipeEditorSheet({
     }
     setPriceDrafts(initialPrices)
 
-    if (recipe) {
-      setName(recipe.name)
-      setProductId(recipe.productId || activeProducts[0]?.id || "")
+    const source = recipe ?? baseRecipe
+    if (source) {
+      setName(
+        recipe
+          ? recipe.name
+          : isOrderCustomMode
+            ? `${source.name} (custom)`
+            : source.name,
+      )
+      setProductId(initialProductId || source.productId || activeProducts[0]?.id || "")
       setVariantId(
-        recipe.variantId ||
-          activeProducts.find((p) => p.id === recipe.productId)?.variants[0]
-            ?.id ||
+        initialVariantId ||
+          source.variantId ||
+          activeProducts.find((p) => p.id === (initialProductId || source.productId))
+            ?.variants[0]?.id ||
           activeProducts[0]?.variants[0]?.id ||
           "",
       )
-      setYieldCount(String(recipe.yield || 1))
-      setYieldLabel(recipe.yieldLabel || "")
-      setPrepMinutes(String(recipe.preparationMinutes || 60))
+      setYieldCount(String(source.yield || 1))
+      setYieldLabel(source.yieldLabel || "")
+      setPrepMinutes(String(source.preparationMinutes || 60))
       setIngredients(
-        recipe.ingredients.map((item) => ({
+        source.ingredients.map((item) => ({
           key: `ing-${crypto.randomUUID().slice(0, 8)}`,
           inventoryId: item.inventoryId,
           quantity: String(item.quantity),
@@ -133,13 +146,13 @@ export default function RecipeEditorSheet({
         })),
       )
       setPackaging(
-        recipe.packaging.map((item) => ({
+        source.packaging.map((item) => ({
           key: `pkg-${crypto.randomUUID().slice(0, 8)}`,
           inventoryId: item.inventoryId,
           quantity: String(item.quantity),
         })),
       )
-      setSteps(recipe.instructions.length ? [...recipe.instructions] : [""])
+      setSteps(source.instructions.length ? [...source.instructions] : [""])
       setSaveToLibrary(!isOrderCustomMode)
     } else {
       const defaultProduct =
@@ -149,7 +162,13 @@ export default function RecipeEditorSheet({
         defaultProduct?.variants.find((v) => v.id === initialVariantId) ??
         defaultProduct?.variants[0]
       const firstIng = ingredientItems[0]
-      setName("")
+      setName(
+        isOrderCustomMode
+          ? defaultProduct
+            ? `${defaultProduct.name} (custom)`
+            : "Custom recipe"
+          : "",
+      )
       setProductId(defaultProduct?.id ?? "")
       setVariantId(defaultVariant?.id ?? "")
       setYieldCount("1")
@@ -170,11 +189,12 @@ export default function RecipeEditorSheet({
           : [],
       )
       setPackaging([])
-      setSteps(["Preheat oven and prepare baking tin."])
+      setSteps(isOrderCustomMode ? [] : ["Preheat oven and prepare baking tin."])
       setSaveToLibrary(!isOrderCustomMode)
     }
   }, [
     activeProducts,
+    baseRecipe,
     ingredientItems,
     initialProductId,
     initialVariantId,
@@ -407,10 +427,14 @@ export default function RecipeEditorSheet({
           recipe
             ? `Edit ${recipe.name}`
             : isOrderCustomMode
-              ? "Custom order recipe"
+              ? "Customise recipe"
               : "New recipe"
         }
-        subtitle="Updating an ingredient price here updates it across all recipes"
+        subtitle={
+          isOrderCustomMode
+            ? `Est. cost ${formatLkr(liveCost.totalCost)}`
+            : "Updating an ingredient price here updates it across all recipes"
+        }
         onClose={onClose}
         footer={
           <div className="flex gap-2">
@@ -418,87 +442,123 @@ export default function RecipeEditorSheet({
               Cancel
             </Button>
             <Button className="flex-1" onClick={handleSave}>
-              {recipe ? "Save version" : "Save recipe"}
+              {isOrderCustomMode
+                ? "Apply to item"
+                : recipe
+                  ? "Save version"
+                  : "Save recipe"}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
-          <Field
-            label="Recipe name"
-            placeholder="e.g., Signature ribbon cake"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value)
-              setError("")
-            }}
-          />
-
-          {activeProducts.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField
-                label="Product"
-                value={productId}
-                options={activeProducts.map((p) => ({
-                  value: p.id,
-                  label: p.name,
-                }))}
+          {isOrderCustomMode ? (
+            <div className="grid grid-cols-[1fr_92px] gap-2.5">
+              <Field
+                label="Custom name"
+                placeholder="e.g., Extra chocolate"
+                value={name}
                 onChange={(e) => {
-                  const nextP = activeProducts.find(
-                    (p) => p.id === e.target.value,
-                  )
-                  setProductId(e.target.value)
-                  setVariantId(nextP?.variants[0]?.id ?? "")
+                  setName(e.target.value)
+                  setError("")
                 }}
               />
-              <SelectField
-                label="Variant"
-                value={variantId}
-                options={
-                  variantOptions.length
-                    ? variantOptions
-                    : [{ value: "", label: "Default" }]
-                }
-                onChange={(e) => setVariantId(e.target.value)}
+              <Field
+                label="Prep (min)"
+                type="number"
+                min="0"
+                value={prepMinutes}
+                onChange={(e) => setPrepMinutes(e.target.value)}
               />
             </div>
-          ) : null}
+          ) : (
+            <>
+              <Field
+                label="Recipe name"
+                placeholder="e.g., Signature ribbon cake"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  setError("")
+                }}
+              />
 
-          <div className="grid grid-cols-3 gap-2">
-            <Field
-              label="Batch yield"
-              type="number"
-              min="1"
-              value={yieldCount}
-              onChange={(e) => setYieldCount(e.target.value)}
-            />
-            <Field
-              label="Yield label"
-              placeholder="1 × 1 kg cake"
-              value={yieldLabel}
-              onChange={(e) => setYieldLabel(e.target.value)}
-            />
-            <Field
-              label="Prep (mins)"
-              type="number"
-              min="0"
-              value={prepMinutes}
-              onChange={(e) => setPrepMinutes(e.target.value)}
-            />
-          </div>
+              {activeProducts.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <SelectField
+                    label="Product"
+                    value={productId}
+                    options={activeProducts.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    }))}
+                    onChange={(e) => {
+                      const nextP = activeProducts.find(
+                        (p) => p.id === e.target.value,
+                      )
+                      setProductId(e.target.value)
+                      setVariantId(nextP?.variants[0]?.id ?? "")
+                    }}
+                  />
+                  <SelectField
+                    label="Variant"
+                    value={variantId}
+                    options={
+                      variantOptions.length
+                        ? variantOptions
+                        : [{ value: "", label: "Default" }]
+                    }
+                    onChange={(e) => setVariantId(e.target.value)}
+                  />
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-3 gap-2">
+                <Field
+                  label="Batch yield"
+                  type="number"
+                  min="1"
+                  value={yieldCount}
+                  onChange={(e) => setYieldCount(e.target.value)}
+                />
+                <Field
+                  label="Yield label"
+                  placeholder="1 × 1 kg cake"
+                  value={yieldLabel}
+                  onChange={(e) => setYieldLabel(e.target.value)}
+                />
+                <Field
+                  label="Prep (mins)"
+                  type="number"
+                  min="0"
+                  value={prepMinutes}
+                  onChange={(e) => setPrepMinutes(e.target.value)}
+                />
+              </div>
+            </>
+          )}
 
           <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-cocoa">
                 Ingredients ({compiledIngredients.length})
               </span>
-              <div className="flex gap-1.5">
+              <div className="flex items-center gap-1.5">
+                {isOrderCustomMode ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomPrices((prev) => !prev)}
+                    className="px-1.5 text-xs font-semibold text-muted hover:text-cocoa"
+                  >
+                    {showCustomPrices ? "Hide prices" : "Prices"}
+                  </button>
+                ) : null}
                 <Button
                   size="compact"
                   variant="ghost"
                   onClick={() => setQuickItemCat("ingredient")}
                 >
-                  + New item
+                  + New
                 </Button>
                 <Button
                   size="compact"
@@ -506,7 +566,7 @@ export default function RecipeEditorSheet({
                   leadingIcon={<Plus aria-hidden="true" size={15} />}
                   onClick={handleAddIngredient}
                 >
-                  Add row
+                  Add
                 </Button>
               </div>
             </div>
@@ -521,6 +581,110 @@ export default function RecipeEditorSheet({
               const priceUnitLabel = selectedItem
                 ? getDisplayPriceUnitLabel(selectedItem.unit)
                 : "kg"
+
+              if (isOrderCustomMode) {
+                const missingPrice = !(priceDrafts[row.inventoryId] ?? "").trim()
+                return (
+                  <div
+                    key={row.key}
+                    className="space-y-2 rounded-control border border-warm-border bg-ivory/60 p-2.5"
+                  >
+                    <div className="grid grid-cols-[1fr_72px_68px_auto] items-center gap-1.5">
+                      <select
+                        aria-label="Ingredient"
+                        value={row.inventoryId}
+                        onChange={(e) => {
+                          const nextInv = ingredientItems.find(
+                            (i) => i.inventoryId === e.target.value,
+                          )
+                          setIngredients((current) =>
+                            current.map((item) =>
+                              item.key === row.key
+                                ? {
+                                    ...item,
+                                    inventoryId: e.target.value,
+                                    unit: nextInv ? nextInv.unit : item.unit,
+                                  }
+                                : item,
+                            ),
+                          )
+                        }}
+                        className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2.5 text-sm text-cocoa outline-none focus:border-sage"
+                      >
+                        {ingredientItems.map((i) => (
+                          <option key={i.inventoryId} value={i.inventoryId}>
+                            {i.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        aria-label="Quantity"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={row.quantity}
+                        onChange={(e) =>
+                          setIngredients((current) =>
+                            current.map((item) =>
+                              item.key === row.key
+                                ? { ...item, quantity: e.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2 text-sm tabular-nums text-cocoa outline-none focus:border-sage"
+                      />
+                      <select
+                        aria-label="Unit"
+                        value={row.unit}
+                        onChange={(e) =>
+                          setIngredients((current) =>
+                            current.map((item) =>
+                              item.key === row.key
+                                ? { ...item, unit: e.target.value as Unit }
+                                : item,
+                            ),
+                          )
+                        }
+                        className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2 text-sm text-cocoa outline-none focus:border-sage"
+                      >
+                        {unitChoices.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                      <IconButton
+                        label="Remove ingredient"
+                        className="size-9"
+                        onClick={() =>
+                          setIngredients((current) =>
+                            current.filter((item) => item.key !== row.key),
+                          )
+                        }
+                      >
+                        <Trash2 aria-hidden="true" size={14} />
+                      </IconButton>
+                    </div>
+                    {showCustomPrices || missingPrice ? (
+                      <Field
+                        label={`Price per ${priceUnitLabel} (Rs.)`}
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Enter price"
+                        value={priceDrafts[row.inventoryId] ?? ""}
+                        onChange={(e) =>
+                          setPriceDrafts((prev) => ({
+                            ...prev,
+                            [row.inventoryId]: e.target.value,
+                          }))
+                        }
+                      />
+                    ) : null}
+                  </div>
+                )
+              }
 
               return (
                 <div
@@ -616,194 +780,354 @@ export default function RecipeEditorSheet({
             })}
           </div>
 
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-cocoa">
-                Packaging ({compiledPackaging.length})
-              </span>
-              <div className="flex gap-1.5">
-                <Button
-                  size="compact"
-                  variant="ghost"
-                  onClick={() => setQuickItemCat("packaging")}
-                >
-                  + New box/board
-                </Button>
-                <Button
-                  size="compact"
-                  variant="soft"
-                  leadingIcon={<Plus aria-hidden="true" size={15} />}
-                  onClick={handleAddPackaging}
-                >
-                  Add row
-                </Button>
+          {isOrderCustomMode ? (
+            <details
+              open={packaging.length > 0}
+              className="rounded-control border border-warm-border bg-white"
+            >
+              <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between px-3.5 text-sm font-semibold text-cocoa">
+                <span>Packaging ({compiledPackaging.length})</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  size={15}
+                  className="text-muted"
+                />
+              </summary>
+              <div className="space-y-2 border-t border-warm-border p-3">
+                {packaging.map((row) => (
+                  <div
+                    key={row.key}
+                    className="grid grid-cols-[1fr_72px_auto] items-center gap-1.5"
+                  >
+                    <select
+                      aria-label="Packaging item"
+                      value={row.inventoryId}
+                      onChange={(e) =>
+                        setPackaging((current) =>
+                          current.map((item) =>
+                            item.key === row.key
+                              ? { ...item, inventoryId: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2.5 text-sm text-cocoa outline-none focus:border-sage"
+                    >
+                      {packagingItems.map((i) => (
+                        <option key={i.inventoryId} value={i.inventoryId}>
+                          {i.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      aria-label="Packaging quantity"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={row.quantity}
+                      onChange={(e) =>
+                        setPackaging((current) =>
+                          current.map((item) =>
+                            item.key === row.key
+                              ? { ...item, quantity: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2 text-sm tabular-nums text-cocoa outline-none focus:border-sage"
+                    />
+                    <IconButton
+                      label="Remove packaging"
+                      className="size-9"
+                      onClick={() =>
+                        setPackaging((current) =>
+                          current.filter((item) => item.key !== row.key),
+                        )
+                      }
+                    >
+                      <Trash2 aria-hidden="true" size={14} />
+                    </IconButton>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <Button
+                    size="compact"
+                    variant="soft"
+                    className="flex-1"
+                    leadingIcon={<Plus aria-hidden="true" size={14} />}
+                    onClick={handleAddPackaging}
+                  >
+                    Add packaging
+                  </Button>
+                  <Button
+                    size="compact"
+                    variant="ghost"
+                    onClick={() => setQuickItemCat("packaging")}
+                  >
+                    + New
+                  </Button>
+                </div>
               </div>
-            </div>
+            </details>
+          ) : (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-cocoa">
+                  Packaging ({compiledPackaging.length})
+                </span>
+                <div className="flex gap-1.5">
+                  <Button
+                    size="compact"
+                    variant="ghost"
+                    onClick={() => setQuickItemCat("packaging")}
+                  >
+                    + New box/board
+                  </Button>
+                  <Button
+                    size="compact"
+                    variant="soft"
+                    leadingIcon={<Plus aria-hidden="true" size={15} />}
+                    onClick={handleAddPackaging}
+                  >
+                    Add row
+                  </Button>
+                </div>
+              </div>
 
-            {packaging.map((row) => (
-              <div
-                key={row.key}
-                className="space-y-2 rounded-control border border-warm-border bg-ivory/60 p-3"
-              >
-                <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-                  <SelectField
-                    label="Packaging item"
-                    value={row.inventoryId}
-                    options={packagingItems.map((i) => ({
-                      value: i.inventoryId,
-                      label: i.name,
-                    }))}
+              {packaging.map((row) => (
+                <div
+                  key={row.key}
+                  className="space-y-2 rounded-control border border-warm-border bg-ivory/60 p-3"
+                >
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                    <SelectField
+                      label="Packaging item"
+                      value={row.inventoryId}
+                      options={packagingItems.map((i) => ({
+                        value: i.inventoryId,
+                        label: i.name,
+                      }))}
+                      onChange={(e) =>
+                        setPackaging((current) =>
+                          current.map((item) =>
+                            item.key === row.key
+                              ? { ...item, inventoryId: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                    <IconButton
+                      label="Remove packaging"
+                      className="size-10"
+                      onClick={() =>
+                        setPackaging((current) =>
+                          current.filter((item) => item.key !== row.key),
+                        )
+                      }
+                    >
+                      <Trash2 aria-hidden="true" size={15} />
+                    </IconButton>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field
+                      label="Qty (unit)"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={row.quantity}
+                      onChange={(e) =>
+                        setPackaging((current) =>
+                          current.map((item) =>
+                            item.key === row.key
+                              ? { ...item, quantity: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                    <Field
+                      label="Rs. / unit"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Price"
+                      value={priceDrafts[row.inventoryId] ?? ""}
+                      onChange={(e) =>
+                        setPriceDrafts((prev) => ({
+                          ...prev,
+                          [row.inventoryId]: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isOrderCustomMode ? (
+            <details
+              open={steps.length === 0}
+              className="rounded-control border border-warm-border bg-white"
+            >
+              <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between px-3.5 text-sm font-semibold text-cocoa">
+                <span>Preparation steps ({steps.filter((s) => s.trim()).length})</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  size={15}
+                  className="text-muted"
+                />
+              </summary>
+              <div className="space-y-2 border-t border-warm-border p-3">
+                {steps.map((step, index) => (
+                  <div key={index} className="flex items-center gap-1.5">
+                    <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-sage-soft text-xs font-bold text-sage-dark">
+                      {index + 1}
+                    </span>
+                    <input
+                      type="text"
+                      aria-label={`Step ${index + 1}`}
+                      value={step}
+                      onChange={(e) =>
+                        setSteps((current) =>
+                          current.map((s, i) =>
+                            i === index ? e.target.value : s,
+                          ),
+                        )
+                      }
+                      className="min-h-touch flex-1 rounded-control border border-warm-border bg-white px-3 text-sm text-cocoa outline-none focus:border-sage"
+                    />
+                    <IconButton
+                      label={`Delete step ${index + 1}`}
+                      className="size-8"
+                      onClick={() =>
+                        setSteps((current) =>
+                          current.filter((_, i) => i !== index),
+                        )
+                      }
+                    >
+                      <Trash2 aria-hidden="true" size={14} />
+                    </IconButton>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Add a step..."
+                    value={newStep}
+                    onChange={(e) => setNewStep(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleAddStep()
+                      }
+                    }}
+                    className="min-h-touch flex-1 rounded-control border border-warm-border bg-white px-3 text-sm text-cocoa outline-none focus:border-sage"
+                  />
+                  <Button size="compact" variant="soft" onClick={handleAddStep}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </details>
+          ) : (
+            <div className="space-y-2.5">
+              <span className="block text-sm font-semibold text-cocoa">
+                Preparation steps
+              </span>
+              {steps.map((step, index) => (
+                <div key={index} className="flex items-center gap-1.5">
+                  <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-sage-soft text-xs font-bold text-sage-dark">
+                    {index + 1}
+                  </span>
+                  <input
+                    type="text"
+                    aria-label={`Step ${index + 1}`}
+                    value={step}
                     onChange={(e) =>
-                      setPackaging((current) =>
-                        current.map((item) =>
-                          item.key === row.key
-                            ? { ...item, inventoryId: e.target.value }
-                            : item,
-                        ),
+                      setSteps((current) =>
+                        current.map((s, i) => (i === index ? e.target.value : s)),
                       )
                     }
+                    className="min-h-touch flex-1 rounded-control border border-warm-border bg-white px-3 text-sm text-cocoa outline-none focus:border-sage"
                   />
                   <IconButton
-                    label="Remove packaging"
-                    className="size-10"
+                    label={`Move step ${index + 1} up`}
+                    className="size-8"
+                    disabled={index === 0}
+                    onClick={() => moveStep(index, -1)}
+                  >
+                    <ArrowUp aria-hidden="true" size={14} />
+                  </IconButton>
+                  <IconButton
+                    label={`Move step ${index + 1} down`}
+                    className="size-8"
+                    disabled={index === steps.length - 1}
+                    onClick={() => moveStep(index, 1)}
+                  >
+                    <ArrowDown aria-hidden="true" size={14} />
+                  </IconButton>
+                  <IconButton
+                    label={`Delete step ${index + 1}`}
+                    className="size-8"
                     onClick={() =>
-                      setPackaging((current) =>
-                        current.filter((item) => item.key !== row.key),
-                      )
+                      setSteps((current) => current.filter((_, i) => i !== index))
                     }
                   >
-                    <Trash2 aria-hidden="true" size={15} />
+                    <Trash2 aria-hidden="true" size={14} />
                   </IconButton>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Field
-                    label="Qty (unit)"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={row.quantity}
-                    onChange={(e) =>
-                      setPackaging((current) =>
-                        current.map((item) =>
-                          item.key === row.key
-                            ? { ...item, quantity: e.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                  <Field
-                    label="Rs. / unit"
-                    type="number"
-                    min="0"
-                    step="any"
-                    placeholder="Price"
-                    value={priceDrafts[row.inventoryId] ?? ""}
-                    onChange={(e) =>
-                      setPriceDrafts((prev) => ({
-                        ...prev,
-                        [row.inventoryId]: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-2.5">
-            <span className="block text-sm font-semibold text-cocoa">
-              Preparation steps
-            </span>
-            {steps.map((step, index) => (
-              <div key={index} className="flex items-center gap-1.5">
-                <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-sage-soft text-xs font-bold text-sage-dark">
-                  {index + 1}
-                </span>
+              ))}
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  aria-label={`Step ${index + 1}`}
-                  value={step}
-                  onChange={(e) =>
-                    setSteps((current) =>
-                      current.map((s, i) => (i === index ? e.target.value : s)),
-                    )
-                  }
+                  placeholder="Add another step..."
+                  value={newStep}
+                  onChange={(e) => setNewStep(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleAddStep()
+                    }
+                  }}
                   className="min-h-touch flex-1 rounded-control border border-warm-border bg-white px-3 text-sm text-cocoa outline-none focus:border-sage"
                 />
-                <IconButton
-                  label={`Move step ${index + 1} up`}
-                  className="size-8"
-                  disabled={index === 0}
-                  onClick={() => moveStep(index, -1)}
-                >
-                  <ArrowUp aria-hidden="true" size={14} />
-                </IconButton>
-                <IconButton
-                  label={`Move step ${index + 1} down`}
-                  className="size-8"
-                  disabled={index === steps.length - 1}
-                  onClick={() => moveStep(index, 1)}
-                >
-                  <ArrowDown aria-hidden="true" size={14} />
-                </IconButton>
-                <IconButton
-                  label={`Delete step ${index + 1}`}
-                  className="size-8"
-                  onClick={() =>
-                    setSteps((current) => current.filter((_, i) => i !== index))
-                  }
-                >
-                  <Trash2 aria-hidden="true" size={14} />
-                </IconButton>
+                <Button size="compact" variant="soft" onClick={handleAddStep}>
+                  Add step
+                </Button>
               </div>
-            ))}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Add another step..."
-                value={newStep}
-                onChange={(e) => setNewStep(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    handleAddStep()
-                  }
-                }}
-                className="min-h-touch flex-1 rounded-control border border-warm-border bg-white px-3 text-sm text-cocoa outline-none focus:border-sage"
-              />
-              <Button size="compact" variant="soft" onClick={handleAddStep}>
-                Add step
-              </Button>
             </div>
-          </div>
+          )}
 
-          <Card tone="sage" className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold text-sage-dark">
-                Live batch cost estimate
+          {!isOrderCustomMode ? (
+            <Card tone="sage" className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-sage-dark">
+                  Live batch cost estimate
+                </div>
+                <div className="mt-0.5 text-base font-bold text-cocoa">
+                  <MoneyText amount={liveCost.totalCost} />
+                </div>
+                <div className="text-[11px] text-muted">
+                  Materials{" "}
+                  <MoneyText
+                    amount={liveCost.ingredientsCost + liveCost.packagingCost}
+                  />{" "}
+                  + Labour <MoneyText amount={liveCost.labourCost} />
+                </div>
               </div>
-              <div className="mt-0.5 text-base font-bold text-cocoa">
-                <MoneyText amount={liveCost.totalCost} />
-              </div>
-              <div className="text-[11px] text-muted">
-                Materials{" "}
-                <MoneyText
-                  amount={liveCost.ingredientsCost + liveCost.packagingCost}
-                />{" "}
-                + Labour <MoneyText amount={liveCost.labourCost} />
-              </div>
-            </div>
-            <Button
-              size="compact"
-              variant="secondary"
-              leadingIcon={<Calculator aria-hidden="true" size={15} />}
-              onClick={() => setPricingOpen(true)}
-            >
-              Price check
-            </Button>
-          </Card>
+              <Button
+                size="compact"
+                variant="secondary"
+                leadingIcon={<Calculator aria-hidden="true" size={15} />}
+                onClick={() => setPricingOpen(true)}
+              >
+                Price check
+              </Button>
+            </Card>
+          ) : null}
 
           {isOrderCustomMode ? (
             <CheckboxField

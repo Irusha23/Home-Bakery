@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 
 import Button from "./ui/Button"
+import Disclosure from "./ui/Disclosure"
 
 import type { AppData } from "../types"
 
@@ -144,11 +145,10 @@ export default function BackupRestorePanel({
   }
 
   return (
-    <details className="rounded-card border border-warm-border bg-white p-4 shadow-subtle">
-      <summary className="cursor-pointer font-semibold text-cocoa focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30">
-        Backup and restore
-      </summary>
-      <div className="mt-4 space-y-4">
+    <Disclosure
+      title="Backup and restore"
+      contentClassName="space-y-4 border-t border-warm-border p-4"
+    >
         {data ? (
           <div>
             <p className="text-sm leading-relaxed text-muted">
@@ -222,7 +222,6 @@ export default function BackupRestorePanel({
             {error}
           </p>
         ) : null}
-      </div>
-    </details>
+    </Disclosure>
   )
 }

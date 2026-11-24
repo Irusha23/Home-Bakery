@@ -632,6 +632,7 @@ export const demoData: AppData = {
   expenseAllocationHistories: [],
   inventoryMovements: [],
   shoppingSelections: {},
+  shoppingTrips: [],
   preparationRecords: [],
   settings: structuredClone(defaultSettings),
   budgetPlan: structuredClone(defaultBudgetPlan),

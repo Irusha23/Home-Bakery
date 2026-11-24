@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
-import {
-  AlertTriangle,
-  ChevronDown,
-  Download,
-  Pencil,
-  SlidersHorizontal,
-  TrendingUp,
-  Wallet,
-} from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, Download } from "lucide-react"
+import ShoppingReceiptSheet from "../components/domain/ShoppingReceiptSheet"
 import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
+import Disclosure from "../components/ui/Disclosure"
 import Field from "../components/ui/Field"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
-import ProgressRing from "../components/ui/ProgressRing"
+import Illustration from "../components/ui/Illustration"
+import { TabView } from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import Sheet from "../components/ui/Sheet"
 import StatusBadge from "../components/ui/StatusBadge"
@@ -22,7 +17,6 @@ import {
   formatMonthHeading,
   getMonthPeriod,
   selectFinishedStockSalesSummary,
-  selectMonthlyBudgetReport,
 } from "../lib/budget"
 import {
   buildExpensesCsv,
@@ -31,26 +25,36 @@ import {
   downloadCsvFile,
 } from "../lib/csv"
 import {
-  selectActualMaterialCostByCompletionDate,
   selectCollectedSales,
   selectCustomerBalances,
   selectCustomerCashMovement,
-  selectEstimatedContribution,
-  selectExpenseBreakdown,
-  selectFinishedStockCosts,
   selectRecordedExpenseValue,
-  selectRecordedPurchaseValue,
   type DatePeriod,
 } from "../lib/financialReports"
-import { outstandingOrderBalance } from "../lib/financials"
-import { formatLkr } from "../lib/format"
+import {
+  outstandingOrderBalance,
+  pendingCancellationRefund,
+} from "../lib/financials"
+import { formatDate, formatLkr } from "../lib/format"
 import { getCurrentWeekPeriod } from "../lib/homeFinancialMetrics"
+import { calculateOrderProfit } from "../lib/orderProfit"
 import { useAppState } from "../state/AppState"
-import type { StarterAction } from "../types"
+import type { ShoppingTripRecord, StarterAction } from "../types"
 import FinancesScreen from "./FinancesScreen"
 
-type MoneySection = "overview" | "budget" | "expenses"
+type MoneySection = "overview" | "orders" | "expenses"
 type PeriodPreset = "week" | "month" | "custom"
+
+type MoneyLogEntry = {
+  id: string
+  date: string
+  kind: "income" | "refund" | "expense"
+  title: string
+  subtitle: string
+  amount: number
+  orderId?: string
+  tripId?: string
+}
 
 type MoneyScreenProps = {
   starterAction?: StarterAction | null
@@ -65,12 +69,16 @@ function formatMoneyOrPlaceholder(value: number | null | undefined): string {
   return formatLkr(value)
 }
 
+function inPeriod(date: string, period: DatePeriod): boolean {
+  return date >= period.startDate && date <= period.endDate
+}
+
 export default function MoneyScreen({
   starterAction,
   onOpenOrder,
   onViewDueOrders,
 }: MoneyScreenProps) {
-  const { state, dispatchIfAccepted } = useAppState()
+  const { state } = useAppState()
   const { showToast } = useToast()
   const [section, setSection] = useState<MoneySection>(
     starterAction === "add-expense" ? "expenses" : "overview",
@@ -80,16 +88,12 @@ export default function MoneyScreen({
     () => getMonthPeriod().startDate,
   )
   const [customEnd, setCustomEnd] = useState(() => getMonthPeriod().endDate)
-  const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
   const [dueSheetOpen, setDueSheetOpen] = useState(false)
-  const [showAllCategories, setShowAllCategories] = useState(false)
-
-  const [salesTargetDraft, setSalesTargetDraft] = useState("")
-  const [profitTargetDraft, setProfitTargetDraft] = useState("")
-  const [ingredientLimitDraft, setIngredientLimitDraft] = useState("")
-  const [categoryLimitDrafts, setCategoryLimitDrafts] =
-    useState<Record<string, string>>({})
-  const [budgetError, setBudgetError] = useState("")
+  const [refundSheetOpen, setRefundSheetOpen] = useState(false)
+  const [selectedTrip, setSelectedTrip] = useState<ShoppingTripRecord | null>(
+    null,
+  )
+  const [showAllLog, setShowAllLog] = useState(false)
 
   useEffect(() => {
     if (starterAction === "add-expense") {
@@ -97,19 +101,17 @@ export default function MoneyScreen({
     }
   }, [starterAction])
 
+  const monthPeriod = useMemo(() => getMonthPeriod(new Date()), [])
+  const monthKey = monthPeriod.startDate.slice(0, 7)
+
   const period: DatePeriod = useMemo(() => {
     if (preset === "week") return getCurrentWeekPeriod(new Date())
-    if (preset === "month") return getMonthPeriod(new Date())
+    if (preset === "month") return monthPeriod
     return {
-      startDate: customStart || getMonthPeriod().startDate,
-      endDate: customEnd || getMonthPeriod().endDate,
+      startDate: customStart || monthPeriod.startDate,
+      endDate: customEnd || monthPeriod.endDate,
     }
-  }, [customEnd, customStart, preset])
-
-  const budgetReport = useMemo(
-    () => selectMonthlyBudgetReport(state, new Date()),
-    [state],
-  )
+  }, [customEnd, customStart, monthPeriod, preset])
 
   const salesReport = useMemo(
     () => selectCollectedSales(state.orders, period),
@@ -123,10 +125,6 @@ export default function MoneyScreen({
     () => selectCustomerCashMovement(state.orders, state.refunds, period),
     [period, state.orders, state.refunds],
   )
-  const contribution = useMemo(
-    () => selectEstimatedContribution(state.orders, period),
-    [period, state.orders],
-  )
   const expenseValue = useMemo(
     () =>
       selectRecordedExpenseValue(
@@ -137,14 +135,11 @@ export default function MoneyScreen({
       ),
     [period, state.expenseCategories, state.expenses, state.orders],
   )
-  const purchaseValue = useMemo(
-    () => selectRecordedPurchaseValue(state.purchases, period),
-    [period, state.purchases],
-  )
   const customerBalances = useMemo(
     () => selectCustomerBalances(state.orders, state.refunds),
     [state.orders, state.refunds],
   )
+
   const dueOrders = useMemo(
     () =>
       state.orders
@@ -167,175 +162,153 @@ export default function MoneyScreen({
         }),
     [state.orders, state.refunds],
   )
-  const expenseBreakdown = useMemo(
+
+  const cancelledHeldOrders = useMemo(
     () =>
-      selectExpenseBreakdown(
-        state.expenses,
-        state.expenseCategories,
-        state.orders,
-        period,
-      ),
-    [period, state.expenseCategories, state.expenses, state.orders],
+      state.orders
+        .filter((order) => order.status === "Cancelled")
+        .map((order) => ({
+          order,
+          retained: pendingCancellationRefund(order, state.refunds),
+        }))
+        .filter((item) => item.retained > 0),
+    [state.orders, state.refunds],
   )
-  const materialByCompletion = useMemo(
-    () =>
-      selectActualMaterialCostByCompletionDate(
-        state.preparationRecords,
-        period,
-      ),
-    [period, state.preparationRecords],
-  )
-  const finishedStockCosts = useMemo(
-    () => selectFinishedStockCosts(state.finishedStockTransactions, period),
-    [period, state.finishedStockTransactions],
+  const totalCancelledHeld = useMemo(
+    () => cancelledHeldOrders.reduce((sum, item) => sum + item.retained, 0),
+    [cancelledHeldOrders],
   )
 
+  const logEntries = useMemo<MoneyLogEntry[]>(() => {
+    const categoryNames = new Map(
+      state.expenseCategories.map((cat) => [cat.id, cat.name]),
+    )
+    const orderById = new Map(state.orders.map((order) => [order.id, order]))
+    const tripByExpenseId = new Map(
+      (state.shoppingTrips ?? [])
+        .filter((trip) => Boolean(trip.expenseId))
+        .map((trip) => [trip.expenseId!, trip]),
+    )
+    const entries: MoneyLogEntry[] = []
+
+    for (const order of state.orders) {
+      for (const payment of order.payments) {
+        if (!inPeriod(payment.date, period)) continue
+        entries.push({
+          id: `pay-${payment.id}`,
+          date: payment.date,
+          kind: "income",
+          title: order.customerName,
+          subtitle: `${formatDate(payment.date)} · ${payment.method} · ${order.reference}`,
+          amount: payment.amount,
+          orderId: order.id,
+        })
+      }
+    }
+
+    for (const refund of state.refunds) {
+      if (!inPeriod(refund.date, period)) continue
+      const order = orderById.get(refund.orderId)
+      entries.push({
+        id: `ref-${refund.id}`,
+        date: refund.date,
+        kind: "refund",
+        title: `Refund · ${order?.customerName ?? "Customer"}`,
+        subtitle: `${formatDate(refund.date)} · ${refund.reason}`,
+        amount: refund.amount,
+        orderId: order?.id,
+      })
+    }
+
+    for (const expense of state.expenses) {
+      if (!inPeriod(expense.paidDate, period)) continue
+      const category = categoryNames.get(expense.categoryId) ?? "Expense"
+      const linkedTrip = tripByExpenseId.get(expense.id)
+      entries.push({
+        id: `exp-${expense.id}`,
+        date: expense.paidDate,
+        kind: "expense",
+        title: expense.description,
+        subtitle: linkedTrip
+          ? `${formatDate(expense.paidDate)} · ${linkedTrip.reference}`
+          : `${formatDate(expense.paidDate)} · ${category}`,
+        amount: expense.amount,
+        tripId: linkedTrip?.id,
+      })
+    }
+
+    return entries.sort((a, b) => b.date.localeCompare(a.date))
+  }, [
+    period,
+    state.expenseCategories,
+    state.expenses,
+    state.orders,
+    state.refunds,
+    state.shoppingTrips,
+  ])
+
+  const visibleLog = showAllLog ? logEntries : logEntries.slice(0, 10)
   const totalCollectedSales =
     (salesReport.recognizedRevenueLkr ?? 0) + finishedSales.revenueLkr
+  const netCash =
+    cashMovement.netCustomerCashMovementLkr !== null &&
+    expenseValue.totalLkr !== null
+      ? cashMovement.netCustomerCashMovementLkr - expenseValue.totalLkr
+      : null
 
-  const openBudgetEditor = () => {
-    setSalesTargetDraft(
-      state.budgetPlan.monthlySalesTarget !== undefined
-        ? String(state.budgetPlan.monthlySalesTarget)
-        : "",
-    )
-    setProfitTargetDraft(
-      state.budgetPlan.monthlyProfitTarget !== undefined
-        ? String(state.budgetPlan.monthlyProfitTarget)
-        : "",
-    )
-    setIngredientLimitDraft(
-      state.budgetPlan.ingredientSpendLimit !== undefined
-        ? String(state.budgetPlan.ingredientSpendLimit)
-        : "",
-    )
-    const drafts: Record<string, string> = {}
-    for (const cat of state.expenseCategories) {
-      const val = state.budgetPlan.categoryLimits[cat.id]
-      drafts[cat.id] = val !== undefined && val > 0 ? String(val) : ""
-    }
-    setCategoryLimitDrafts(drafts)
-    setBudgetError("")
-    setBudgetSheetOpen(true)
-  }
-
-  const saveBudgetPlan = () => {
-    const parseOptionalWholeLkr = (
-      raw: string,
-      label: string,
-    ):
-      | {
-          ok: true
-          value: number | undefined
-        }
-      | { ok: false; error: string } => {
-      const trimmed = raw.trim()
-      if (!trimmed) return { ok: true, value: undefined }
-      if (!/^\d+$/.test(trimmed)) {
-        return { ok: false, error: `${label} must be a whole LKR number.` }
-      }
-      const n = Number(trimmed)
-      if (!Number.isSafeInteger(n) || n < 0) {
-        return { ok: false, error: `${label} must be zero or positive.` }
-      }
-      return { ok: true, value: n === 0 ? undefined : n }
-    }
-
-    const salesParsed = parseOptionalWholeLkr(salesTargetDraft, "Sales target")
-    if (!salesParsed.ok) {
-      setBudgetError(salesParsed.error)
-      return
-    }
-    const profitParsed = parseOptionalWholeLkr(
-      profitTargetDraft,
-      "Profit target",
-    )
-    if (!profitParsed.ok) {
-      setBudgetError(profitParsed.error)
-      return
-    }
-    const ingredientParsed = parseOptionalWholeLkr(
-      ingredientLimitDraft,
-      "Ingredient spend limit",
-    )
-    if (!ingredientParsed.ok) {
-      setBudgetError(ingredientParsed.error)
-      return
-    }
-
-    const categoryLimits: Record<string, number> = {}
-    for (const cat of state.expenseCategories) {
-      const parsed = parseOptionalWholeLkr(
-        categoryLimitDrafts[cat.id] ?? "",
-        `${cat.name} limit`,
-      )
-      if (!parsed.ok) {
-        setBudgetError(parsed.error)
-        return
-      }
-      categoryLimits[cat.id] = parsed.value ?? 0
-    }
-
-    const accepted = dispatchIfAccepted({
-      type: "UPDATE_BUDGET_PLAN",
-      budgetPlan: {
-        monthlySalesTarget: salesParsed.value,
-        monthlyProfitTarget: profitParsed.value,
-        ingredientSpendLimit: ingredientParsed.value,
-        categoryLimits,
-      },
-    })
-    if (!accepted) {
-      setBudgetError("Could not save budget settings. Review the values.")
-      return
-    }
-
-    showToast({ message: "Goals updated", tone: "success" })
-    setBudgetSheetOpen(false)
-  }
+  const orderProfits = useMemo(
+    () =>
+      state.orders
+        .filter(
+          (order) =>
+            order.status !== "Draft" &&
+            order.status !== "Cancelled" &&
+            inPeriod(order.collectionDate, period),
+        )
+        .map((order) => ({
+          order,
+          profit: calculateOrderProfit(order, state),
+        }))
+        .sort((a, b) =>
+          b.order.collectionDate.localeCompare(a.order.collectionDate),
+        ),
+    [period, state],
+  )
+  const totalOrderProfit = useMemo(
+    () => orderProfits.reduce((sum, item) => sum + item.profit.profitLkr, 0),
+    [orderProfits],
+  )
+  const totalOrderIncome = useMemo(
+    () => orderProfits.reduce((sum, item) => sum + item.profit.incomeLkr, 0),
+    [orderProfits],
+  )
+  const totalOrderCost = useMemo(
+    () => orderProfits.reduce((sum, item) => sum + item.profit.totalCostLkr, 0),
+    [orderProfits],
+  )
 
   const handleExportCsv = (kind: "orders" | "purchases" | "expenses") => {
-    const stamp = budgetReport.monthKey
     if (kind === "orders") {
-      downloadCsvFile(`udenis-orders-${stamp}.csv`, buildOrdersCsv(state))
+      downloadCsvFile(`udenis-orders-${monthKey}.csv`, buildOrdersCsv(state))
       showToast({ message: "Orders CSV downloaded", tone: "success" })
     } else if (kind === "purchases") {
-      downloadCsvFile(`udenis-purchases-${stamp}.csv`, buildPurchasesCsv(state))
+      downloadCsvFile(
+        `udenis-purchases-${monthKey}.csv`,
+        buildPurchasesCsv(state),
+      )
       showToast({ message: "Purchases CSV downloaded", tone: "success" })
     } else {
-      downloadCsvFile(`udenis-expenses-${stamp}.csv`, buildExpensesCsv(state))
+      downloadCsvFile(
+        `udenis-expenses-${monthKey}.csv`,
+        buildExpensesCsv(state),
+      )
       showToast({ message: "Expenses CSV downloaded", tone: "success" })
     }
   }
 
-  const activeCategoryLimits = budgetReport.categories.filter(
-    (cat) => (cat.limit && cat.limit > 0) || cat.spent > 0,
-  )
-  const hiddenCategoryLimits = budgetReport.categories.filter(
-    (cat) => (!cat.limit || cat.limit <= 0) && cat.spent === 0,
-  )
-  const visibleCategoryLimits = showAllCategories
-    ? budgetReport.categories
-    : activeCategoryLimits
-
   return (
     <div className="space-y-4 pb-6">
-      <ScreenHeader
-        title="Money"
-        subtitle={formatMonthHeading(budgetReport.monthKey)}
-        action={
-          section === "budget" ? (
-            <Button
-              size="compact"
-              variant="secondary"
-              leadingIcon={<Pencil aria-hidden="true" size={14} />}
-              onClick={openBudgetEditor}
-            >
-              Edit
-            </Button>
-          ) : undefined
-        }
-      />
+      <ScreenHeader title="Money" subtitle={formatMonthHeading(monthKey)} />
 
       <div className="sticky top-0 z-10 -mx-5 border-b border-warm-border/70 bg-ivory/95 px-5 pb-3 pt-1 backdrop-blur-sm">
         <SegmentedControl
@@ -343,20 +316,15 @@ export default function MoneyScreen({
           value={section}
           onChange={(value) => setSection(value as MoneySection)}
           segments={[
-            { value: "overview", label: "Summary" },
-            {
-              value: "budget",
-              label:
-                budgetReport.overLimitAlerts.length > 0
-                  ? `Goals (${budgetReport.overLimitAlerts.length})`
-                  : "Goals",
-            },
+            { value: "overview", label: "Log" },
+            { value: "orders", label: "Orders" },
             { value: "expenses", label: "Expenses" },
           ]}
         />
       </div>
 
-      {section === "overview" ? (
+      <TabView viewKey={section}>
+        {section === "overview" ? (
         <div className="space-y-4">
           <SegmentedControl
             label="Period"
@@ -387,102 +355,63 @@ export default function MoneyScreen({
           ) : null}
 
           <Card className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Sales earned
+                <p className="inline-flex items-center gap-1 text-xs font-medium text-muted">
+                  <ArrowDownLeft
+                    aria-hidden="true"
+                    size={13}
+                    className="text-success"
+                  />
+                  Income
                 </p>
-                <p className="mt-1 text-3xl font-bold tabular-nums text-cocoa">
-                  {formatLkr(totalCollectedSales)}
+                <p className="mt-1 text-xl font-bold tabular-nums text-success">
+                  {formatMoneyOrPlaceholder(
+                    cashMovement.netCustomerCashMovementLkr,
+                  )}
                 </p>
-                <p className="mt-1 text-xs text-muted">
-                  {salesReport.collectedOrderCount} completed{" "}
-                  {salesReport.collectedOrderCount === 1 ? "order" : "orders"}
-                  {contribution.estimatedContributionLkr !== null
-                    ? ` · Profit ${formatLkr(contribution.estimatedContributionLkr)}`
-                    : ""}
+                <p className="mt-0.5 text-xs text-muted">
+                  {cashMovement.paymentCount}{" "}
+                  {cashMovement.paymentCount === 1 ? "payment" : "payments"}
                 </p>
               </div>
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-sage-soft text-cocoa">
-                <TrendingUp aria-hidden="true" size={20} />
-              </span>
+              <div className="border-l border-warm-border pl-3">
+                <p className="inline-flex items-center gap-1 text-xs font-medium text-muted">
+                  <ArrowUpRight
+                    aria-hidden="true"
+                    size={13}
+                    className="text-warning"
+                  />
+                  Expenses
+                </p>
+                <p className="mt-1 text-xl font-bold tabular-nums text-cocoa">
+                  {formatMoneyOrPlaceholder(expenseValue.totalLkr)}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {expenseValue.recordCount}{" "}
+                  {expenseValue.recordCount === 1 ? "entry" : "entries"}
+                </p>
+              </div>
             </div>
 
-            {budgetReport.sales.target ? (
-              <div className="border-t border-warm-border/70 pt-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted">Monthly goal</span>
-                  <span className="font-semibold text-cocoa">
-                    {budgetReport.sales.progressPct}% of{" "}
-                    {formatLkr(budgetReport.sales.target)}
-                  </span>
-                </div>
-                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-sage-soft">
-                  <div
-                    className="h-full rounded-full bg-sage transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, budgetReport.sales.progressPct)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
+            <div className="flex items-center justify-between border-t border-warm-border/75 pt-2.5 text-xs">
+              <span className="text-muted">
+                Net cash ·{" "}
+                <strong
+                  className={`tabular-nums ${
+                    netCash !== null && netCash < 0
+                      ? "text-warning"
+                      : "text-cocoa"
+                  }`}
+                >
+                  {formatMoneyOrPlaceholder(netCash)}
+                </strong>
+              </span>
+              <span className="tabular-nums text-muted">
+                Sales {formatLkr(totalCollectedSales)}
+              </span>
+            </div>
           </Card>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="p-3.5">
-              <p className="text-xs text-muted">Cash received</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-cocoa">
-                {formatMoneyOrPlaceholder(
-                  cashMovement.netCustomerCashMovementLkr,
-                )}
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                {cashMovement.paymentCount}{" "}
-                {cashMovement.paymentCount === 1 ? "payment" : "payments"}
-              </p>
-            </Card>
-            <Card className="p-3.5">
-              <p className="text-xs text-muted">Expenses paid</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-cocoa">
-                {formatMoneyOrPlaceholder(expenseValue.totalLkr)}
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                {expenseValue.recordCount}{" "}
-                {expenseValue.recordCount === 1 ? "entry" : "entries"}
-              </p>
-            </Card>
-          </div>
-
-          {budgetReport.overLimitAlerts.length > 0 ? (
-            <Card
-              tone="warning"
-              className="flex items-center justify-between gap-3"
-            >
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle
-                  aria-hidden="true"
-                  size={18}
-                  className="mt-0.5 shrink-0 text-warning"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-cocoa">
-                    {budgetReport.overLimitAlerts[0].label} over limit
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Over by {formatLkr(budgetReport.overLimitAlerts[0].overBy)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                size="compact"
-                variant="secondary"
-                onClick={() => setSection("budget")}
-              >
-                View
-              </Button>
-            </Card>
-          ) : null}
 
           <GroupedList title="Balances">
             <ListRow
@@ -504,6 +433,21 @@ export default function MoneyScreen({
                 </span>
               }
             />
+            {cancelledHeldOrders.length > 0 ? (
+              <ListRow
+                title="Cancelled cash held"
+                subtitle={`${cancelledHeldOrders.length} ${
+                  cancelledHeldOrders.length === 1 ? "order" : "orders"
+                } · Tap to refund`}
+                showChevron
+                onClick={() => setRefundSheetOpen(true)}
+                trailing={
+                  <span className="font-semibold tabular-nums text-warning">
+                    {formatLkr(totalCancelledHeld)}
+                  </span>
+                }
+              />
+            ) : null}
             {(customerBalances.customerCreditLkr ?? 0) > 0 ? (
               <ListRow
                 title="Customer credits"
@@ -516,298 +460,201 @@ export default function MoneyScreen({
             ) : null}
           </GroupedList>
 
-          <details className="rounded-card border border-warm-border bg-white shadow-subtle">
-            <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-cocoa">
-              Breakdown & exports
-              <ChevronDown aria-hidden="true" size={16} className="text-muted" />
-            </summary>
-            <div className="divide-y divide-warm-border border-t border-warm-border px-4 text-xs">
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-muted">Ingredients used in bakes</span>
-                <span className="font-semibold tabular-nums text-cocoa">
-                  {formatMoneyOrPlaceholder(
-                    materialByCompletion.actualMaterialCost,
-                  )}
-                </span>
-              </div>
-              {(purchaseValue.totalLkr ?? 0) > 0 ? (
-                <div className="flex items-center justify-between py-2.5">
-                  <span className="text-muted">Legacy stock purchases</span>
-                  <span className="font-semibold tabular-nums text-cocoa">
-                    {formatMoneyOrPlaceholder(purchaseValue.totalLkr)}
-                  </span>
-                </div>
-              ) : null}
-              {(finishedStockCosts.costOfStockSold ?? 0) > 0 ? (
-                <div className="flex items-center justify-between py-2.5">
-                  <span className="text-muted">Finished-stock cost</span>
-                  <span className="font-semibold tabular-nums text-cocoa">
-                    {formatMoneyOrPlaceholder(
-                      finishedStockCosts.costOfStockSold,
-                    )}
-                  </span>
-                </div>
-              ) : null}
-              {expenseBreakdown.byCategory.map((row) => (
-                <div
-                  key={row.categoryId}
-                  className="flex items-center justify-between py-2.5"
-                >
-                  <span className="text-muted">{row.categoryName}</span>
-                  <span className="font-semibold tabular-nums text-cocoa">
-                    {formatMoneyOrPlaceholder(row.totalLkr)}
-                  </span>
-                </div>
-              ))}
-              <div className="flex flex-wrap gap-2 py-3">
-                <Button
-                  size="compact"
-                  variant="secondary"
-                  leadingIcon={<Download aria-hidden="true" size={14} />}
-                  onClick={() => handleExportCsv("orders")}
-                >
-                  Orders CSV
-                </Button>
-                <Button
-                  size="compact"
-                  variant="secondary"
-                  leadingIcon={<Download aria-hidden="true" size={14} />}
-                  onClick={() => handleExportCsv("expenses")}
-                >
-                  Expenses CSV
-                </Button>
-                {state.purchases.length > 0 ? (
-                  <Button
-                    size="compact"
-                    variant="secondary"
-                    leadingIcon={<Download aria-hidden="true" size={14} />}
-                    onClick={() => handleExportCsv("purchases")}
+          {logEntries.length > 0 ? (
+            <div className="space-y-2">
+              <GroupedList
+                title={`Activity (${logEntries.length})`}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setSection("expenses")}
+                    className="text-xs font-semibold text-cocoa hover:underline"
                   >
-                    Purchases CSV
-                  </Button>
-                ) : null}
-              </div>
+                    + Add expense
+                  </button>
+                }
+              >
+                {visibleLog.map((entry) => (
+                  <ListRow
+                    key={entry.id}
+                    title={entry.title}
+                    subtitle={entry.subtitle}
+                    showChevron={Boolean(
+                      entry.tripId || (entry.orderId && onOpenOrder),
+                    )}
+                    onClick={
+                      entry.tripId
+                        ? () => {
+                            const trip =
+                              (state.shoppingTrips ?? []).find(
+                                (item) => item.id === entry.tripId,
+                              ) ?? null
+                            setSelectedTrip(trip)
+                          }
+                        : entry.orderId && onOpenOrder
+                          ? () => onOpenOrder(entry.orderId!)
+                          : undefined
+                    }
+                    trailing={
+                      <span
+                        className={`text-sm font-semibold tabular-nums ${
+                          entry.kind === "income"
+                            ? "text-success"
+                            : entry.kind === "refund"
+                              ? "text-warning"
+                              : "text-error"
+                        }`}
+                      >
+                        {entry.kind === "income" ? "+" : "−"}
+                        {formatLkr(entry.amount)}
+                      </span>
+                    }
+                  />
+                ))}
+              </GroupedList>
+              {logEntries.length > 10 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllLog((prev) => !prev)}
+                  className="w-full py-1.5 text-center text-xs font-semibold text-muted hover:text-cocoa"
+                >
+                  {showAllLog
+                    ? "Show less"
+                    : `Show all ${logEntries.length} entries`}
+                </button>
+              ) : null}
             </div>
-          </details>
-        </div>
-      ) : null}
-
-      {section === "budget" ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Card className="flex items-center gap-4">
-              <ProgressRing
-                progress={
-                  budgetReport.sales.target && budgetReport.sales.target > 0
-                    ? budgetReport.sales.actual / budgetReport.sales.target
-                    : 0
-                }
-                tone={budgetReport.sales.reached ? "success" : "sage"}
-                label={
-                  budgetReport.sales.target
-                    ? `${Math.min(999, budgetReport.sales.progressPct)}%`
-                    : "—"
-                }
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Sales goal
-                </p>
-                <p className="mt-1 text-base font-bold tabular-nums text-cocoa">
-                  {formatLkr(budgetReport.sales.actual)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {budgetReport.sales.target
-                    ? `Goal ${formatLkr(budgetReport.sales.target)}`
-                    : "No goal set"}
-                </p>
-              </div>
+          ) : (
+            <Card className="px-5 py-7 text-center">
+              <Illustration name="money-jar" size="sm" />
+              <p className="mt-2 text-xs text-muted">
+                No payments or expenses logged in this period.
+              </p>
             </Card>
+          )}
 
-            <Card className="flex items-center gap-4">
-              <ProgressRing
-                progress={
-                  budgetReport.profit.target && budgetReport.profit.target > 0
-                    ? Math.max(0, budgetReport.profit.actual) /
-                      budgetReport.profit.target
-                    : 0
-                }
-                tone={budgetReport.profit.reached ? "success" : "sage"}
-                label={
-                  budgetReport.profit.target
-                    ? `${Math.min(999, Math.max(0, budgetReport.profit.progressPct))}%`
-                    : "—"
-                }
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Profit goal
-                </p>
-                <p className="mt-1 text-base font-bold tabular-nums text-cocoa">
-                  {formatLkr(budgetReport.profit.actual)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {budgetReport.profit.target
-                    ? `Goal ${formatLkr(budgetReport.profit.target)}`
-                    : "No goal set"}
-                </p>
-              </div>
-            </Card>
-          </div>
-
-          <section className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Spending limits
-              </h2>
+          <Disclosure
+            title="Export CSV"
+            contentClassName="flex flex-wrap gap-2 border-t border-warm-border px-4 py-3"
+          >
+            <Button
+              size="compact"
+              variant="secondary"
+              leadingIcon={<Download aria-hidden="true" size={14} />}
+              onClick={() => handleExportCsv("orders")}
+            >
+              Orders CSV
+            </Button>
+            <Button
+              size="compact"
+              variant="secondary"
+              leadingIcon={<Download aria-hidden="true" size={14} />}
+              onClick={() => handleExportCsv("expenses")}
+            >
+              Expenses CSV
+            </Button>
+            {state.purchases.length > 0 ? (
               <Button
                 size="compact"
                 variant="secondary"
-                leadingIcon={<SlidersHorizontal aria-hidden="true" size={14} />}
-                onClick={openBudgetEditor}
+                leadingIcon={<Download aria-hidden="true" size={14} />}
+                onClick={() => handleExportCsv("purchases")}
               >
-                Limits
+                Purchases CSV
               </Button>
-            </div>
-
-            {(budgetReport.ingredientSpend.limit &&
-              budgetReport.ingredientSpend.limit > 0) ||
-            budgetReport.ingredientSpend.spent > 0 ? (
-              <SpendLimitCard
-                title="Ingredients & packaging"
-                spent={budgetReport.ingredientSpend.spent}
-                limit={budgetReport.ingredientSpend.limit}
-                progressPct={budgetReport.ingredientSpend.progressPct}
-                status={budgetReport.ingredientSpend.status}
-              />
             ) : null}
-
-            {visibleCategoryLimits.length > 0 ? (
-              visibleCategoryLimits.map((cat) => (
-                <SpendLimitCard
-                  key={cat.categoryId}
-                  title={cat.categoryName}
-                  spent={cat.spent}
-                  limit={cat.limit}
-                  progressPct={cat.progressPct}
-                  status={cat.status}
-                />
-              ))
-            ) : (
-              <Card className="py-5 text-center text-xs text-muted">
-                No spending limits set yet. Tap Limits above to add one.
-              </Card>
-            )}
-
-            {hiddenCategoryLimits.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowAllCategories((prev) => !prev)}
-                className="w-full py-1.5 text-center text-xs font-semibold text-muted hover:text-cocoa"
-              >
-                {showAllCategories
-                  ? "Hide uncapped categories"
-                  : `Show ${hiddenCategoryLimits.length} uncapped categories`}
-              </button>
-            ) : null}
-          </section>
+          </Disclosure>
         </div>
-      ) : null}
-
-      {section === "expenses" ? (
-        <FinancesScreen starterAction={starterAction} embedded />
-      ) : null}
-
-      <Sheet
-        open={budgetSheetOpen}
-        onClose={() => setBudgetSheetOpen(false)}
-        title="Monthly goals & limits"
-        subtitle="Leave empty for no cap"
-        footer={
-          <Button
-            fullWidth
-            leadingIcon={<Wallet aria-hidden="true" size={17} />}
-            onClick={saveBudgetPlan}
-          >
-            Save
-          </Button>
-        }
-      >
+      ) : section === "orders" ? (
         <div className="space-y-4">
-          {budgetError ? (
-            <div
-              className="rounded-control border border-error-border bg-error-soft p-3 text-sm text-cocoa"
-              role="alert"
-            >
-              {budgetError}
+          <SegmentedControl
+            label="Period"
+            value={preset}
+            onChange={(value) => setPreset(value as PeriodPreset)}
+            segments={[
+              { value: "week", label: "Week" },
+              { value: "month", label: "Month" },
+              { value: "custom", label: "Custom" },
+            ]}
+          />
+
+          {preset === "custom" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                label="From"
+                type="date"
+                value={customStart}
+                onChange={(event) => setCustomStart(event.target.value)}
+              />
+              <Field
+                label="To"
+                type="date"
+                value={customEnd}
+                onChange={(event) => setCustomEnd(event.target.value)}
+              />
             </div>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Sales goal (LKR)"
-              type="number"
-              min="0"
-              step="100"
-              inputMode="numeric"
-              value={salesTargetDraft}
-              onChange={(event) => {
-                setSalesTargetDraft(event.target.value)
-                setBudgetError("")
-              }}
-            />
-            <Field
-              label="Profit goal (LKR)"
-              type="number"
-              min="0"
-              step="100"
-              inputMode="numeric"
-              value={profitTargetDraft}
-              onChange={(event) => {
-                setProfitTargetDraft(event.target.value)
-                setBudgetError("")
-              }}
-            />
-          </div>
-
-          <Field
-            label="Ingredients & packaging limit (LKR)"
-            type="number"
-            min="0"
-            step="100"
-            inputMode="numeric"
-            placeholder="No limit"
-            value={ingredientLimitDraft}
-            onChange={(event) => {
-              setIngredientLimitDraft(event.target.value)
-              setBudgetError("")
-            }}
-          />
-
-          <div className="space-y-3 border-t border-warm-border pt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Expense limits
+          <Card className="space-y-1.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-xs font-medium text-muted">
+                Order profit ({orderProfits.length})
+              </span>
+              <span
+                className={`text-xl font-bold tabular-nums ${
+                  totalOrderProfit >= 0 ? "text-success" : "text-error"
+                }`}
+              >
+                {totalOrderProfit >= 0 ? "+" : "−"}
+                {formatLkr(Math.abs(totalOrderProfit))}
+              </span>
+            </div>
+            <p className="text-xs tabular-nums text-muted">
+              Income {formatLkr(totalOrderIncome)} · Cost{" "}
+              {formatLkr(totalOrderCost)}
             </p>
-            {state.expenseCategories.map((cat) => (
-              <Field
-                key={cat.id}
-                label={`${cat.name} (LKR)`}
-                type="number"
-                min="0"
-                step="100"
-                inputMode="numeric"
-                placeholder="No limit"
-                value={categoryLimitDrafts[cat.id] ?? ""}
-                onChange={(event) => {
-                  const val = event.target.value
-                  setCategoryLimitDrafts((prev) => ({ ...prev, [cat.id]: val }))
-                  setBudgetError("")
-                }}
-              />
-            ))}
-          </div>
+          </Card>
+
+          {orderProfits.length > 0 ? (
+            <GroupedList>
+              {orderProfits.map(({ order, profit }) => (
+                <ListRow
+                  key={order.id}
+                  title={`${order.customerName} · ${order.reference}`}
+                  subtitle={`Income ${formatLkr(profit.incomeLkr)} · Cost ${formatLkr(profit.totalCostLkr)}${
+                    profit.extraExpensesLkr > 0
+                      ? ` (+${formatLkr(profit.extraExpensesLkr)} extra)`
+                      : ""
+                  }`}
+                  onClick={
+                    onOpenOrder ? () => onOpenOrder(order.id) : undefined
+                  }
+                  trailing={
+                    <span
+                      className={`text-sm font-bold tabular-nums ${
+                        profit.profitLkr >= 0 ? "text-success" : "text-error"
+                      }`}
+                    >
+                      {profit.profitLkr >= 0 ? "+" : "−"}
+                      {formatLkr(Math.abs(profit.profitLkr))}
+                    </span>
+                  }
+                />
+              ))}
+            </GroupedList>
+          ) : (
+            <Card className="px-5 py-7 text-center">
+              <Illustration name="money-jar" size="sm" />
+              <p className="mt-2 text-xs text-muted">
+                No orders in this period.
+              </p>
+            </Card>
+          )}
         </div>
-      </Sheet>
+      ) : (
+        <FinancesScreen starterAction={starterAction} embedded />
+      )}
+      </TabView>
 
       <Sheet
         open={dueSheetOpen}
@@ -841,10 +688,10 @@ export default function MoneyScreen({
               className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-ivory/70"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-cocoa">
+                <p className="line-clamp-2 text-sm font-semibold leading-snug text-cocoa">
                   {order.customerName}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-muted">
+                <p className="mt-0.5 text-xs leading-snug text-muted">
                   {order.reference} ·{" "}
                   {order.status === "Completed" ? "Collected" : order.status}
                 </p>
@@ -865,65 +712,53 @@ export default function MoneyScreen({
           ))}
         </div>
       </Sheet>
-    </div>
-  )
-}
 
-function SpendLimitCard({
-  title,
-  spent,
-  limit,
-  progressPct,
-  status,
-}: {
-  title: string
-  spent: number
-  limit?: number
-  progressPct: number
-  status: "on-track" | "warning" | "over"
-}) {
-  const barWidth =
-    limit && limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : 0
-  return (
-    <Card className="space-y-2.5 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-cocoa">{title}</p>
-          <p className="mt-0.5 text-xs tabular-nums text-muted">
-            {formatLkr(spent)} spent
-            {limit && limit > 0 ? ` of ${formatLkr(limit)}` : ""}
-          </p>
+      <Sheet
+        open={refundSheetOpen}
+        onClose={() => setRefundSheetOpen(false)}
+        title="Cancelled orders with cash held"
+        subtitle={`Total ${formatLkr(totalCancelledHeld)} refundable`}
+      >
+        <div className="divide-y divide-warm-border rounded-card border border-warm-border bg-white">
+          {cancelledHeldOrders.map(({ order, retained }) => (
+            <button
+              key={order.id}
+              type="button"
+              onClick={() => {
+                setRefundSheetOpen(false)
+                onOpenOrder?.(order.id)
+              }}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-ivory/70"
+            >
+              <div className="min-w-0">
+                <p className="line-clamp-2 text-sm font-semibold leading-snug text-cocoa">
+                  {order.customerName}
+                </p>
+                <p className="mt-0.5 text-xs leading-snug text-muted">
+                  {order.reference} · Cancelled
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusBadge
+                  tone={
+                    order.paymentStatus === "Paid" ? "success" : "progress"
+                  }
+                >
+                  {order.paymentStatus}
+                </StatusBadge>
+                <span className="text-sm font-bold tabular-nums text-warning">
+                  {formatLkr(retained)}
+                </span>
+              </div>
+            </button>
+          ))}
         </div>
-        {limit && limit > 0 ? (
-          <StatusBadge
-            tone={
-              status === "over"
-                ? "warning"
-                : status === "warning"
-                  ? "progress"
-                  : "success"
-            }
-          >
-            {status === "over" ? `Over (${progressPct}%)` : `${progressPct}%`}
-          </StatusBadge>
-        ) : (
-          <StatusBadge tone="neutral">No cap</StatusBadge>
-        )}
-      </div>
-      {limit && limit > 0 ? (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-sage-soft">
-          <div
-            className={`h-full rounded-full transition-all duration-300 ${
-              status === "over"
-                ? "bg-error"
-                : status === "warning"
-                  ? "bg-warning"
-                  : "bg-sage"
-            }`}
-            style={{ width: `${barWidth}%` }}
-          />
-        </div>
-      ) : null}
-    </Card>
+      </Sheet>
+
+      <ShoppingReceiptSheet
+        trip={selectedTrip}
+        onClose={() => setSelectedTrip(null)}
+      />
+    </div>
   )
 }

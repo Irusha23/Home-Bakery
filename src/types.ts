@@ -201,6 +201,7 @@ export type Order = {
   updatedAt: string
   confirmedAt: string | null
   collectedAt?: string | null
+  cancellationFee?: number
 }
 
 export type InventoryItem = {
@@ -392,6 +393,33 @@ export type BudgetPlan = {
   updatedAt: string
 }
 
+export type ShoppingTripItemOrder = {
+  orderId: string
+  reference: string
+  customerName: string
+  quantity: number
+}
+
+export type ShoppingTripItem = {
+  inventoryId: string
+  name: string
+  category: Exclude<InventoryCategory, "finished">
+  quantity: number
+  unit: BaseUnit
+  estimatedCost: number | null
+  orders: ShoppingTripItemOrder[]
+}
+
+export type ShoppingTripRecord = {
+  id: string
+  reference: string
+  date: string
+  createdAt: string
+  totalSpent: number | null
+  expenseId?: string
+  items: ShoppingTripItem[]
+}
+
 export type AppData = {
   customers: Customer[]
   products: Product[]
@@ -409,6 +437,7 @@ export type AppData = {
   expenseAllocationHistories: ExpenseAllocationHistory[]
   inventoryMovements: InventoryMovement[]
   shoppingSelections: Record<string, number>
+  shoppingTrips?: ShoppingTripRecord[]
   preparationRecords: PreparationRecord[]
   settings: AppSettings
   budgetPlan: BudgetPlan

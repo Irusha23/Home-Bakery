@@ -1,8 +1,10 @@
 import type { ReactNode } from "react"
 import Button from "./Button"
+import Illustration, { type IllustrationName } from "./Illustration"
 
 type EmptyStateProps = {
-  icon: ReactNode
+  icon?: ReactNode
+  illustration?: IllustrationName
   title: string
   description: string
   actionLabel?: string
@@ -11,6 +13,7 @@ type EmptyStateProps = {
 
 export default function EmptyState({
   icon,
+  illustration,
   title,
   description,
   actionLabel,
@@ -18,9 +21,13 @@ export default function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className="rounded-card border border-dashed border-warm-border bg-white/80 px-5 py-8 text-center">
-      <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-sage-soft text-sage-dark">
-        {icon}
-      </div>
+      {illustration ? (
+        <Illustration name={illustration} size="md" />
+      ) : icon ? (
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-sage-soft text-sage-dark">
+          {icon}
+        </div>
+      ) : null}
       <h3 className="mt-3 text-base font-semibold text-cocoa">{title}</h3>
       <p className="mx-auto mt-1 max-w-xs text-sm leading-relaxed text-muted">
         {description}

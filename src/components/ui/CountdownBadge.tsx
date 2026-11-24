@@ -42,7 +42,7 @@ export default function CountdownBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tabular-nums ${toneClass} ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold tabular-nums ${toneClass} ${className}`}
     >
       <Timer aria-hidden="true" size={12} className="shrink-0" />
       <span>

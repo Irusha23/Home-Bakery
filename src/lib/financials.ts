@@ -1,3 +1,4 @@
+import { createId } from "./id"
 import type { Order, Payment, PaymentStatus, Refund } from "../types"
 
 export const PAYMENT_METHOD_OPTIONS = [
@@ -251,6 +252,21 @@ export function netRetainedPayments(order: Order, refunds: Refund[]): number {
   return totalValidPayments(order) - totalRefundsForOrder(order, refunds)
 }
 
+export function pendingCancellationRefund(
+  order: Order,
+  refunds: Refund[],
+): number {
+  if (order.status !== "Cancelled") return 0
+  const retained = netRetainedPayments(order, refunds)
+  const fee =
+    typeof order.cancellationFee === "number" &&
+    Number.isSafeInteger(order.cancellationFee) &&
+    order.cancellationFee >= 0
+      ? order.cancellationFee
+      : 0
+  return Math.max(0, retained - fee)
+}
+
 export function outstandingOrderBalance(
   order: Order,
 
@@ -277,4 +293,38 @@ export function derivePaymentStatus(
   if (retained > 0) return "Part paid"
 
   return "Unpaid"
+}
+
+export function allocateOrderRefunds(
+  order: Order,
+  existingRefunds: Refund[],
+  totalAmount: number,
+  date: string,
+  reason: string,
+): Refund[] | null {
+  if (!isValidMoneyAmount(totalAmount) || !isValidFinancialDate(date) || !reason.trim()) {
+    return null
+  }
+  let remainingToAllocate = totalAmount
+  const planned: Refund[] = []
+  for (const payment of order.payments) {
+    if (remainingToAllocate <= 0) break
+    const refundable = remainingRefundableAmount(
+      order,
+      existingRefunds,
+      payment.id,
+    )
+    if (!Number.isSafeInteger(refundable) || refundable <= 0) continue
+    const slice = Math.min(refundable, remainingToAllocate)
+    planned.push({
+      id: createId("refund"),
+      orderId: order.id,
+      paymentId: payment.id,
+      date,
+      amount: slice,
+      reason: reason.trim(),
+    })
+    remainingToAllocate -= slice
+  }
+  return remainingToAllocate === 0 ? planned : null
 }

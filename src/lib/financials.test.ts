@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  allocateOrderRefunds,
   derivePaymentStatus,
   financialActionFeedback,
   isValidMoneyAmount,
   netRetainedPayments,
   outstandingOrderBalance,
+  pendingCancellationRefund,
   remainingRefundableAmount,
   submitFinancialAction,
   totalRefundsForOrder,
@@ -277,5 +279,60 @@ describe("order financial calculations", () => {
     expect(totalRefundsForOrder(invalidPaymentOrder, invalidRefunds)).toBe(
       2000,
     )
+  })
+
+  it("allocates order-level refunds across multiple payments up to retained balance", () => {
+    const multiOrder = createTestOrder(
+      "multi-pay-order",
+      [createTestOrderLine("line-1")],
+      {
+        status: "Cancelled",
+        agreedPrice: 12000,
+        payments: [
+          { id: "p-1", date: "2026-10-01", amount: 3000, method: "Cash" },
+          { id: "p-2", date: "2026-10-05", amount: 5000, method: "Online transaction" },
+        ],
+      },
+    )
+
+    const partial = allocateOrderRefunds(
+      multiOrder,
+      [],
+      4500,
+      "2026-10-10",
+      "Customer collected partial refund",
+    )
+    expect(partial).toHaveLength(2)
+    expect(partial?.[0]).toMatchObject({ paymentId: "p-1", amount: 3000 })
+    expect(partial?.[1]).toMatchObject({ paymentId: "p-2", amount: 1500 })
+
+    expect(
+      allocateOrderRefunds(multiOrder, [], 9000, "2026-10-10", "Too much"),
+    ).toBeNull()
+  })
+
+  it("computes pending cancellation refund after deducting cancellation fee", () => {
+    const cancelledOrder = createTestOrder(
+      "cancel-fee-order",
+      [createTestOrderLine("line-1")],
+      {
+        status: "Cancelled",
+        agreedPrice: 7500,
+        payments: [{ id: "p-1", date: "2026-10-01", amount: 7500, method: "Cash" }],
+        cancellationFee: 1000,
+      },
+    )
+    const partialRefund: Refund[] = [
+      {
+        id: "ref-1",
+        orderId: "cancel-fee-order",
+        paymentId: "p-1",
+        date: "2026-10-03",
+        amount: 6500,
+        reason: "Customer refund",
+      },
+    ]
+    expect(pendingCancellationRefund(cancelledOrder, [])).toBe(6500)
+    expect(pendingCancellationRefund(cancelledOrder, partialRefund)).toBe(0)
   })
 })

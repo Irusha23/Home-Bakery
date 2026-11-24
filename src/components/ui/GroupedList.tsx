@@ -69,11 +69,13 @@ export function ListRow({
     <>
       {leading ? <div className="shrink-0">{leading}</div> : null}
       <div className="min-w-0 flex-1 text-left">
-        <div className={`truncate text-sm font-semibold ${titleToneClass}`}>
+        <div className={`line-clamp-2 text-sm font-semibold leading-snug ${titleToneClass}`}>
           {title}
         </div>
         {subtitle ? (
-          <div className="mt-0.5 truncate text-xs text-muted">{subtitle}</div>
+          <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
+            {subtitle}
+          </div>
         ) : null}
       </div>
       {value !== undefined && value !== null ? (
@@ -97,7 +99,7 @@ export function ListRow({
       <button
         type="button"
         onClick={onClick}
-        className={`flex min-h-touch w-full items-center gap-3 px-4 py-3 transition duration-ui hover:bg-ivory/70 active:bg-sage-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/35 ${className}`}
+        className={`flex min-h-touch w-full items-center gap-3 px-4 py-3 transition duration-ui ease-out hover:bg-ivory/70 active:scale-[0.99] active:bg-sage-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/35 ${className}`}
       >
         {content}
       </button>

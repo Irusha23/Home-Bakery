@@ -5,11 +5,13 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
 import { defaultBudgetPlan, defaultSettings, demoData } from "../data/demoData"
 import PersistenceRecoveryScreen from "../components/PersistenceRecoveryScreen"
+import { createId } from "../lib/id"
 import {
   getUsageToBuyQuantity,
   hasUnpurchasedShoppingItems,
@@ -24,6 +26,7 @@ import { canCancelOrder, canCollectOrder } from "../lib/orderLifecycle"
 import {
   derivePaymentStatus,
   isValidMoneyAmount,
+  netRetainedPayments,
   outstandingOrderBalance,
   remainingRefundableAmount,
 } from "../lib/financials"
@@ -65,6 +68,7 @@ import type {
   Refund,
   Recipe,
   RecipeSnapshot,
+  ShoppingTripRecord,
 } from "../types"
 import {
   errorMessage,
@@ -91,6 +95,7 @@ type AppAction =
       payment: Order["payments"][number]
     }
   | { type: "RECORD_REFUND"; refund: Refund }
+  | { type: "SET_CANCELLATION_FEE"; orderId: string; fee: number }
   | { type: "RECORD_EXPENSE"; expense: Expense }
   | { type: "ADD_EXPENSE_CATEGORY"; category: ExpenseCategory }
   | {
@@ -224,6 +229,10 @@ type AppAction =
   | {
       type: "COMPLETE_SHOPPING_CHECKLIST"
       extraInventoryIds?: string[]
+    }
+  | {
+      type: "ADD_SHOPPING_TRIP"
+      trip: ShoppingTripRecord
     }
   | {
       type: "REMOVE_MANUAL_SHOPPING_ITEM"
@@ -579,7 +588,7 @@ export function migrateState(source: AppData): AppData {
   }
 }
 
-function makeReference(orders: Order[]) {
+export function makeReference(orders: Order[]) {
   const highest = orders.reduce((max, order) => {
     const number = Number(order.reference.replace(/\D/g, ""))
     return Number.isFinite(number) ? Math.max(max, number) : max
@@ -587,10 +596,18 @@ function makeReference(orders: Order[]) {
   return `US-${highest + 1}`
 }
 
+export function makeShoppingReference(trips: ShoppingTripRecord[]) {
+  const highest = trips.reduce((max, trip) => {
+    const number = Number(trip.reference.replace(/\D/g, ""))
+    return Number.isFinite(number) ? Math.max(max, number) : max
+  }, 1000)
+  return `SHP-${highest + 1}`
+}
+
 function makeUniqueId(prefix: string, existingIds: Set<string>) {
   let id: string
   do {
-    id = `${prefix}-${crypto.randomUUID()}`
+    id = createId(prefix)
   } while (existingIds.has(id))
   existingIds.add(id)
   return id
@@ -838,7 +855,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
       const order: Order = {
         ...action.payload,
-        id: existing?.id ?? action.payload.id ?? `order-${crypto.randomUUID()}`,
+        id: existing?.id ?? action.payload.id ?? createId("order"),
         reference: existing?.reference ?? makeReference(state.orders),
         status: "Draft",
         preparationStatus: "Not started",
@@ -1125,6 +1142,35 @@ export function reducer(state: AppData, action: AppAction): AppData {
             ? {
                 ...item,
                 paymentStatus: derivePaymentStatus(item, refunds),
+                updatedAt: new Date().toISOString(),
+              }
+            : item,
+        ),
+      }
+    }
+
+    case "SET_CANCELLATION_FEE": {
+      const order = state.orders.find((item) => item.id === action.orderId)
+      const retained = order
+        ? netRetainedPayments(order, state.refunds)
+        : Number.NaN
+      if (
+        !order ||
+        order.status !== "Cancelled" ||
+        !Number.isSafeInteger(action.fee) ||
+        action.fee < 0 ||
+        !Number.isSafeInteger(retained) ||
+        action.fee > retained
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        orders: state.orders.map((item) =>
+          item.id === order.id
+            ? {
+                ...item,
+                cancellationFee: action.fee,
                 updatedAt: new Date().toISOString(),
               }
             : item,
@@ -2681,6 +2727,28 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
     }
 
+    case "ADD_SHOPPING_TRIP": {
+      const trip = action.trip
+      const existing = state.shoppingTrips ?? []
+      if (
+        !trip ||
+        typeof trip.id !== "string" ||
+        !trip.id.trim() ||
+        typeof trip.reference !== "string" ||
+        !trip.reference.trim() ||
+        !isValidDate(trip.date) ||
+        !Array.isArray(trip.items) ||
+        trip.items.length === 0 ||
+        existing.some((item) => item.id === trip.id)
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        shoppingTrips: [structuredClone(trip), ...existing],
+      }
+    }
+
     case "REMOVE_MANUAL_SHOPPING_ITEM": {
       const nextSelections = { ...state.shoppingSelections }
       if (!(action.inventoryId in nextSelections)) return state
@@ -2773,10 +2841,7 @@ export default function AppStateProvider({
           )
         }
         onStartFresh={() => {
-          const recoveryId =
-            typeof crypto !== "undefined" && "randomUUID" in crypto
-              ? crypto.randomUUID()
-              : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+          const recoveryId = createId()
           setBootstrap(
             startFreshPreservingRaw(
               bootstrap,
@@ -2818,6 +2883,8 @@ function ReadyAppStateProvider({
   children: ReactNode
 }) {
   const [state, dispatch] = useReducer(reducer, bootstrap.data)
+  const latestStateRef = useRef(state)
+  latestStateRef.current = state
   const [persistenceError, setPersistenceError] = useState(
     bootstrap.persistenceError ?? null,
   )
@@ -2854,18 +2921,23 @@ function ReadyAppStateProvider({
     return result
   }, [])
 
-  const dispatchIfAccepted = useCallback(
-    (action: AppAction) => {
-      if (reducer(state, action) === state) return false
-      dispatch(action)
-      return true
-    },
-    [state],
-  )
+  const trackedDispatch = useCallback((action: AppAction) => {
+    latestStateRef.current = reducer(latestStateRef.current, action)
+    dispatch(action)
+  }, [])
+
+  const dispatchIfAccepted = useCallback((action: AppAction) => {
+    const next = reducer(latestStateRef.current, action)
+    if (next === latestStateRef.current) return false
+    latestStateRef.current = next
+    dispatch(action)
+    return true
+  }, [])
+
   const value = useMemo(
     () => ({
       state,
-      dispatch,
+      dispatch: trackedDispatch,
       dispatchIfAccepted,
       restoreBackupFromRaw: handleRestore,
       persistenceError,
@@ -2873,6 +2945,7 @@ function ReadyAppStateProvider({
     }),
     [
       state,
+      trackedDispatch,
       dispatchIfAccepted,
       handleRestore,
       persistenceError,

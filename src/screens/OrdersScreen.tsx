@@ -5,10 +5,20 @@ import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
 import Field from "../components/ui/Field"
+import Illustration from "../components/ui/Illustration"
+import {
+  AnimatedItem,
+  AnimatedList,
+  PushView,
+} from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import { useToast } from "../components/ui/Toast"
-import { outstandingOrderBalance } from "../lib/financials"
+import {
+  outstandingOrderBalance,
+  pendingCancellationRefund,
+} from "../lib/financials"
 import { canCollectOrder } from "../lib/orderLifecycle"
+import { calculateOrderProfit } from "../lib/orderProfit"
 import { orderHasUnpurchasedItems } from "../lib/inventory"
 import { useAppState } from "../state/AppState"
 import type { Order, StarterAction } from "../types"
@@ -53,6 +63,7 @@ type OrdersScreenProps = {
   starterAction: StarterAction | null
   initialOrderId?: string
   onConsumeOrderIntent?: () => void
+  onReturnFromIntent?: () => void
   onConsumeStarterAction: () => void
   onFocusedChange: (focused: boolean) => void
   onOpenShopping: () => void
@@ -62,6 +73,7 @@ export default function OrdersScreen({
   starterAction,
   initialOrderId,
   onConsumeOrderIntent,
+  onReturnFromIntent,
   onConsumeStarterAction,
   onFocusedChange,
   onOpenShopping,
@@ -82,6 +94,7 @@ export default function OrdersScreen({
   const [filter, setFilter] = useState<Filter>("Active")
   const [repeatNotice, setRepeatNotice] = useState<string | null>(null)
   const [openPaymentOnDetail, setOpenPaymentOnDetail] = useState(false)
+  const [openRefundOnDetail, setOpenRefundOnDetail] = useState(false)
   const consumedAction = useRef<StarterAction | null>(null)
 
   useEffect(() => {
@@ -92,7 +105,11 @@ export default function OrdersScreen({
   }, [initialOrderId, onConsumeOrderIntent])
 
   useEffect(() => {
-    if (!starterAction || consumedAction.current === starterAction) return
+    if (!starterAction) {
+      consumedAction.current = null
+      return
+    }
+    if (consumedAction.current === starterAction) return
     consumedAction.current = starterAction
     if (starterAction === "create-order") {
       setEditingOrderId(null)
@@ -197,10 +214,9 @@ export default function OrdersScreen({
           })
           if (ok) {
             showToast({ message: `${order.reference} confirmed`, tone: "success" })
-          } else {
-            setSelectedOrderId(order.id)
-            setView("detail")
           }
+          setSelectedOrderId(order.id)
+          setView("detail")
         },
       }
     }
@@ -256,6 +272,22 @@ export default function OrdersScreen({
     }
 
     if (
+      order.status === "Cancelled" &&
+      pendingCancellationRefund(order, state.refunds) > 0
+    ) {
+      return {
+        label: "Record refund",
+        run: () => {
+          setRepeatNotice(null)
+          setOpenPaymentOnDetail(false)
+          setOpenRefundOnDetail(true)
+          setSelectedOrderId(order.id)
+          setView("detail")
+        },
+      }
+    }
+
+    if (
       order.status !== "Cancelled" &&
       outstandingOrderBalance(order, state.refunds) > 0 &&
       (order.status === "Completed" || order.paymentStatus === "Part paid")
@@ -264,6 +296,7 @@ export default function OrdersScreen({
         label: "Add payment",
         run: () => {
           setRepeatNotice(null)
+          setOpenRefundOnDetail(false)
           setOpenPaymentOnDetail(true)
           setSelectedOrderId(order.id)
           setView("detail")
@@ -274,176 +307,219 @@ export default function OrdersScreen({
     return null
   }
 
-  if (view === "create") {
-    return (
-      <CreateOrderFlow
-        key={editingOrder?.id ?? preselectedCustomerId ?? "new-order"}
-        order={editingOrder}
-        initialCustomerId={preselectedCustomerId}
-        onCancel={() => {
-          setView("list")
-          setEditingOrderId(null)
-          setPreselectedCustomerId(undefined)
-        }}
-        onComplete={(orderId) => {
-          setSelectedOrderId(orderId)
-          setEditingOrderId(null)
-          setPreselectedCustomerId(undefined)
-          setView("detail")
-        }}
-      />
-    )
-  }
+  const pushDepth =
+    view === "preparation-product" && Boolean(selectedPreparationId)
+      ? 2
+      : view === "create"
+        ? editingOrderId
+          ? 2
+          : 1
+        : (view === "detail" && Boolean(selectedOrder)) || view === "customers"
+          ? 1
+          : 0
 
-  if (view === "detail" && selectedOrder) {
+  const pushKey =
+    view === "detail" && selectedOrder
+      ? `detail-${selectedOrder.id}`
+      : view === "preparation-product" && selectedPreparationId
+        ? `prep-${selectedPreparationId}`
+        : view
+
+  const renderContent = () => {
+    if (view === "create") {
+      return (
+        <CreateOrderFlow
+          key={editingOrder?.id ?? preselectedCustomerId ?? "new-order"}
+          order={editingOrder}
+          initialCustomerId={preselectedCustomerId}
+          onCancel={() => {
+            setView("list")
+            setEditingOrderId(null)
+            setPreselectedCustomerId(undefined)
+          }}
+          onComplete={(orderId) => {
+            setSelectedOrderId(orderId)
+            setEditingOrderId(null)
+            setPreselectedCustomerId(undefined)
+            setView("detail")
+          }}
+        />
+      )
+    }
+
+    if (view === "detail" && selectedOrder) {
+      return (
+        <OrderDetailScreen
+          order={selectedOrder}
+          repeatNotice={repeatNotice}
+          openPaymentOnMount={openPaymentOnDetail}
+          onPaymentOpenedOnMount={() => setOpenPaymentOnDetail(false)}
+          openRefundOnMount={openRefundOnDetail}
+          onRefundOpenedOnMount={() => setOpenRefundOnDetail(false)}
+          onBack={() => {
+            setSelectedOrderId(null)
+            setRepeatNotice(null)
+            setOpenPaymentOnDetail(false)
+            setOpenRefundOnDetail(false)
+            if (onReturnFromIntent) {
+              onReturnFromIntent()
+              return
+            }
+            setView("list")
+          }}
+          onEditDraft={() => {
+            setEditingOrderId(selectedOrder.id)
+            setView("create")
+          }}
+          onOpenShopping={onOpenShopping}
+          onOpenPreparation={(lineId) => {
+            const record = state.preparationRecords.find(
+              (item) =>
+                item.orderId === selectedOrder.id && item.orderLineId === lineId,
+            )
+            if (record) {
+              setSelectedPreparationId(record.id)
+              setView("preparation-product")
+            }
+          }}
+          onRepeatCreated={(newOrderId) => {
+            setFilter("Active")
+            setSearch("")
+            setSelectedOrderId(newOrderId)
+            setRepeatNotice(
+              `A new draft was created from ${selectedOrder.reference}.`,
+            )
+          }}
+        />
+      )
+    }
+
+    if (view === "preparation-product" && selectedPreparationId) {
+      return (
+        <PreparationProductScreen
+          preparationId={selectedPreparationId}
+          onOpenShopping={onOpenShopping}
+          onBack={() => {
+            setSelectedPreparationId(null)
+            setView(selectedOrderId ? "detail" : "list")
+          }}
+        />
+      )
+    }
+
+    if (view === "customers") {
+      return (
+        <CustomersScreen
+          onBack={() => setView("list")}
+          onOpenOrder={(orderId) => {
+            setSelectedOrderId(orderId)
+            setView("detail")
+          }}
+          onCreateOrderForCustomer={(customerId) => {
+            setEditingOrderId(null)
+            setPreselectedCustomerId(customerId)
+            setView("create")
+          }}
+        />
+      )
+    }
+
     return (
-      <OrderDetailScreen
-        order={selectedOrder}
-        repeatNotice={repeatNotice}
-        openPaymentOnMount={openPaymentOnDetail}
-        onPaymentOpenedOnMount={() => setOpenPaymentOnDetail(false)}
-        onBack={() => {
-          setSelectedOrderId(null)
-          setRepeatNotice(null)
-          setOpenPaymentOnDetail(false)
-          setView("list")
-        }}
-        onEditDraft={() => {
-          setEditingOrderId(selectedOrder.id)
-          setView("create")
-        }}
-        onOpenShopping={onOpenShopping}
-        onOpenPreparation={(lineId) => {
-          const record = state.preparationRecords.find(
-            (item) =>
-              item.orderId === selectedOrder.id && item.orderLineId === lineId,
-          )
-          if (record) {
-            setSelectedPreparationId(record.id)
-            setView("preparation-product")
+      <div className="space-y-4 pb-6">
+        <ScreenHeader
+          title="Orders"
+          action={
+            <div className="flex items-center gap-2">
+              <Button
+                size="compact"
+                variant="secondary"
+                leadingIcon={<UsersRound aria-hidden="true" size={15} />}
+                onClick={() => setView("customers")}
+              >
+                Customers
+              </Button>
+              <Button
+                size="compact"
+                leadingIcon={<Plus aria-hidden="true" size={16} />}
+                onClick={() => {
+                  setEditingOrderId(null)
+                  setPreselectedCustomerId(undefined)
+                  setView("create")
+                }}
+              >
+                New
+              </Button>
+            </div>
           }
-        }}
-        onRepeatCreated={(newOrderId) => {
-          setFilter("Active")
-          setSearch("")
-          setSelectedOrderId(newOrderId)
-          setRepeatNotice(
-            `A new draft was created from ${selectedOrder.reference}.`,
-          )
-        }}
-      />
-    )
-  }
+        />
 
-  if (view === "preparation-product" && selectedPreparationId) {
-    return (
-      <PreparationProductScreen
-        preparationId={selectedPreparationId}
-        onOpenShopping={onOpenShopping}
-        onBack={() => {
-          setSelectedPreparationId(null)
-          setView(selectedOrderId ? "detail" : "list")
-        }}
-      />
-    )
-  }
+        <Field
+          label="Search orders"
+          hideLabel
+          isSearch
+          placeholder="Search customer or cake..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
 
-  if (view === "customers") {
-    return (
-      <CustomersScreen
-        onBack={() => setView("list")}
-        onOpenOrder={(orderId) => {
-          setSelectedOrderId(orderId)
-          setView("detail")
-        }}
-        onCreateOrderForCustomer={(customerId) => {
-          setEditingOrderId(null)
-          setPreselectedCustomerId(customerId)
-          setView("create")
-        }}
-      />
+        <SegmentedControl
+          label="Filter orders by stage"
+          value={filter}
+          segments={filters}
+          onChange={setFilter}
+        />
+
+        {filteredOrders.length ? (
+          <AnimatedList className="space-y-3 pt-1">
+            {filteredOrders.map((order) => {
+              const quickAction = getQuickAction(order)
+              return (
+                <AnimatedItem key={order.id}>
+                  <OrderCard
+                    order={order}
+                    balanceDue={outstandingOrderBalance(order, state.refunds)}
+                    retainedAmount={
+                      order.status === "Cancelled"
+                        ? pendingCancellationRefund(order, state.refunds)
+                        : undefined
+                    }
+                    profitLkr={
+                      order.status === "Completed"
+                        ? calculateOrderProfit(order, state).profitLkr
+                        : undefined
+                    }
+                    quickActionLabel={quickAction?.label}
+                    onQuickAction={quickAction?.run}
+                    onClick={() => {
+                      setRepeatNotice(null)
+                      setOpenPaymentOnDetail(false)
+                      setOpenRefundOnDetail(false)
+                      setSelectedOrderId(order.id)
+                      setView("detail")
+                    }}
+                  />
+                </AnimatedItem>
+              )
+            })}
+          </AnimatedList>
+        ) : (
+          <Card className="px-5 py-8 text-center">
+            <Illustration name="cake-box" size="md" />
+            <div className="mt-2 text-base font-semibold text-cocoa">
+              No {filter === "All" ? "" : `${filter.toLowerCase()} `}orders
+            </div>
+            <p className="mx-auto mt-1 max-w-empty text-xs leading-relaxed text-muted">
+              Tap New above whenever a customer requests a bake.
+            </p>
+          </Card>
+        )}
+      </div>
     )
   }
 
   return (
-    <div className="space-y-4 pb-6">
-      <ScreenHeader
-        title="Orders"
-        action={
-          <div className="flex items-center gap-2">
-            <Button
-              size="compact"
-              variant="secondary"
-              leadingIcon={<UsersRound aria-hidden="true" size={15} />}
-              onClick={() => setView("customers")}
-            >
-              Customers
-            </Button>
-            <Button
-              size="compact"
-              leadingIcon={<Plus aria-hidden="true" size={16} />}
-              onClick={() => {
-                setEditingOrderId(null)
-                setPreselectedCustomerId(undefined)
-                setView("create")
-              }}
-            >
-              New
-            </Button>
-          </div>
-        }
-      />
-
-      <Field
-        label="Search orders"
-        hideLabel
-        isSearch
-        placeholder="Search customer or cake..."
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
-
-      <SegmentedControl
-        label="Filter orders by stage"
-        value={filter}
-        segments={filters}
-        onChange={setFilter}
-      />
-
-      {filteredOrders.length ? (
-        <div className="space-y-3 pt-1">
-          {filteredOrders.map((order) => {
-            const quickAction = getQuickAction(order)
-            return (
-              <OrderCard
-                key={order.id}
-                order={order}
-                balanceDue={outstandingOrderBalance(order, state.refunds)}
-                quickActionLabel={quickAction?.label}
-                onQuickAction={quickAction?.run}
-                onClick={() => {
-                  setRepeatNotice(null)
-                  setOpenPaymentOnDetail(false)
-                  setSelectedOrderId(order.id)
-                  setView("detail")
-                }}
-              />
-            )
-          })}
-        </div>
-      ) : (
-        <Card className="px-5 py-10 text-center">
-          <span className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-sage-soft text-cocoa">
-            <ClipboardList aria-hidden="true" size={22} />
-          </span>
-          <div className="mt-3 text-base font-semibold text-cocoa">
-            No {filter === "All" ? "" : `${filter.toLowerCase()} `}orders
-          </div>
-          <p className="mx-auto mt-1 max-w-empty text-xs leading-relaxed text-muted">
-            Tap New above whenever a customer requests a bake.
-          </p>
-        </Card>
-      )}
-    </div>
+    <PushView viewKey={pushKey} depth={pushDepth}>
+      {renderContent()}
+    </PushView>
   )
 }

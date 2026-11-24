@@ -9,6 +9,7 @@ import EmptyState from "../components/ui/EmptyState"
 import Field from "../components/ui/Field"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
 import MoneyText from "../components/ui/MoneyText"
+import { PushView } from "../components/ui/MotionPrimitives"
 import StatusBadge from "../components/ui/StatusBadge"
 import { useToast } from "../components/ui/Toast"
 import { outstandingOrderBalance, netRetainedPayments } from "../lib/financials"
@@ -67,11 +68,11 @@ export default function CustomersScreen({
     (s) => s.customer.id === selectedId,
   )
 
-  if (selectedSummary) {
+  const renderCustomerDetail = () => {
+    if (!selectedSummary) return null
     const { customer, orders, totalNetPaid, totalOutstanding } = selectedSummary
     return (
-      <>
-        <div className="space-y-4 pb-8">
+      <div className="space-y-4 pb-8">
           <ScreenHeader
             title={customer.name}
             subtitle={customer.phone || "No phone number"}
@@ -151,7 +152,7 @@ export default function CustomersScreen({
                 </div>
               ) : (
                 <EmptyState
-                  icon={<UsersRound aria-hidden="true" size={20} />}
+                  illustration="customers-wave"
                   title="No orders yet"
                   description="Orders placed for this customer will appear here."
                 />
@@ -159,20 +160,11 @@ export default function CustomersScreen({
             </div>
           </div>
         </div>
-
-        <CustomerEditorSheet
-          open={editorTarget !== null}
-          customer={editorTarget === "new" ? null : editorTarget}
-          onClose={() => setEditorTarget(null)}
-          onSaved={(saved) => showToast(`Updated ${saved.name}`)}
-        />
-      </>
     )
   }
 
-  return (
-    <>
-      <div className="space-y-4 pb-8">
+  const renderCustomerList = () => (
+    <div className="space-y-4 pb-8">
         <ScreenHeader
           title="Customers"
           subtitle={`${state.customers.length} saved contacts`}
@@ -226,7 +218,7 @@ export default function CustomersScreen({
             </GroupedList>
           ) : (
             <EmptyState
-              icon={<UsersRound aria-hidden="true" size={22} />}
+              illustration="customers-wave"
               title="No matching customers"
               description="Add a customer to keep their contact details and order history handy."
               actionLabel="Add customer"
@@ -235,14 +227,30 @@ export default function CustomersScreen({
           )}
         </div>
       </div>
+  )
+
+  return (
+    <>
+      <PushView
+        viewKey={
+          selectedSummary ? `customer-${selectedSummary.customer.id}` : "list"
+        }
+        depth={selectedSummary ? 1 : 0}
+      >
+        {selectedSummary ? renderCustomerDetail() : renderCustomerList()}
+      </PushView>
 
       <CustomerEditorSheet
         open={editorTarget !== null}
         customer={editorTarget === "new" ? null : editorTarget}
         onClose={() => setEditorTarget(null)}
         onSaved={(saved) => {
-          showToast(`Saved ${saved.name}`)
-          setSelectedId(saved.id)
+          showToast(
+            editorTarget === "new"
+              ? `Saved ${saved.name}`
+              : `Updated ${saved.name}`,
+          )
+          if (editorTarget === "new") setSelectedId(saved.id)
         }}
       />
     </>

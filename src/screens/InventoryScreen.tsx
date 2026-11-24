@@ -26,6 +26,7 @@ import StatusBadge from "../components/ui/StatusBadge"
 import TextAreaField from "../components/ui/TextAreaField"
 import { useToast } from "../components/ui/Toast"
 import { formatDate, formatLkr, formatQuantity } from "../lib/format"
+import { createId } from "../lib/id"
 import {
   inventoryCategory,
   selectAvailableInventory,
@@ -342,7 +343,7 @@ function InventoryDetail({
   const [itemSheetOpen, setItemSheetOpen] = useState(false)
   const [adjustOpen, setAdjustOpen] = useState(false)
   const [adjustmentId, setAdjustmentId] = useState(
-    () => `movement-adjust-${crypto.randomUUID()}`,
+    () => createId("movement-adjust"),
   )
   const [type, setType] = useState<AdjustmentType>("Correction")
   const [direction, setDirection] = useState<"add" | "remove">("remove")
@@ -444,7 +445,7 @@ function InventoryDetail({
     const unitCost =
       batch.source === "production" ? batch.actualUnitCost : batch.unitCost
     const stockCost = amount * unitCost
-    const transactionId = `finished-${finishedAction}-${crypto.randomUUID()}`
+    const transactionId = createId(`finished-${finishedAction}`)
     finishedActionLock.current = true
     const accepted =
       finishedAction === "sale"
@@ -533,7 +534,7 @@ function InventoryDetail({
       return
     }
 
-    const batchId = `legacy-batch-${crypto.randomUUID()}`
+    const batchId = createId("legacy-batch")
     reconcileLock.current = true
     const accepted = dispatchIfAccepted({
       type: "RECONCILE_LEGACY_FINISHED_STOCK",
@@ -558,7 +559,7 @@ function InventoryDetail({
   }
 
   const resetAdjustment = () => {
-    setAdjustmentId(`movement-adjust-${crypto.randomUUID()}`)
+    setAdjustmentId(createId("movement-adjust"))
     setQuantity("")
     setReason("")
     setError("")

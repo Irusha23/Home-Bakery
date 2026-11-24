@@ -13,6 +13,7 @@ import {
   toBaseQuantity,
 } from "../lib/inventory"
 import { formatQuantity } from "../lib/format"
+import { createId } from "../lib/id"
 import { submitPurchaseIfAccepted } from "../lib/purchaseSubmission"
 import { useAppState } from "../state/AppState"
 import type { Unit } from "../types"
@@ -44,7 +45,7 @@ export default function PurchaseForm({
     requirements.find((item) => item.inventoryId === initialItem?.inventoryId)
       ?.selectedPurchase ?? 0
 
-  const [purchaseId] = useState(() => `purchase-${crypto.randomUUID()}`)
+  const [purchaseId] = useState(() => createId("purchase"))
   const [inventoryId, setInventoryId] = useState(initialItem?.inventoryId ?? "")
   const [purchasedQuantity, setPurchasedQuantity] = useState(
     suggested > 0 ? String(suggested) : "",

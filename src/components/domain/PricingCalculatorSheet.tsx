@@ -196,8 +196,8 @@ export default function PricingCalculatorSheet({
               value={mode}
               onChange={(next) => setMode(next)}
               segments={[
-                { value: "margin", label: "Target margin %" },
-                { value: "markup", label: "Cost markup %" },
+                { value: "margin", label: "% of price" },
+                { value: "markup", label: "% on cost" },
               ]}
             />
           </div>
@@ -205,7 +205,7 @@ export default function PricingCalculatorSheet({
           <div className="grid grid-cols-2 gap-3">
             {mode === "margin" ? (
               <Field
-                label="Target margin (%)"
+                label="Profit of price (%)"
                 type="number"
                 min="0"
                 max="99"
@@ -216,7 +216,7 @@ export default function PricingCalculatorSheet({
               />
             ) : (
               <Field
-                label="Markup on cost (%)"
+                label="Extra on cost (%)"
                 type="number"
                 min="0"
                 step="5"

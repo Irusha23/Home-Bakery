@@ -24,7 +24,12 @@ import type {
   Recipe,
 } from "../types"
 
-import { migrateState, reducer } from "./AppState"
+import {
+  makeReference,
+  makeShoppingReference,
+  migrateState,
+  reducer,
+} from "./AppState"
 
 function createPurchase(
   overrides: Partial<PurchaseRecord> = {},
@@ -2331,5 +2336,160 @@ describe("application reducer business rules", () => {
     })
     expect(exported.settings.lastBackupAt).toBe("2026-04-12T10:15:00.000Z")
     expect(exported.settings.backupReminderSnoozedUntil).toBeNull()
+  })
+
+  it("creates, confirms, and records a deposit sequentially on a brand-new order", () => {
+    const initial = createTestAppData({
+      customers: [{ id: "cust-1", name: "Nadeesha", phone: "0771234567" }],
+      inventory: [
+        createTestInventoryItem({
+          inventoryId: "flour",
+          name: "Flour",
+          unit: "g",
+          category: "ingredient",
+        }),
+      ],
+    })
+    const orderId = "order-new-with-deposit"
+    const expectedReference = makeReference(initial.orders)
+    const line = createTestOrderLine(
+      "line-deposit",
+      createTestRecipeSnapshot({
+        ingredients: [{ inventoryId: "flour", name: "Flour", quantity: 500, unit: "g" }],
+        packaging: [],
+      }),
+    )
+
+    const drafted = reducer(initial, {
+      type: "UPSERT_DRAFT",
+      payload: {
+        id: orderId,
+        customerId: initial.customers[0].id,
+        customerName: initial.customers[0].name,
+        isQuickOrder: false,
+        collectionDate: "2026-11-20",
+        collectionTime: "15:00",
+        instructions: "",
+        lines: [line],
+        agreedPrice: 12000,
+        costSnapshot: {
+          ingredients: 4000,
+          packaging: 500,
+          labour: 1000,
+          estimatedTotal: 5500,
+          suggestedPrice: 12000,
+          pricingMode: "margin",
+        },
+      },
+    })
+    expect(drafted.orders[0].reference).toBe(expectedReference)
+    expect(drafted.orders[0].status).toBe("Draft")
+
+    const confirmed = reducer(drafted, {
+      type: "CONFIRM_ORDER",
+      orderId,
+    })
+    expect(confirmed.orders[0].status).toBe("Confirmed")
+
+    const paid = reducer(confirmed, {
+      type: "RECORD_PAYMENT",
+      orderId,
+      orderReference: expectedReference,
+      payment: {
+        id: "pay-deposit-1",
+        date: "2026-11-18",
+        amount: 4000,
+        method: "Cash",
+        note: "Order deposit",
+      },
+    })
+    expect(paid.orders[0].payments).toHaveLength(1)
+    expect(paid.orders[0].payments[0].amount).toBe(4000)
+    expect(paid.orders[0].paymentStatus).toBe("Part paid")
+  })
+
+  it("records a cancellation fee on a cancelled order up to retained payments", () => {
+    const order = createTestOrder("cancel-fee-test", [createTestOrderLine("l-1")], {
+      status: "Cancelled",
+      agreedPrice: 7500,
+      payments: [{ id: "p-1", date: "2026-10-01", amount: 7500, method: "Cash" }],
+    })
+    const state = createTestAppData({
+      orders: [order],
+      refunds: [
+        {
+          id: "r-1",
+          orderId: order.id,
+          paymentId: "p-1",
+          date: "2026-10-02",
+          amount: 6500,
+          reason: "Partial refund",
+        },
+      ],
+    })
+
+    const settled = reducer(state, {
+      type: "SET_CANCELLATION_FEE",
+      orderId: order.id,
+      fee: 1000,
+    })
+    expect(settled.orders[0].cancellationFee).toBe(1000)
+
+    expect(
+      reducer(state, {
+        type: "SET_CANCELLATION_FEE",
+        orderId: order.id,
+        fee: 1500,
+      }),
+    ).toBe(state)
+  })
+
+  it("saves completed shopping trips with sequential SHP references", () => {
+    const initial = createTestAppData()
+    const firstRef = makeShoppingReference(initial.shoppingTrips ?? [])
+    expect(firstRef).toBe("SHP-1001")
+
+    const withFirst = reducer(initial, {
+      type: "ADD_SHOPPING_TRIP",
+      trip: {
+        id: "trip-1",
+        reference: firstRef,
+        date: "2026-11-24",
+        createdAt: "2026-11-24T11:30:00.000Z",
+        totalSpent: 1085,
+        expenseId: "exp-1",
+        items: [
+          {
+            inventoryId: "flour",
+            name: "All-purpose flour",
+            category: "ingredient",
+            quantity: 870,
+            unit: "g",
+            estimatedCost: 278,
+            orders: [
+              {
+                orderId: "order-1",
+                reference: "US-1008",
+                customerName: "Nadeesha Perera",
+                quantity: 150,
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(withFirst.shoppingTrips).toHaveLength(1)
+    expect(makeShoppingReference(withFirst.shoppingTrips ?? [])).toBe(
+      "SHP-1002",
+    )
+
+    // Rejects duplicate trip IDs
+    expect(
+      reducer(withFirst, {
+        type: "ADD_SHOPPING_TRIP",
+        trip: withFirst.shoppingTrips![0],
+      }),
+    ).toBe(withFirst)
   })
 })

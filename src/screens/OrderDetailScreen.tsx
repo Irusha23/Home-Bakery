@@ -6,7 +6,6 @@ import {
   CheckCheck,
   CheckCircle2,
   ChefHat,
-  ChevronDown,
   Clock3,
   CreditCard,
   Flame,
@@ -14,17 +13,21 @@ import {
   Pencil,
   ReceiptText,
   Repeat2,
+  RotateCcw,
   ShoppingBag,
   X,
 } from "lucide-react"
 import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
+import CheckboxField from "../components/ui/CheckboxField"
 import CountdownBadge from "../components/ui/CountdownBadge"
 import Dialog from "../components/ui/Dialog"
+import Disclosure from "../components/ui/Disclosure"
 import Field from "../components/ui/Field"
 import SelectField from "../components/ui/SelectField"
 import StatusBadge from "../components/ui/StatusBadge"
+import SwipeableRow from "../components/ui/SwipeableRow"
 import TextAreaField from "../components/ui/TextAreaField"
 import { getBakeTargetMs, getCollectionTargetMs } from "../lib/countdown"
 import {
@@ -33,6 +36,7 @@ import {
   formatQuantity,
   formatTime,
 } from "../lib/format"
+import { createId } from "../lib/id"
 import {
   hasUnpurchasedShoppingItems,
   isUsageInPantry,
@@ -46,9 +50,11 @@ import {
 } from "../lib/orderLifecycle"
 import {
   PAYMENT_METHOD_OPTIONS,
+  allocateOrderRefunds,
   derivePaymentStatus,
   netRetainedPayments,
   outstandingOrderBalance,
+  pendingCancellationRefund,
   remainingRefundableAmount,
   submitFinancialAction,
   totalRefundsForOrder,
@@ -57,6 +63,7 @@ import {
   validatePaymentEntry,
   validateRefundEntry,
 } from "../lib/financials"
+import { calculateOrderProfit } from "../lib/orderProfit"
 import { useAppState } from "../state/AppState"
 import type { Order } from "../types"
 
@@ -74,6 +81,8 @@ type OrderDetailScreenProps = {
   repeatNotice?: string | null
   openPaymentOnMount?: boolean
   onPaymentOpenedOnMount?: () => void
+  openRefundOnMount?: boolean
+  onRefundOpenedOnMount?: () => void
 }
 
 export default function OrderDetailScreen({
@@ -86,33 +95,48 @@ export default function OrderDetailScreen({
   repeatNotice,
   openPaymentOnMount,
   onPaymentOpenedOnMount,
+  openRefundOnMount,
+  onRefundOpenedOnMount,
 }: OrderDetailScreenProps) {
   const { state, dispatch, dispatchIfAccepted } = useAppState()
   const [confirmation, setConfirmation] =
     useState<"cancel" | "collect" | "repeat" | null>(null)
   const repeatSubmitting = useRef(false)
-  const [financialDialog, setFinancialDialog] = useState<"payment" | {
-    kind: "refund"
-    paymentId: string
-  } | null>(null)
+  const [financialDialog, setFinancialDialog] = useState<
+    | "payment"
+    | { kind: "refund"; paymentId: string }
+    | { kind: "order-refund" }
+    | null
+  >(null)
   const [financialAmount, setFinancialAmount] = useState("")
   const [financialDate, setFinancialDate] = useState(today)
   const [financialMethod, setFinancialMethod] = useState("Cash")
   const [financialOtherMethod, setFinancialOtherMethod] = useState("")
   const [financialReason, setFinancialReason] = useState("")
+  const [keepRemainderAsFee, setKeepRemainderAsFee] = useState(false)
   const [financialError, setFinancialError] = useState("")
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error"
     message: string
   } | null>(null)
+  const [repeatDismissed, setRepeatDismissed] = useState(false)
+
+  useEffect(() => {
+    setRepeatDismissed(false)
+  }, [repeatNotice])
   const paid = totalValidPayments(order)
   const refundsTotal = totalRefundsForOrder(order, state.refunds)
   const retained = netRetainedPayments(order, state.refunds)
+  const cancellationFee = order.cancellationFee ?? 0
+  const pendingRefund = pendingCancellationRefund(order, state.refunds)
   const balance = outstandingOrderBalance(order, state.refunds)
   const paymentStatus = derivePaymentStatus(order, state.refunds)
   const maxPayable = Math.max(0, balance)
+  const orderProfit = calculateOrderProfit(order, state)
   const selectedRefundPayment =
-    financialDialog && typeof financialDialog === "object"
+    financialDialog &&
+    typeof financialDialog === "object" &&
+    financialDialog.kind === "refund"
       ? order.payments.find(
           (payment) => payment.id === financialDialog.paymentId,
         )
@@ -167,7 +191,7 @@ export default function OrderDetailScreen({
   const confirmRepeatOrder = () => {
     if (repeatSubmitting.current || confirmation !== "repeat") return
     repeatSubmitting.current = true
-    const newOrderId = `order-${crypto.randomUUID()}`
+    const newOrderId = createId("order")
     const accepted = dispatchIfAccepted({
       type: "REPEAT_ORDER",
       orderId: order.id,
@@ -187,7 +211,10 @@ export default function OrderDetailScreen({
   }
 
   const openFinancialDialog = (
-    dialog: "payment" | { kind: "refund"; paymentId: string },
+    dialog:
+      | "payment"
+      | { kind: "refund"; paymentId: string }
+      | { kind: "order-refund" },
     initialAmount?: number,
   ) => {
     setFinancialAmount(
@@ -197,12 +224,23 @@ export default function OrderDetailScreen({
           : maxPayable > 0
             ? String(maxPayable)
             : ""
-        : "",
+        : typeof dialog === "object" && dialog.kind === "order-refund"
+          ? pendingRefund > 0
+            ? String(pendingRefund)
+            : ""
+          : "",
     )
     setFinancialDate(today())
     setFinancialMethod("Cash")
     setFinancialOtherMethod("")
-    setFinancialReason("")
+    setFinancialReason(
+      typeof dialog === "object" &&
+        dialog.kind === "order-refund" &&
+        order.status === "Cancelled"
+        ? "Customer refund"
+        : "",
+    )
+    setKeepRemainderAsFee(false)
     setFinancialError("")
     setFeedback(null)
     setFinancialDialog(dialog)
@@ -216,6 +254,15 @@ export default function OrderDetailScreen({
     onPaymentOpenedOnMount?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPaymentOnMount, order.id])
+
+  useEffect(() => {
+    if (!openRefundOnMount) return
+    if (pendingRefund > 0) {
+      openFinancialDialog({ kind: "order-refund" })
+    }
+    onRefundOpenedOnMount?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRefundOnMount, order.id])
 
   const submitPayment = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -239,7 +286,7 @@ export default function OrderDetailScreen({
         orderId: order.id,
         orderReference: order.reference,
         payment: {
-          id: `payment-${crypto.randomUUID()}`,
+          id: createId("payment"),
           date: financialDate,
           amount: Number(financialAmount),
           method: resolvedMethod,
@@ -255,6 +302,67 @@ export default function OrderDetailScreen({
 
   const submitRefund = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (
+      financialDialog &&
+      typeof financialDialog === "object" &&
+      financialDialog.kind === "order-refund"
+    ) {
+      const error = validateRefundEntry(
+        financialAmount,
+        financialDate,
+        financialReason,
+        pendingRefund,
+      )
+      if (error) {
+        setFinancialError(error)
+        return
+      }
+      const refundAmount = Number(financialAmount)
+      const remainderAfterRefund = Math.max(0, pendingRefund - refundAmount)
+      const slices = allocateOrderRefunds(
+        order,
+        state.refunds,
+        refundAmount,
+        financialDate,
+        financialReason.trim(),
+      )
+      if (!slices || slices.length === 0) {
+        setFinancialError("Refund could not be allocated across payments.")
+        return
+      }
+      let allAccepted = true
+      for (const slice of slices) {
+        const accepted = dispatchIfAccepted({
+          type: "RECORD_REFUND",
+          refund: slice,
+        })
+        if (!accepted) {
+          allAccepted = false
+          break
+        }
+      }
+      if (!allAccepted) {
+        setFinancialError("Refund was not accepted. Order balances remain unchanged.")
+        return
+      }
+      if (keepRemainderAsFee && remainderAfterRefund > 0) {
+        dispatchIfAccepted({
+          type: "SET_CANCELLATION_FEE",
+          orderId: order.id,
+          fee: cancellationFee + remainderAfterRefund,
+        })
+      }
+      setFeedback({
+        kind: "success",
+        message:
+          keepRemainderAsFee && remainderAfterRefund > 0
+            ? `Recorded ${formatLkr(refundAmount)} refund and kept ${formatLkr(remainderAfterRefund)} cancellation fee.`
+            : `Recorded ${formatLkr(refundAmount)} refund.`,
+      })
+      setFinancialError("")
+      setFinancialDialog(null)
+      return
+    }
     if (!selectedRefundPayment) return
     const error = validateRefundEntry(
       financialAmount,
@@ -270,7 +378,7 @@ export default function OrderDetailScreen({
       {
         type: "RECORD_REFUND",
         refund: {
-          id: `refund-${crypto.randomUUID()}`,
+          id: createId("refund"),
           orderId: order.id,
           paymentId: selectedRefundPayment.id,
           date: financialDate,
@@ -311,24 +419,54 @@ export default function OrderDetailScreen({
       />
 
       {feedback ? (
-        <p
-          role={feedback.kind === "success" ? "status" : "alert"}
-          className={`mt-4 rounded-control p-3 text-sm ${
-            feedback.kind === "success"
-              ? "bg-sage-soft text-sage-dark"
-              : "bg-warning-soft text-cocoa"
-          }`}
+        <SwipeableRow
+          className="mt-4"
+          actionLabel="Dismiss"
+          onAction={() => setFeedback(null)}
         >
-          {feedback.message}
-        </p>
+          <div
+            role={feedback.kind === "success" ? "status" : "alert"}
+            className={`flex items-start justify-between gap-2 rounded-control p-3 text-sm ${
+              feedback.kind === "success"
+                ? "bg-sage-soft text-sage-dark"
+                : "bg-warning-soft text-cocoa"
+            }`}
+          >
+            <span className="min-w-0 flex-1">{feedback.message}</span>
+            <button
+              type="button"
+              aria-label="Dismiss notice"
+              onClick={() => setFeedback(null)}
+              className="shrink-0 rounded-full p-0.5 opacity-70 transition hover:opacity-100"
+            >
+              <X aria-hidden="true" size={14} />
+            </button>
+          </div>
+        </SwipeableRow>
       ) : null}
-      {repeatNotice ? (
-        <p
-          role="status"
-          className="mt-4 rounded-control bg-sage-soft p-3 text-sm text-sage-dark"
+      {repeatNotice && !repeatDismissed ? (
+        <SwipeableRow
+          className="mt-4"
+          actionLabel="Dismiss"
+          onAction={() => setRepeatDismissed(true)}
         >
-          {repeatNotice} Opened as draft {order.reference}.
-        </p>
+          <div
+            role="status"
+            className="flex items-start justify-between gap-2 rounded-control bg-sage-soft p-3 text-sm text-sage-dark"
+          >
+            <span className="min-w-0 flex-1">
+              {repeatNotice} Opened as draft {order.reference}.
+            </span>
+            <button
+              type="button"
+              aria-label="Dismiss notice"
+              onClick={() => setRepeatDismissed(true)}
+              className="shrink-0 rounded-full p-0.5 opacity-70 transition hover:opacity-100"
+            >
+              <X aria-hidden="true" size={14} />
+            </button>
+          </div>
+        </SwipeableRow>
       ) : null}
 
       {order.status !== "Draft" && order.status !== "Cancelled" ? (
@@ -583,39 +721,34 @@ export default function OrderDetailScreen({
                         </div>
                       </div>
                     ) : (
-                      <details className="mt-3 rounded-control border border-warm-border bg-ivory/60">
-                        <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-xs font-medium text-cocoa">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Check
-                              aria-hidden="true"
-                              size={13}
-                              className="text-success"
-                            />
-                            Ingredients ready ({prepRecord.actualUsage.length})
-                          </span>
-                          <ChevronDown
+                      <Disclosure
+                        compact
+                        className="mt-3"
+                        title={`Ingredients ready (${prepRecord.actualUsage.length})`}
+                        leadingIcon={
+                          <Check
                             aria-hidden="true"
-                            size={14}
-                            className="text-muted"
+                            size={13}
+                            className="text-success"
                           />
-                        </summary>
-                        <div className="divide-y divide-warm-border/70 border-t border-warm-border px-3 pb-2 pt-1">
-                          {prepRecord.actualUsage.map((usage) => (
-                            <div
-                              key={usage.inventoryId}
-                              className="flex items-center justify-between py-1.5 text-xs"
-                            >
-                              <span className="text-cocoa">{usage.name}</span>
-                              <span className="text-muted">
-                                {formatQuantity(
-                                  usage.plannedQuantity,
-                                  usage.unit,
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
+                        }
+                        contentClassName="divide-y divide-warm-border/70 border-t border-warm-border px-3 pb-2 pt-1"
+                      >
+                        {prepRecord.actualUsage.map((usage) => (
+                          <div
+                            key={usage.inventoryId}
+                            className="flex items-center justify-between py-1.5 text-xs"
+                          >
+                            <span className="text-cocoa">{usage.name}</span>
+                            <span className="text-muted">
+                              {formatQuantity(
+                                usage.plannedQuantity,
+                                usage.unit,
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </Disclosure>
                     )
                   ) : null}
 
@@ -703,14 +836,23 @@ export default function OrderDetailScreen({
           <div className="text-base font-semibold text-cocoa">Payment</div>
           <StatusBadge
             tone={
-              paymentStatus === "Paid"
+              order.status === "Cancelled" &&
+              paid > 0 &&
+              pendingRefund === 0
                 ? "success"
-                : paymentStatus === "Unpaid" || paymentStatus === "Refunded"
-                  ? "neutral"
-                  : "warning"
+                : paymentStatus === "Paid"
+                  ? "success"
+                  : paymentStatus === "Unpaid" || paymentStatus === "Refunded"
+                    ? "neutral"
+                    : "warning"
             }
           >
-            {paymentStatus}
+            {order.status === "Cancelled" &&
+            paid > 0 &&
+            pendingRefund === 0 &&
+            paymentStatus !== "Refunded"
+              ? "Settled"
+              : paymentStatus}
           </StatusBadge>
         </div>
         <Card className="space-y-4">
@@ -733,14 +875,24 @@ export default function OrderDetailScreen({
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                Due
+                {order.status === "Cancelled" ? "Refund due" : "Due"}
               </p>
               <p
                 className={`mt-1 text-sm font-bold tabular-nums ${
-                  balance > 0 ? "text-warning" : "text-success"
+                  order.status === "Cancelled"
+                    ? pendingRefund > 0
+                      ? "text-warning"
+                      : "text-success"
+                    : balance > 0
+                      ? "text-warning"
+                      : "text-success"
                 }`}
               >
-                {formatLkr(Math.max(0, balance))}
+                {formatLkr(
+                  order.status === "Cancelled"
+                    ? Math.max(0, pendingRefund)
+                    : Math.max(0, balance),
+                )}
               </p>
             </div>
           </div>
@@ -754,6 +906,15 @@ export default function OrderDetailScreen({
             </div>
           ) : null}
 
+          {cancellationFee > 0 ? (
+            <div className="flex items-center justify-between border-t border-warm-border pt-2.5 text-xs text-muted">
+              <span>Cancellation fee kept</span>
+              <span className="font-semibold tabular-nums text-cocoa">
+                {formatLkr(cancellationFee)}
+              </span>
+            </div>
+          ) : null}
+
           {order.status !== "Cancelled" && maxPayable > 0 ? (
             <Button
               fullWidth
@@ -762,103 +923,199 @@ export default function OrderDetailScreen({
             >
               Add payment
             </Button>
+          ) : order.status === "Cancelled" && pendingRefund > 0 ? (
+            <div className="space-y-2">
+              <Button
+                fullWidth
+                variant="secondary"
+                leadingIcon={<RotateCcw aria-hidden="true" size={17} />}
+                onClick={() => openFinancialDialog({ kind: "order-refund" })}
+              >
+                Record refund
+              </Button>
+              <Button
+                fullWidth
+                size="compact"
+                variant="ghost"
+                onClick={() => {
+                  const accepted = dispatchIfAccepted({
+                    type: "SET_CANCELLATION_FEE",
+                    orderId: order.id,
+                    fee: retained,
+                  })
+                  if (accepted) {
+                    setFeedback({
+                      kind: "success",
+                      message: `Marked ${formatLkr(pendingRefund)} as kept cancellation fee.`,
+                    })
+                  }
+                }}
+              >
+                Keep {formatLkr(pendingRefund)} as cancellation fee
+              </Button>
+            </div>
           ) : null}
         </Card>
 
-        <details className="mt-3 rounded-card border border-warm-border bg-white shadow-subtle">
-          <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-cocoa">
-            <span>Cost breakdown</span>
-            <span className="inline-flex items-center gap-1.5 tabular-nums text-muted">
-              {formatLkr(order.costSnapshot.estimatedTotal)}
-              <ChevronDown aria-hidden="true" size={15} />
+        <Disclosure
+          className="mt-3"
+          title="Profit"
+          trailing={
+            <span
+              className={`font-bold tabular-nums ${
+                orderProfit.profitLkr >= 0 ? "text-success" : "text-error"
+              }`}
+            >
+              {orderProfit.profitLkr >= 0 ? "+" : "−"}
+              {formatLkr(Math.abs(orderProfit.profitLkr))}
             </span>
-          </summary>
-          <div className="space-y-2 border-t border-warm-border px-4 py-3 text-sm text-muted">
-            <div className="flex justify-between">
-              <span>Ingredients</span>
-              <span>{formatLkr(order.costSnapshot.ingredients)}</span>
+          }
+        >
+          <div className="space-y-2 text-sm text-muted">
+            <div className="flex items-baseline justify-between gap-2">
+              <span>
+                Income
+                {order.status !== "Cancelled" &&
+                orderProfit.collectedLkr < orderProfit.incomeLkr
+                  ? ` (Collected ${formatLkr(orderProfit.collectedLkr)})`
+                  : ""}
+              </span>
+              <span className="font-medium tabular-nums text-cocoa">
+                {formatLkr(orderProfit.incomeLkr)}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span>Packaging</span>
-              <span>{formatLkr(order.costSnapshot.packaging)}</span>
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span>Recipe & items</span>
+                <span className="tabular-nums text-cocoa">
+                  −{formatLkr(orderProfit.recipeCostLkr)}
+                </span>
+              </div>
+              <div className="space-y-0.5 pl-3 text-xs">
+                <div className="flex justify-between">
+                  <span>Ingredients</span>
+                  <span className="tabular-nums">
+                    {formatLkr(orderProfit.ingredientsLkr)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Packaging</span>
+                  <span className="tabular-nums">
+                    {formatLkr(orderProfit.packagingLkr)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Labour</span>
+                  <span className="tabular-nums">
+                    {formatLkr(orderProfit.labourLkr)}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span>Labour</span>
-              <span>{formatLkr(order.costSnapshot.labour)}</span>
+            {orderProfit.extraExpenseItems.length > 0 ? (
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span>Order expenses</span>
+                  <span className="tabular-nums text-cocoa">
+                    −{formatLkr(orderProfit.extraExpensesLkr)}
+                  </span>
+                </div>
+                <div className="space-y-0.5 pl-3 text-xs">
+                  {orderProfit.extraExpenseItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex justify-between gap-3"
+                    >
+                      <span className="truncate">{item.description}</span>
+                      <span className="shrink-0 tabular-nums">
+                        {formatLkr(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between border-t border-warm-border pt-2 font-semibold text-cocoa">
+              <span>Net profit</span>
+              <span
+                className={`tabular-nums ${
+                  orderProfit.profitLkr >= 0 ? "text-success" : "text-error"
+                }`}
+              >
+                {orderProfit.profitLkr >= 0 ? "+" : "−"}
+                {formatLkr(Math.abs(orderProfit.profitLkr))}
+                {orderProfit.marginPercent !== null
+                  ? ` · ${orderProfit.marginPercent}%`
+                  : ""}
+              </span>
             </div>
           </div>
-        </details>
+        </Disclosure>
 
         {order.payments.length > 0 ? (
-          <details className="mt-2.5 rounded-card border border-warm-border bg-white shadow-subtle">
-            <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-cocoa">
-              <span>Payments ({order.payments.length})</span>
-              <ChevronDown
-                aria-hidden="true"
-                size={15}
-                className="text-muted"
-              />
-            </summary>
-            <div className="divide-y divide-warm-border border-t border-warm-border px-4">
-              {order.payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex items-center justify-between gap-3 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-cocoa">
-                      {payment.method} · {formatLkr(payment.amount)}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {formatDate(payment.date)}
-                      {totalRefundsForPayment(order, state.refunds, payment.id) >
-                      0
-                        ? ` · Refunded ${formatLkr(
-                            totalRefundsForPayment(
-                              order,
-                              state.refunds,
-                              payment.id,
-                            ),
-                          )}`
-                        : ""}
-                    </p>
-                  </div>
-                  {remainingRefundableAmount(order, state.refunds, payment.id) >
-                  0 ? (
-                    <Button
-                      size="compact"
-                      variant="secondary"
-                      onClick={() =>
-                        openFinancialDialog({
-                          kind: "refund",
-                          paymentId: payment.id,
-                        })
-                      }
-                    >
-                      Refund
-                    </Button>
-                  ) : null}
+          <Disclosure
+            className="mt-2.5"
+            title={`Payments (${order.payments.length})`}
+            contentClassName="divide-y divide-warm-border border-t border-warm-border px-4"
+          >
+            {order.payments.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex items-center justify-between gap-3 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-cocoa">
+                    {payment.method} · {formatLkr(payment.amount)}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {formatDate(payment.date)}
+                    {totalRefundsForPayment(order, state.refunds, payment.id) >
+                    0
+                      ? ` · Refunded ${formatLkr(
+                          totalRefundsForPayment(
+                            order,
+                            state.refunds,
+                            payment.id,
+                          ),
+                        )}`
+                      : ""}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </details>
+                {remainingRefundableAmount(order, state.refunds, payment.id) >
+                  0 &&
+                (order.status !== "Cancelled" || pendingRefund > 0) ? (
+                  <Button
+                    size="compact"
+                    variant="secondary"
+                    onClick={() =>
+                      openFinancialDialog({
+                        kind: "refund",
+                        paymentId: payment.id,
+                      })
+                    }
+                  >
+                    Refund
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </Disclosure>
         ) : null}
 
-        <details className="mt-2.5 rounded-card border border-warm-border bg-white shadow-subtle">
-          <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-cocoa">
-            <span className="inline-flex items-center gap-2">
-              <History aria-hidden="true" className="text-muted" size={16} />
-              Order history
-            </span>
-            <ChevronDown aria-hidden="true" size={15} className="text-muted" />
-          </summary>
-          <p className="border-t border-warm-border px-4 py-3 text-xs leading-relaxed text-muted">
+        <Disclosure
+          className="mt-2.5"
+          title="Order history"
+          leadingIcon={
+            <History aria-hidden="true" className="text-muted" size={16} />
+          }
+        >
+          <p className="text-xs leading-relaxed text-muted">
             Created {formatDate(order.createdAt.slice(0, 10))}
             {order.confirmedAt
               ? ` · Confirmed ${formatDate(order.confirmedAt.slice(0, 10))}`
               : " · Draft"}
           </p>
-        </details>
+        </Disclosure>
       </section>
 
       {order.status === "Draft" ? (
@@ -989,16 +1246,24 @@ export default function OrderDetailScreen({
         open={
           financialDialog !== null &&
           typeof financialDialog === "object" &&
-          financialDialog.kind === "refund"
+          (financialDialog.kind === "refund" ||
+            financialDialog.kind === "order-refund")
         }
         title="Record refund"
         description={
-          selectedRefundPayment
-            ? `Refund against ${selectedRefundPayment.method} payment ${selectedRefundPayment.id}.`
-            : "The selected payment is no longer available."
+          financialDialog &&
+          typeof financialDialog === "object" &&
+          financialDialog.kind === "order-refund"
+            ? `Order ${order.reference} · ${formatLkr(retained)} retained.`
+            : selectedRefundPayment
+              ? `Refund against ${selectedRefundPayment.method} payment ${selectedRefundPayment.id}.`
+              : "The selected payment is no longer available."
         }
         onClose={() => setFinancialDialog(null)}
         footer={
+          (financialDialog &&
+            typeof financialDialog === "object" &&
+            financialDialog.kind === "order-refund") ||
           selectedRefundPayment ? (
             <div className="flex flex-wrap justify-end gap-3">
               <Button
@@ -1016,7 +1281,90 @@ export default function OrderDetailScreen({
           )
         }
       >
-        {selectedRefundPayment ? (
+        {financialDialog &&
+        typeof financialDialog === "object" &&
+        financialDialog.kind === "order-refund" ? (
+          <form
+            id="record-refund-form"
+            className="space-y-4"
+            onSubmit={submitRefund}
+          >
+            <div className="rounded-control bg-ivory p-3 text-sm text-cocoa">
+              <p>
+                Total paid: <strong>{formatLkr(paid)}</strong>
+              </p>
+              {refundsTotal > 0 ? (
+                <p className="mt-1">
+                  Previously refunded: <strong>{formatLkr(refundsTotal)}</strong>
+                </p>
+              ) : null}
+              {cancellationFee > 0 ? (
+                <p className="mt-1">
+                  Cancellation fee kept:{" "}
+                  <strong>{formatLkr(cancellationFee)}</strong>
+                </p>
+              ) : null}
+              <p className="mt-1">
+                Remaining refundable:{" "}
+                <strong>{formatLkr(pendingRefund)}</strong>
+              </p>
+            </div>
+            {pendingRefund > 0 ? (
+              <>
+                <Field
+                  label="Refund amount (LKR)"
+                  type="number"
+                  min="1"
+                  max={pendingRefund}
+                  step="1"
+                  inputMode="numeric"
+                  required
+                  value={financialAmount}
+                  onChange={(event) => setFinancialAmount(event.target.value)}
+                  helperText={`Whole rupees only. Maximum refund: ${formatLkr(pendingRefund)}.`}
+                />
+                {Number.isSafeInteger(Number(financialAmount)) &&
+                Number(financialAmount) > 0 &&
+                pendingRefund - Number(financialAmount) > 0 ? (
+                  <CheckboxField
+                    checked={keepRemainderAsFee}
+                    onChange={setKeepRemainderAsFee}
+                    label={`Keep remaining ${formatLkr(
+                      pendingRefund - Number(financialAmount),
+                    )} as cancellation fee`}
+                    description="Marks this cancelled order settled with no refund left due."
+                  />
+                ) : null}
+                <Field
+                  label="Refund date"
+                  type="date"
+                  required
+                  value={financialDate}
+                  onChange={(event) => setFinancialDate(event.target.value)}
+                />
+                <TextAreaField
+                  label="Reason for refund"
+                  required
+                  value={financialReason}
+                  onChange={(event) => setFinancialReason(event.target.value)}
+                  helperText="This reason is retained with the refund history."
+                />
+              </>
+            ) : (
+              <p className="text-sm text-muted">
+                All payments on this order have been refunded.
+              </p>
+            )}
+            {financialError ? (
+              <p
+                role="alert"
+                className="rounded-control bg-warning-soft p-3 text-sm text-cocoa"
+              >
+                {financialError}
+              </p>
+            ) : null}
+          </form>
+        ) : selectedRefundPayment ? (
           <form
             id="record-refund-form"
             className="space-y-4"

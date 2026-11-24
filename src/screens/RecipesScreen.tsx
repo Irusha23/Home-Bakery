@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Archive,
   BookOpen,
@@ -24,11 +24,13 @@ import EmptyState from "../components/ui/EmptyState"
 import Field from "../components/ui/Field"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
 import MoneyText from "../components/ui/MoneyText"
+import { PushView, TabView } from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import StatusBadge from "../components/ui/StatusBadge"
 import Stepper from "../components/ui/Stepper"
 import { useToast } from "../components/ui/Toast"
 import { formatLkr, formatQuantity } from "../lib/format"
+import { createId } from "../lib/id"
 import {
   calculateItemRecipeCost,
   estimateRecipeMaterialCost,
@@ -97,24 +99,26 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
     (recipe) => recipe.id === selectedRecipeId,
   )
 
+  useEffect(() => {
+    onFocusedChange(Boolean(selectedRecipe))
+    return () => onFocusedChange(false)
+  }, [selectedRecipe, onFocusedChange])
+
   const openRecipe = (recipeId: string) => {
     setSelectedRecipeId(recipeId)
     setScaleMultiplier(1)
     setShowHistory(false)
-    onFocusedChange(true)
-    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const closeRecipe = () => {
     setSelectedRecipeId(null)
     setShowHistory(false)
-    onFocusedChange(false)
   }
 
   const handleDuplicateRecipe = (source: Recipe) => {
     const clone: Recipe = {
       ...structuredClone(source),
-      id: `recipe-${crypto.randomUUID().slice(0, 8)}`,
+      id: createId("recipe"),
       name: `${source.name} (Copy)`,
       version: 1,
       archived: false,
@@ -127,7 +131,8 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
     }
   }
 
-  if (selectedRecipe) {
+  const renderRecipeDetail = () => {
+    if (!selectedRecipe) return null
     const product = state.products.find(
       (item) => item.id === selectedRecipe.productId,
     )
@@ -144,8 +149,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
       : selectedRecipe.estimatedCost
 
     return (
-      <>
-        <div className="focused-flow pb-10">
+      <div className="focused-flow pb-10">
           <ScreenHeader
             title={selectedRecipe.name}
             subtitle={`${product?.name ?? "Custom product"}${
@@ -408,44 +412,11 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             </div>
           </div>
         </div>
-
-        <RecipeEditorSheet
-          open={recipeEditorTarget !== null}
-          recipe={recipeEditorTarget === "new" ? null : recipeEditorTarget}
-          onSave={(saved) => {
-            if (recipeEditorTarget === "new") {
-              dispatchIfAccepted({ type: "ADD_RECIPE", recipe: saved })
-              showToast("Recipe created")
-            } else {
-              dispatchIfAccepted({ type: "UPDATE_RECIPE", recipe: saved })
-              showToast(`Saved ${saved.name} v${saved.version}`)
-            }
-          }}
-          onClose={() => setRecipeEditorTarget(null)}
-        />
-
-        <PricingCalculatorSheet
-          open={pricingTarget !== null}
-          recipe={pricingTarget ?? undefined}
-          quantity={scaleMultiplier >= 1 ? Math.round(scaleMultiplier) : 1}
-          onClose={() => setPricingTarget(null)}
-        />
-
-        <InventoryItemSheet
-          open={editingPriceItem !== null}
-          item={editingPriceItem}
-          onClose={() => setEditingPriceItem(null)}
-          onSaved={(saved) =>
-            showToast(`Updated ${saved.name} price across all recipes`)
-          }
-        />
-      </>
     )
   }
 
-  return (
-    <>
-      <div className="space-y-4 pb-6">
+  const renderList = () => (
+    <div className="space-y-4 pb-6">
         <ScreenHeader
           title="Recipes"
           action={
@@ -495,7 +466,8 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
           onChange={(event) => setSearch(event.target.value)}
         />
 
-        {section === "recipes" ? (
+        <TabView viewKey={section}>
+          {section === "recipes" ? (
           recipes.length > 0 ? (
             <div className="space-y-3">
               {recipes.map((recipe) => {
@@ -557,7 +529,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             </div>
           ) : (
             <EmptyState
-              icon={<BookOpen aria-hidden="true" size={22} />}
+              illustration="recipe-book"
               title="No matching recipes"
               description="Create your first recipe to track exact ingredient weights, preparation time, and live cost."
               actionLabel="Create recipe"
@@ -569,21 +541,21 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             {products.map((product) => (
               <Card key={product.id} className="space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-semibold text-cocoa">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-semibold leading-snug text-cocoa">
                         {product.name}
                       </h2>
                       {product.archived ? (
                         <StatusBadge tone="warning">Archived</StatusBadge>
                       ) : null}
                     </div>
-                    <p className="text-xs text-muted">
+                    <p className="mt-0.5 text-xs text-muted">
                       {product.variants.length}{" "}
                       {product.variants.length === 1 ? "variant" : "variants"}
                     </p>
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex shrink-0 gap-1.5">
                     <Button
                       size="compact"
                       variant="secondary"
@@ -627,14 +599,25 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
           </div>
         ) : (
           <EmptyState
-            icon={<Layers aria-hidden="true" size={22} />}
+            illustration="recipe-book"
             title="No products yet"
             description="Add the cakes, boxes, or treats you sell so orders and recipes stay organized."
             actionLabel="Add product"
             onAction={() => setProductEditorTarget("new")}
           />
         )}
+        </TabView>
       </div>
+  )
+
+  return (
+    <>
+      <PushView
+        viewKey={selectedRecipe ? `recipe-${selectedRecipe.id}` : "list"}
+        depth={selectedRecipe ? 1 : 0}
+      >
+        {selectedRecipe ? renderRecipeDetail() : renderList()}
+      </PushView>
 
       <RecipeEditorSheet
         open={recipeEditorTarget !== null}
@@ -656,6 +639,22 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
         product={productEditorTarget === "new" ? null : productEditorTarget}
         onClose={() => setProductEditorTarget(null)}
         onSaved={(saved) => showToast(`Saved ${saved.name}`)}
+      />
+
+      <PricingCalculatorSheet
+        open={pricingTarget !== null}
+        recipe={pricingTarget ?? undefined}
+        quantity={scaleMultiplier >= 1 ? Math.round(scaleMultiplier) : 1}
+        onClose={() => setPricingTarget(null)}
+      />
+
+      <InventoryItemSheet
+        open={editingPriceItem !== null}
+        item={editingPriceItem}
+        onClose={() => setEditingPriceItem(null)}
+        onSaved={(saved) =>
+          showToast(`Updated ${saved.name} price across all recipes`)
+        }
       />
     </>
   )
