@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
   BookOpen,
   CalendarDays,
+  Camera,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -25,6 +26,7 @@ import CountdownBadge from "../components/ui/CountdownBadge"
 import Dialog from "../components/ui/Dialog"
 import Disclosure from "../components/ui/Disclosure"
 import ItemThumbnail from "../components/ui/ItemThumbnail"
+import { ImagePickerSheet } from "../components/ui/ImagePickerSheet"
 import Field from "../components/ui/Field"
 import SelectField from "../components/ui/SelectField"
 import StatusBadge from "../components/ui/StatusBadge"
@@ -38,6 +40,7 @@ import {
   formatTime,
 } from "../lib/format"
 import { createId } from "../lib/id"
+import { useResolvedImageSrc } from "../lib/mediaStore"
 import {
   hasUnpurchasedShoppingItems,
   isUsageInPantry,
@@ -116,6 +119,9 @@ export default function OrderDetailScreen({
   const [financialReason, setFinancialReason] = useState("")
   const [keepRemainderAsFee, setKeepRemainderAsFee] = useState(false)
   const [financialError, setFinancialError] = useState("")
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false)
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
+  const resolvedReferencePhoto = useResolvedImageSrc(order.referencePhoto)
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error"
     message: string
@@ -576,6 +582,62 @@ export default function OrderDetailScreen({
               <p className="mt-2 border-t border-sage-border/70 pt-2 text-xs leading-relaxed text-cocoa">
                 {order.instructions}
               </p>
+            ) : null}
+            {order.referencePhoto ? (
+              <div className="mt-2 flex items-center justify-between gap-2.5 border-t border-sage-border/70 pt-2.5">
+                <button
+                  type="button"
+                  onClick={() => setPhotoViewerOpen(true)}
+                  className="flex min-w-0 items-center gap-2.5 text-left transition active:scale-[0.98]"
+                >
+                  <ItemThumbnail
+                    image={order.referencePhoto}
+                    alt={`Reference photo for ${order.reference}`}
+                    size="xs"
+                  />
+                  <div className="min-w-0">
+                    <span className="block text-xs font-semibold text-cocoa">
+                      Customer reference photo
+                    </span>
+                    <span className="block text-[11px] text-muted">
+                      Tap to view full photo
+                    </span>
+                  </div>
+                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPhotoPickerOpen(true)}
+                    className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-[11px] font-semibold text-cocoa transition hover:bg-ivory"
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      dispatch({
+                        type: "SET_ORDER_REFERENCE_PHOTO",
+                        orderId: order.id,
+                        referencePhoto: undefined,
+                      })
+                    }
+                    className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-[11px] font-semibold text-muted transition hover:text-error"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : order.status !== "Cancelled" ? (
+              <div className="mt-2 border-t border-sage-border/70 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPhotoPickerOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-sage-dark hover:underline"
+                >
+                  <Camera aria-hidden="true" size={13} />
+                  + Attach customer reference photo
+                </button>
+              </div>
             ) : null}
           </div>
 
@@ -1529,13 +1591,51 @@ export default function OrderDetailScreen({
           </div>
         }
       >
-        <p className="text-sm leading-relaxed text-muted">
+          <p className="text-sm leading-relaxed text-muted">
           The new order will start as an unreserved draft. It will not copy old
           payments, preparation progress, reservations, inventory movements,
           finished-stock transactions, or collected/completed status. Current
           recipe details and pricing are used where available; stock is checked
           when you confirm the draft.
         </p>
+      </Dialog>
+
+      <ImagePickerSheet
+        open={photoPickerOpen}
+        value={order.referencePhoto}
+        galleryOnly
+        photoPreset="reference"
+        onSelect={(next) => {
+          dispatch({
+            type: "SET_ORDER_REFERENCE_PHOTO",
+            orderId: order.id,
+            referencePhoto: next,
+          })
+          setPhotoPickerOpen(false)
+        }}
+        onClose={() => setPhotoPickerOpen(false)}
+      />
+
+      <Dialog
+        open={photoViewerOpen}
+        title="Customer reference photo"
+        description={order.reference}
+        onClose={() => setPhotoViewerOpen(false)}
+        footer={
+          <Button fullWidth onClick={() => setPhotoViewerOpen(false)}>
+            Done
+          </Button>
+        }
+      >
+        {resolvedReferencePhoto ? (
+          <img
+            src={resolvedReferencePhoto}
+            alt={`Reference photo for ${order.reference}`}
+            className="max-h-[60vh] w-full rounded-control border border-warm-border object-contain bg-ivory"
+          />
+        ) : (
+          <p className="text-sm text-muted">Loading photo...</p>
+        )}
       </Dialog>
     </div>
   )

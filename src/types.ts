@@ -204,6 +204,7 @@ export type Order = {
   confirmedAt: string | null
   collectedAt?: string | null
   cancellationFee?: number
+  referencePhoto?: string
 }
 
 export type InventoryItem = {

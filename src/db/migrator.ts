@@ -3,9 +3,11 @@ import {
   migration0001InitialSchema,
   type SqlMigration,
 } from "./migrations/0001_initial_schema"
+import { migration0002OrderReferencePhoto } from "./migrations/0002_order_reference_photo"
 
 export const ALL_MIGRATIONS: readonly SqlMigration[] = [
   migration0001InitialSchema,
+  migration0002OrderReferencePhoto,
 ]
 
 export const LATEST_DB_SCHEMA_VERSION =

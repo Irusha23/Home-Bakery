@@ -46,11 +46,12 @@ function encodeCanvas(
 
 /**
  * Compresses a gallery/camera image file on an offscreen canvas to a compact
- * square-friendly thumbnail data URL safe for `localStorage` and JSON backups.
+ * thumbnail or reference photo data URL suitable for local media storage and JSON backups.
  */
 export async function compressImageFile(
   file: File,
   maxDimension = MAX_DIMENSION_PX,
+  maxBytes = MAX_COMPRESSED_BYTES,
 ): Promise<ImageUploadResult> {
   if (!file.type.startsWith("image/")) {
     return { ok: false, error: "Choose an image file (JPG, PNG, or WebP)." }
@@ -80,7 +81,7 @@ export async function compressImageFile(
 
     for (const quality of [0.8, 0.65, 0.5]) {
       const encoded = encodeCanvas(canvas, quality)
-      if (encoded && encoded.length <= MAX_COMPRESSED_BYTES) {
+      if (encoded && encoded.length <= maxBytes) {
         return { ok: true, dataUrl: encoded }
       }
     }

@@ -300,8 +300,8 @@ export class SqliteAppRepository implements AppRepository {
             id, reference, customer_id, customer_name, is_quick_order,
             status, preparation_status, payment_status, collection_date, collection_time,
             instructions, agreed_price, cost_snapshot_json, reservations_json, shortages_json,
-            created_at, updated_at, confirmed_at, collected_at, cancellation_fee, sort_order
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            created_at, updated_at, confirmed_at, collected_at, cancellation_fee, reference_photo, sort_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             order.id,
             order.reference,
@@ -323,6 +323,7 @@ export class SqliteAppRepository implements AppRepository {
             order.confirmedAt,
             order.collectedAt ?? null,
             order.cancellationFee ?? null,
+            order.referencePhoto ?? null,
             oIndex,
           ],
         )
@@ -838,6 +839,7 @@ export class SqliteAppRepository implements AppRepository {
     const orders: Order[] = orderRows.map((row) => {
       const id = asString(row.id)
       const cancellationFee = asNullableNumber(row.cancellation_fee)
+      const referencePhoto = asNullableString(row.reference_photo)
       return {
         id,
         reference: asString(row.reference),
@@ -869,6 +871,7 @@ export class SqliteAppRepository implements AppRepository {
         confirmedAt: asNullableString(row.confirmed_at),
         collectedAt: asNullableString(row.collected_at),
         ...(cancellationFee !== null ? { cancellationFee } : {}),
+        ...(referencePhoto !== null ? { referencePhoto } : {}),
       }
     })
 

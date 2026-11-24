@@ -1,11 +1,12 @@
-import { useRef, useState, type ChangeEvent } from "react"
-import { Check, ImagePlus, Trash2, Upload } from "lucide-react"
+import { useEffect, useRef, useState, type ChangeEvent } from "react"
+import { Camera, Check, ImagePlus, Trash2, Upload } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import {
   getImagePresetsByCategory,
   type ImagePresetCategory,
 } from "../../lib/imageLibrary"
 import { compressImageFile } from "../../lib/imageUpload"
+import { defaultMediaStore } from "../../lib/mediaStore"
 import {
   REDUCED_MOTION_TRANSITION,
   SPRING_PANEL,
@@ -21,17 +22,21 @@ type ImagePickerFieldProps = {
   label?: string
   value?: string
   defaultCategory?: ImagePresetCategory
+  galleryOnly?: boolean
+  photoPreset?: "thumbnail" | "reference"
   onChange: (value: string | undefined) => void
 }
 
 /**
- * Compact inline image selector used inside Product, Recipe, and Inventory
- * editor sheets.
+ * Compact inline image selector used inside Product, Recipe, Inventory, and
+ * Order flows.
  */
 export function ImagePickerField({
   label = "Item photo",
   value,
   defaultCategory = "bakes",
+  galleryOnly = false,
+  photoPreset = "thumbnail",
   onChange,
 }: ImagePickerFieldProps) {
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -49,7 +54,13 @@ export function ImagePickerField({
           <div className="min-w-0">
             <p className="text-xs font-semibold text-cocoa">{label}</p>
             <p className="text-[11px] text-muted">
-              {value ? "Shown on cards & lists" : "Library icon or gallery photo"}
+              {value
+                ? galleryOnly
+                  ? "Attached to this order"
+                  : "Shown on cards & lists"
+                : galleryOnly
+                  ? "Cake design, sketch, or WhatsApp photo"
+                  : "Library icon or gallery photo"}
             </p>
           </div>
         </div>
@@ -79,6 +90,8 @@ export function ImagePickerField({
         open={sheetOpen}
         value={value}
         defaultCategory={defaultCategory}
+        galleryOnly={galleryOnly}
+        photoPreset={photoPreset}
         onSelect={(next) => {
           onChange(next)
           setSheetOpen(false)
@@ -93,6 +106,8 @@ type ImagePickerSheetProps = {
   open: boolean
   value?: string
   defaultCategory?: ImagePresetCategory
+  galleryOnly?: boolean
+  photoPreset?: "thumbnail" | "reference"
   onSelect: (value: string | undefined) => void
   onClose: () => void
 }
@@ -101,16 +116,28 @@ export function ImagePickerSheet({
   open,
   value,
   defaultCategory = "bakes",
+  galleryOnly = false,
+  photoPreset = "thumbnail",
   onSelect,
   onClose,
 }: ImagePickerSheetProps) {
   const reducedMotion = useReducedMotion()
-  const [mode, setMode] = useState<"library" | "gallery">("library")
+  const [mode, setMode] = useState<"library" | "gallery">(
+    galleryOnly ? "gallery" : "library",
+  )
   const [category, setCategory] =
     useState<ImagePresetCategory>(defaultCategory)
   const [uploadError, setUploadError] = useState("")
   const [compressing, setCompressing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setMode(galleryOnly ? "gallery" : "library")
+      setUploadError("")
+    }
+  }, [galleryOnly, open])
 
   const presets = getImagePresetsByCategory(category)
 
@@ -120,35 +147,45 @@ export function ImagePickerSheet({
     if (!file) return
     setUploadError("")
     setCompressing(true)
-    const result = await compressImageFile(file)
-    setCompressing(false)
+    const maxDimension = photoPreset === "reference" ? 720 : 360
+    const maxBytes = photoPreset === "reference" ? 240 * 1024 : 120 * 1024
+    const result = await compressImageFile(file, maxDimension, maxBytes)
     if (!result.ok) {
+      setCompressing(false)
       setUploadError(result.error)
       return
     }
-    onSelect(result.dataUrl)
+    const storedRef = await defaultMediaStore.saveMedia(result.dataUrl)
+    setCompressing(false)
+    onSelect(storedRef)
   }
 
   return (
     <Sheet
       open={open}
-      title="Choose image"
-      subtitle="Pick a food icon or upload from your phone gallery"
+      title={galleryOnly ? "Attach reference photo" : "Choose image"}
+      subtitle={
+        galleryOnly
+          ? "Take a photo or choose from your phone gallery"
+          : "Pick a food icon or upload from your phone gallery"
+      }
       onClose={onClose}
     >
       <div className="space-y-4">
-        <SegmentedControl
-          label="Image source"
-          value={mode}
-          onChange={(next) => setMode(next as "library" | "gallery")}
-          segments={[
-            { value: "library", label: "Library" },
-            { value: "gallery", label: "Gallery" },
-          ]}
-        />
+        {!galleryOnly ? (
+          <SegmentedControl
+            label="Image source"
+            value={mode}
+            onChange={(next) => setMode(next as "library" | "gallery")}
+            segments={[
+              { value: "library", label: "Library" },
+              { value: "gallery", label: "Gallery" },
+            ]}
+          />
+        ) : null}
 
         <TabView viewKey={mode}>
-          {mode === "library" ? (
+          {mode === "library" && !galleryOnly ? (
             <div className="space-y-3">
               <SegmentedControl
                 label="Library category"
@@ -215,24 +252,45 @@ export function ImagePickerSheet({
                 onChange={handleFileChange}
                 className="sr-only"
               />
-              <button
-                type="button"
-                disabled={compressing}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-sage-border bg-ivory/70 px-5 py-8 text-center transition hover:bg-sage-soft/50 active:scale-[0.99] disabled:opacity-60"
-              >
-                <span className="inline-flex size-12 items-center justify-center rounded-full bg-white text-sage-dark shadow-subtle">
-                  <Upload aria-hidden="true" size={20} />
-                </span>
-                <span className="text-sm font-semibold text-cocoa">
-                  {compressing
-                    ? "Compressing photo..."
-                    : "Tap to choose from gallery or camera"}
-                </span>
-                <span className="text-xs text-muted">
-                  Photos are resized automatically so backups stay fast.
-                </span>
-              </button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileChange}
+                className="sr-only"
+              />
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={compressing}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-sage-border bg-ivory/70 px-4 py-6 text-center transition hover:bg-sage-soft/50 active:scale-[0.99] disabled:opacity-60"
+                >
+                  <span className="inline-flex size-11 items-center justify-center rounded-full bg-white text-sage-dark shadow-subtle">
+                    <Upload aria-hidden="true" size={19} />
+                  </span>
+                  <span className="text-sm font-semibold text-cocoa">
+                    {compressing ? "Saving photo..." : "Choose from gallery"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={compressing}
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-sage-border bg-ivory/70 px-4 py-6 text-center transition hover:bg-sage-soft/50 active:scale-[0.99] disabled:opacity-60"
+                >
+                  <span className="inline-flex size-11 items-center justify-center rounded-full bg-white text-sage-dark shadow-subtle">
+                    <Camera aria-hidden="true" size={19} />
+                  </span>
+                  <span className="text-sm font-semibold text-cocoa">
+                    {compressing ? "Saving photo..." : "Take photo"}
+                  </span>
+                </button>
+              </div>
+              <p className="text-center text-xs text-muted">
+                Photos are resized and stored locally on this device so backups stay fast.
+              </p>
 
               {uploadError ? (
                 <p role="alert" className="text-xs font-medium text-error">

@@ -9,6 +9,7 @@ import Card from "../components/ui/Card"
 import CheckboxField from "../components/ui/CheckboxField"
 import Dialog from "../components/ui/Dialog"
 import Field from "../components/ui/Field"
+import { ImagePickerField } from "../components/ui/ImagePickerSheet"
 import MoneyText from "../components/ui/MoneyText"
 import QuantityControl from "../components/ui/QuantityControl"
 import SegmentedControl from "../components/ui/SegmentedControl"
@@ -137,6 +138,9 @@ export default function CreateOrderFlow({
     order?.collectionTime || "15:00",
   )
   const [instructions, setInstructions] = useState(order?.instructions ?? "")
+  const [referencePhoto, setReferencePhoto] = useState<string | undefined>(
+    order?.referencePhoto,
+  )
   const [agreedPrice, setAgreedPrice] = useState(
     order?.agreedPrice ? String(order.agreedPrice) : "",
   )
@@ -296,6 +300,7 @@ export default function CreateOrderFlow({
       collectionDate,
       collectionTime,
       instructions: instructions.trim(),
+      ...(referencePhoto ? { referencePhoto } : {}),
       lines: resolvedLines,
       agreedPrice: Math.round(effectiveAgreedPrice),
       costSnapshot,
@@ -745,6 +750,14 @@ export default function CreateOrderFlow({
             + Add special notes
           </button>
         )}
+
+        <ImagePickerField
+          label="Customer reference photo"
+          value={referencePhoto}
+          galleryOnly
+          photoPreset="reference"
+          onChange={setReferencePhoto}
+        />
       </Card>
 
       <Card className="space-y-3">

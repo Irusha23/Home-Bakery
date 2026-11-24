@@ -98,6 +98,11 @@ type AppAction =
   | { type: "COLLECT_ORDER"; orderId: string }
   | { type: "REPEAT_ORDER"; orderId: string; newOrderId: string }
   | {
+      type: "SET_ORDER_REFERENCE_PHOTO"
+      orderId: string
+      referencePhoto?: string
+    }
+  | {
       type: "RECORD_PAYMENT"
       orderId: string
       orderReference: string
@@ -1030,8 +1035,9 @@ export function reducer(state: AppData, action: AppAction): AppData {
         }
       })
       const costSnapshot = calculateCostSnapshot(lines)
+      const { referencePhoto: _ignoredRefPhoto, ...repeatSource } = source
       const order: Order = {
-        ...source,
+        ...repeatSource,
         id: action.newOrderId,
         reference: makeReference(state.orders),
         status: "Draft",
@@ -1053,6 +1059,30 @@ export function reducer(state: AppData, action: AppAction): AppData {
       return {
         ...state,
         orders: [order, ...state.orders],
+      }
+    }
+
+    case "SET_ORDER_REFERENCE_PHOTO": {
+      const target = state.orders.find((item) => item.id === action.orderId)
+      if (!target) return state
+      const now = new Date().toISOString()
+      return {
+        ...state,
+        orders: state.orders.map((item) => {
+          if (item.id !== action.orderId) return item
+          if (!action.referencePhoto) {
+            const { referencePhoto: _removed, ...rest } = item
+            return {
+              ...rest,
+              updatedAt: now,
+            }
+          }
+          return {
+            ...item,
+            referencePhoto: action.referencePhoto,
+            updatedAt: now,
+          }
+        }),
       }
     }
 

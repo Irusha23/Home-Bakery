@@ -1,9 +1,6 @@
 import { Image as ImageIcon } from "lucide-react"
-import {
-  getImagePreset,
-  isDataImageUrl,
-  type ImagePreset,
-} from "../../lib/imageLibrary"
+import { getImagePreset, type ImagePreset } from "../../lib/imageLibrary"
+import { useResolvedImageSrc } from "../../lib/mediaStore"
 
 type ThumbnailSize = "xs" | "sm" | "md" | "lg"
 
@@ -378,7 +375,8 @@ export default function ItemThumbnail({
   showPlaceholder = false,
 }: ItemThumbnailProps) {
   const preset = getImagePreset(image)
-  const isPhoto = isDataImageUrl(image)
+  const resolvedPhotoSrc = useResolvedImageSrc(image)
+  const isPhoto = Boolean(resolvedPhotoSrc)
 
   if (!preset && !isPhoto) {
     if (!showPlaceholder) return null
@@ -396,9 +394,9 @@ export default function ItemThumbnail({
     <div
       className={`shrink-0 overflow-hidden border border-warm-border/75 bg-white shadow-subtle ${SIZE_CLASSES[size]} ${className}`.trim()}
     >
-      {isPhoto ? (
+      {resolvedPhotoSrc ? (
         <img
-          src={image}
+          src={resolvedPhotoSrc}
           alt={alt}
           className="h-full w-full object-cover"
           loading="lazy"

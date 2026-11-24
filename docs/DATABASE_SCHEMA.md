@@ -1,6 +1,6 @@
 # Udeni's Specials — On-Device SQLite Database Schema
 
-**Schema Version:** `1` (`0001_initial_schema`)  
+**Schema Version:** `2` (`0002_order_reference_photo`)  
 **Target Engines:** On-device SQLite 3 via `@capacitor-community/sqlite` (Android `.apk`) and `node:sqlite` (Vitest verification suite), with an `IndexedDB` key-value fallback adapter (`IndexedDbAppRepository`) for browser development.  
 **Related ADRs:** `docs/ARCHITECTURE_DECISIONS.md` (ADR-002, ADR-003, ADR-006, ADR-007)
 
@@ -278,7 +278,7 @@ erDiagram
 ### 3.3 Orders, Production & Finished Stock
 | Table | Primary Key | Foreign Keys & Constraints |
 |---|---|---|
-| `orders` | `id` | `reference UNIQUE`, `customer_id -> customers(id) ON DELETE SET NULL`, `status`, `preparation_status`, `payment_status` enums, `agreed_price >= 0`, immutable JSON snapshots |
+| `orders` | `id` | `reference UNIQUE`, `customer_id -> customers(id) ON DELETE SET NULL`, `status`, `preparation_status`, `payment_status` enums, `agreed_price >= 0`, `reference_photo TEXT`, immutable JSON snapshots |
 | `order_lines` | `id` | `order_id -> orders(id) ON DELETE CASCADE`, `quantity > 0`, `recipe_snapshot_json` |
 | `preparation_records` | `id` | `order_id -> orders(id) ON DELETE CASCADE`, `UNIQUE (order_id, order_line_id)`, `planned_quantity > 0`, `status IN ('Awaiting preparation', 'In progress', 'Ready', 'Cancelled')` |
 | `extra_stock_plans` | `id` | `quantity > 0`, `recipe_snapshot_json` |
