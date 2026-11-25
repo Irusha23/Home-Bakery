@@ -32,7 +32,7 @@ import HomeScreen from "./screens/HomeScreen"
 import KitchenScreen from "./screens/KitchenScreen"
 import MoneyScreen from "./screens/MoneyScreen"
 import OrdersScreen from "./screens/OrdersScreen"
-import SettingsScreen from "./screens/SettingsScreen"
+import SettingsScreen, { type SettingsSection } from "./screens/SettingsScreen"
 import type { StarterAction, TabId } from "./types"
 
 function AppContent() {
@@ -42,6 +42,7 @@ function AppContent() {
     useNavigationStack("today")
   const [isUpdatesOpen, setIsUpdatesOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("root")
   const [focusedScreen, setFocusedScreen] = useState(false)
   const [orderIntent, setOrderIntent] = useState<string | undefined>()
   const [preparationIntent, setPreparationIntent] = useState<string | undefined>()
@@ -181,6 +182,7 @@ function AppContent() {
     }
     if (isSettingsOpen) {
       setIsSettingsOpen(false)
+      setSettingsSection("root")
       return
     }
     if (activeTab !== "today") {
@@ -208,7 +210,10 @@ function AppContent() {
         <HomeScreen
           onNavigate={navigate}
           onOpenUpdates={() => setIsUpdatesOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => {
+            setSettingsSection("root")
+            setIsSettingsOpen(true)
+          }}
           onOpenOrder={openOrder}
           onStartPreparation={openPreparation}
           unreadAlertCount={unreadAttentionCount}
@@ -257,6 +262,7 @@ function AppContent() {
         hideNavigation={focusedScreen || isSettingsOpen}
         onNavigate={(tab) => {
           setIsSettingsOpen(false)
+          setSettingsSection("root")
           navigate(tab)
         }}
       >
@@ -265,7 +271,13 @@ function AppContent() {
           isDetail={isSettingsOpen}
         >
           {isSettingsOpen ? (
-            <SettingsScreen onBack={() => setIsSettingsOpen(false)} />
+            <SettingsScreen
+              initialSection={settingsSection}
+              onBack={() => {
+                setIsSettingsOpen(false)
+                setSettingsSection("root")
+              }}
+            />
           ) : (
             <TabView viewKey={activeTab}>{renderTabScreen()}</TabView>
           )}
@@ -360,6 +372,7 @@ function AppContent() {
                               )
                               setIsUpdatesOpen(false)
                               if (item.kind === "backup") {
+                                setSettingsSection("backup")
                                 setIsSettingsOpen(true)
                               } else if (item.orderId) {
                                 openOrder(item.orderId)

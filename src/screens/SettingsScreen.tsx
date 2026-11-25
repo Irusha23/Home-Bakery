@@ -1,14 +1,18 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { Capacitor } from "@capacitor/core"
 import { Share } from "@capacitor/share"
 import {
   BellOff,
+  Calculator,
   Download,
+  Info,
   RefreshCw,
   RotateCcw,
   Save,
   Share2,
   ShieldAlert,
+  ShieldCheck,
+  Store,
 } from "lucide-react"
 import BackupRestorePanel from "../components/BackupRestorePanel"
 import ScreenHeader from "../components/ScreenHeader"
@@ -17,6 +21,7 @@ import Card from "../components/ui/Card"
 import Dialog from "../components/ui/Dialog"
 import Field from "../components/ui/Field"
 import { GroupedList, ListRow } from "../components/ui/GroupedList"
+import { PushView } from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import { useToast } from "../components/ui/Toast"
@@ -26,17 +31,56 @@ import {
   checkForAppUpdate,
   type UpdateCheckResult,
 } from "../lib/appVersion"
+import { useBackHandler } from "../lib/backStack"
 import { LATEST_DB_SCHEMA_VERSION } from "../db/migrator"
 import { formatDate, formatLkr } from "../lib/format"
 import { calculateSuggestedPrice } from "../lib/pricing"
+import { sanitizeNumericDraft } from "../lib/quantityInput"
 import { useAppState } from "../state/AppState"
 import type { PricingMode } from "../types"
 
+export type SettingsSection =
+  | "root"
+  | "profile"
+  | "pricing"
+  | "backup"
+  | "reset"
+  | "about"
+
 type SettingsScreenProps = {
+  initialSection?: SettingsSection
   onBack: () => void
 }
 
-export default function SettingsScreen({ onBack }: SettingsScreenProps) {
+function SettingsRowIcon({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode
+  tone?: "sage" | "warm" | "danger" | "neutral"
+}) {
+  const toneClass =
+    tone === "sage"
+      ? "bg-sage-soft text-sage-dark"
+      : tone === "danger"
+        ? "bg-error-soft text-error"
+        : tone === "warm"
+          ? "bg-ivory text-cocoa"
+          : "bg-neutral-soft text-muted"
+
+  return (
+    <span
+      className={`inline-flex size-8 items-center justify-center rounded-lg ${toneClass}`}
+    >
+      {children}
+    </span>
+  )
+}
+
+export default function SettingsScreen({
+  initialSection = "root",
+  onBack,
+}: SettingsScreenProps) {
   const {
     state,
     dispatch,
@@ -46,6 +90,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   } = useAppState()
   const { showToast } = useToast()
 
+  const [activePage, setActivePage] = useState<SettingsSection>(initialSection)
   const [businessName, setBusinessName] = useState(state.settings.businessName)
   const [ownerName, setOwnerName] = useState(state.settings.ownerName)
   const [labourRate, setLabourRate] = useState(
@@ -70,6 +115,31 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     null,
   )
 
+  useEffect(() => {
+    setActivePage(initialSection)
+  }, [initialSection])
+
+  useEffect(() => {
+    setBusinessName(state.settings.businessName)
+    setOwnerName(state.settings.ownerName)
+    setLabourRate(String(state.settings.defaultLabourRatePerHour))
+    setPricingMode(state.settings.defaultPricingMode)
+    setMarginPercent(String(state.settings.defaultMarginPercent))
+    setMarkupPercent(String(state.settings.defaultMarkupPercent))
+    setRoundingStep(state.settings.priceRoundingStep)
+  }, [state.settings])
+
+  const openPage = useCallback((section: SettingsSection) => {
+    setError("")
+    setActivePage(section)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }, [])
+
+  useBackHandler(() => {
+    openPage("root")
+    return true
+  }, activePage !== "root")
+
   const handleCheckUpdate = async () => {
     if (checkingUpdate) return
     setCheckingUpdate(true)
@@ -84,25 +154,31 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   }
 
-  useEffect(() => {
-    setBusinessName(state.settings.businessName)
-    setOwnerName(state.settings.ownerName)
-    setLabourRate(String(state.settings.defaultLabourRatePerHour))
-    setPricingMode(state.settings.defaultPricingMode)
-    setMarginPercent(String(state.settings.defaultMarginPercent))
-    setMarkupPercent(String(state.settings.defaultMarkupPercent))
-    setRoundingStep(state.settings.priceRoundingStep)
-  }, [state.settings])
-
-  const handleSaveSettings = () => {
+  const handleSaveProfile = () => {
     const trimmedBusiness = businessName.trim()
     if (!trimmedBusiness) {
       setError("Business name cannot be blank.")
       return
     }
-    const parsedLabour = Number(labourRate)
-    const parsedMargin = Number(marginPercent)
-    const parsedMarkup = Number(markupPercent)
+    const accepted = dispatchIfAccepted({
+      type: "UPDATE_SETTINGS",
+      patch: {
+        businessName: trimmedBusiness,
+        ownerName: ownerName.trim(),
+      },
+    })
+    if (!accepted) {
+      setError("Profile could not be saved.")
+      return
+    }
+    setError("")
+    showToast({ message: "Business profile saved", tone: "success" })
+  }
+
+  const handleSavePricing = () => {
+    const parsedLabour = labourRate.trim() === "" ? 0 : Number(labourRate)
+    const parsedMargin = marginPercent.trim() === "" ? 0 : Number(marginPercent)
+    const parsedMarkup = markupPercent.trim() === "" ? 0 : Number(markupPercent)
 
     if (!Number.isFinite(parsedLabour) || parsedLabour < 0) {
       setError("Labour rate per hour must be 0 or greater.")
@@ -124,8 +200,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     const accepted = dispatchIfAccepted({
       type: "UPDATE_SETTINGS",
       patch: {
-        businessName: trimmedBusiness,
-        ownerName: ownerName.trim(),
         defaultLabourRatePerHour: Math.round(parsedLabour),
         defaultPricingMode: pricingMode,
         defaultMarginPercent: parsedMargin,
@@ -135,11 +209,11 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     })
 
     if (!accepted) {
-      setError("Settings could not be saved. Review the values and try again.")
+      setError("Pricing defaults could not be saved.")
       return
     }
     setError("")
-    showToast({ message: "Settings saved", tone: "success" })
+    showToast({ message: "Pricing & labour saved", tone: "success" })
   }
 
   const snoozeReminder = () => {
@@ -182,14 +256,110 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       ? `Snoozed until ${formatDate(state.settings.backupReminderSnoozedUntil.slice(0, 10))}`
       : "Active every 7 days"
 
-  return (
-    <div className="pb-8 space-y-5">
+  const lastBackupSummary = state.settings.lastBackupAt
+    ? formatDate(state.settings.lastBackupAt.slice(0, 10))
+    : "Not yet"
+
+  const pricingSummary = `${
+    state.settings.defaultPricingMode === "margin"
+      ? `${state.settings.defaultMarginPercent}% of price`
+      : `${state.settings.defaultMarkupPercent}% on cost`
+  } · ${formatLkr(state.settings.defaultLabourRatePerHour)}/hr · ${
+    state.settings.priceRoundingStep === 1
+      ? "Exact"
+      : `Nearest ${state.settings.priceRoundingStep}`
+  }`
+
+  const renderRoot = () => (
+    <div className="space-y-5 pb-8">
       <ScreenHeader
-        eyebrow="Kitchen preferences"
         title="Settings"
-        subtitle="Defaults, pricing rules, and local backups"
         onBack={onBack}
         backLabel="Back to Today"
+      />
+
+      <GroupedList>
+        <ListRow
+          leading={
+            <span className="inline-flex size-10 items-center justify-center rounded-xl bg-sage-soft text-sage-dark">
+              <Store aria-hidden="true" size={20} />
+            </span>
+          }
+          title={state.settings.businessName}
+          subtitle={
+            state.settings.ownerName.trim()
+              ? `Owner: ${state.settings.ownerName} · Business profile`
+              : "Business profile"
+          }
+          showChevron
+          onClick={() => openPage("profile")}
+        />
+      </GroupedList>
+
+      <GroupedList title="Preferences">
+        <ListRow
+          leading={
+            <SettingsRowIcon tone="warm">
+              <Calculator aria-hidden="true" size={17} />
+            </SettingsRowIcon>
+          }
+          title="Pricing & labour"
+          subtitle={pricingSummary}
+          showChevron
+          onClick={() => openPage("pricing")}
+        />
+      </GroupedList>
+
+      <GroupedList title="Data & storage">
+        <ListRow
+          leading={
+            <SettingsRowIcon tone="sage">
+              <ShieldCheck aria-hidden="true" size={17} />
+            </SettingsRowIcon>
+          }
+          title="Backup & restore"
+          subtitle={`Last backup: ${lastBackupSummary} · ${reminderStatusLabel}`}
+          showChevron
+          onClick={() => openPage("backup")}
+        />
+        <ListRow
+          leading={
+            <SettingsRowIcon tone="danger">
+              <RotateCcw aria-hidden="true" size={17} />
+            </SettingsRowIcon>
+          }
+          title="Reset workspace"
+          subtitle="Clear data or load starter sample"
+          showChevron
+          onClick={() => openPage("reset")}
+        />
+      </GroupedList>
+
+      <GroupedList title="App">
+        <ListRow
+          leading={
+            <SettingsRowIcon tone="neutral">
+              <Info aria-hidden="true" size={17} />
+            </SettingsRowIcon>
+          }
+          title="About & updates"
+          subtitle="Version, storage & update check"
+          value={`v${APP_VERSION}`}
+          showChevron
+          onClick={() => openPage("about")}
+        />
+      </GroupedList>
+    </div>
+  )
+
+  const renderProfile = () => (
+    <div className="space-y-5 pb-8">
+      <ScreenHeader
+        title="Business profile"
+        subtitle="Shown in your greeting and exports"
+        onBack={() => openPage("root")}
+        backLabel="Settings"
+        compact
       />
 
       {error ? (
@@ -202,14 +372,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       ) : null}
 
       <Card className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-cocoa">
-            Business profile
-          </h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Shown in your greeting and exported summaries.
-          </p>
-        </div>
         <Field
           label="Business name"
           value={businessName}
@@ -228,158 +390,188 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         />
       </Card>
 
-      <Card className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-cocoa">
-            Pricing & labour defaults
-          </h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Pre-fills pricing suggestions when quoting new orders.
-          </p>
-        </div>
-        <Field
-          label="Default labour rate (LKR / hour)"
-          type="number"
-          min="0"
-          step="50"
-          inputMode="numeric"
-          value={labourRate}
-          onChange={(event) => {
-            setLabourRate(event.target.value)
-            setError("")
-          }}
-        />
-        <SegmentedControl
-          label="Default pricing mode"
-          value={pricingMode}
-          onChange={(value) => setPricingMode(value as PricingMode)}
-          segments={[
-            { value: "margin", label: "% of price" },
-            { value: "markup", label: "% on cost" },
-          ]}
-        />
-        {(() => {
-          const parsedMargin = Number(marginPercent)
-          const parsedMarkup = Number(markupPercent)
-          const example = calculateSuggestedPrice(
-            1000,
-            pricingMode === "margin"
-              ? {
-                  mode: "margin",
-                  marginPercent: Number.isFinite(parsedMargin) ? parsedMargin : 0,
-                  markupPercent: 0,
-                  roundingStep,
-                }
-              : {
-                  mode: "markup",
-                  marginPercent: 0,
-                  markupPercent: Number.isFinite(parsedMarkup) ? parsedMarkup : 0,
-                  roundingStep,
-                },
-          )
-          if (pricingMode === "margin") {
-            return (
-              <Field
-                label="Profit out of selling price (%)"
-                type="number"
-                min="0"
-                max="99"
-                step="1"
-                inputMode="decimal"
-                value={marginPercent}
-                onChange={(event) => {
-                  setMarginPercent(event.target.value)
-                  setError("")
-                }}
-                helperText={
-                  example.valid
-                    ? `Example: Rs. 1,000 cost → sell at ${formatLkr(example.suggestedPrice)} (${Number.isFinite(parsedMargin) ? parsedMargin : 0}% of price is profit)`
-                    : "Enter a percentage below 100%."
-                }
-              />
-            )
+      <Button
+        fullWidth
+        leadingIcon={<Save aria-hidden="true" size={17} />}
+        onClick={handleSaveProfile}
+      >
+        Save profile
+      </Button>
+    </div>
+  )
+
+  const renderPricing = () => {
+    const parsedMargin = marginPercent.trim() === "" ? 0 : Number(marginPercent)
+    const parsedMarkup = markupPercent.trim() === "" ? 0 : Number(markupPercent)
+    const example = calculateSuggestedPrice(
+      1000,
+      pricingMode === "margin"
+        ? {
+            mode: "margin",
+            marginPercent: Number.isFinite(parsedMargin) ? parsedMargin : 0,
+            markupPercent: 0,
+            roundingStep,
           }
-          return (
+        : {
+            mode: "markup",
+            marginPercent: 0,
+            markupPercent: Number.isFinite(parsedMarkup) ? parsedMarkup : 0,
+            roundingStep,
+          },
+    )
+
+    return (
+      <div className="space-y-5 pb-8">
+        <ScreenHeader
+          title="Pricing & labour"
+          subtitle="Default rules for recipes and new orders"
+          onBack={() => openPage("root")}
+          backLabel="Settings"
+          compact
+        />
+
+        {error ? (
+          <div
+            className="rounded-control border border-error-border bg-error-soft p-3 text-sm text-cocoa"
+            role="alert"
+          >
+            {error}
+          </div>
+        ) : null}
+
+        <Card className="space-y-4">
+          <Field
+            label="Default labour rate (LKR / hour)"
+            type="text"
+            inputMode="numeric"
+            placeholder="0"
+            value={labourRate}
+            onChange={(event) => {
+              setLabourRate(sanitizeNumericDraft(event.target.value, false))
+              setError("")
+            }}
+          />
+          <SegmentedControl
+            label="Default pricing mode"
+            value={pricingMode}
+            onChange={(value) => setPricingMode(value as PricingMode)}
+            segments={[
+              { value: "margin", label: "% of price" },
+              { value: "markup", label: "% on cost" },
+            ]}
+          />
+          {pricingMode === "margin" ? (
             <Field
-              label="Extra added on cost (%)"
-              type="number"
-              min="0"
-              step="1"
+              label="Profit out of selling price (%)"
+              type="text"
               inputMode="decimal"
-              value={markupPercent}
+              placeholder="0"
+              value={marginPercent}
               onChange={(event) => {
-                setMarkupPercent(event.target.value)
+                setMarginPercent(sanitizeNumericDraft(event.target.value, true))
                 setError("")
               }}
               helperText={
                 example.valid
-                  ? `Example: Rs. 1,000 cost → sell at ${formatLkr(example.suggestedPrice)} (+${Number.isFinite(parsedMarkup) ? parsedMarkup : 0}% added on top)`
+                  ? `Example: Rs. 1,000 cost → sell at ${formatLkr(example.suggestedPrice)} (${parsedMargin}% of price is profit)`
+                  : "Enter a percentage below 100%."
+              }
+            />
+          ) : (
+            <Field
+              label="Extra added on cost (%)"
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              value={markupPercent}
+              onChange={(event) => {
+                setMarkupPercent(sanitizeNumericDraft(event.target.value, true))
+                setError("")
+              }}
+              helperText={
+                example.valid
+                  ? `Example: Rs. 1,000 cost → sell at ${formatLkr(example.suggestedPrice)} (+${parsedMarkup}% added on top)`
                   : "Enter 0% or higher."
               }
             />
-          )
-        })()}
-        <SelectField
-          label="Round suggested prices to nearest"
-          value={String(roundingStep)}
-          onChange={(event) =>
-            setRoundingStep(Number(event.target.value) as 1 | 50 | 100)
+          )}
+          <SelectField
+            label="Round suggested prices to nearest"
+            value={String(roundingStep)}
+            onChange={(event) =>
+              setRoundingStep(Number(event.target.value) as 1 | 50 | 100)
+            }
+            options={[
+              { value: "1", label: "Exact LKR 1" },
+              { value: "50", label: "Nearest LKR 50" },
+              { value: "100", label: "Nearest LKR 100" },
+            ]}
+          />
+        </Card>
+
+        <Button
+          fullWidth
+          leadingIcon={<Save aria-hidden="true" size={17} />}
+          onClick={handleSavePricing}
+        >
+          Save pricing defaults
+        </Button>
+      </div>
+    )
+  }
+
+  const renderBackup = () => (
+    <div className="space-y-5 pb-8">
+      <ScreenHeader
+        title="Backup & restore"
+        subtitle="Schedule, reminders, and encrypted backups"
+        onBack={() => openPage("root")}
+        backLabel="Settings"
+        compact
+      />
+
+      <GroupedList title="Schedule">
+        <ListRow title="Last backup exported" value={lastBackupSummary} />
+        <ListRow title="Weekly reminder" value={reminderStatusLabel} />
+        <ListRow
+          leading={
+            <BellOff aria-hidden="true" size={17} className="text-muted" />
           }
-          options={[
-            { value: "1", label: "Exact LKR 1" },
-            { value: "50", label: "Nearest LKR 50" },
-            { value: "100", label: "Nearest LKR 100" },
-          ]}
+          title="Snooze backup reminder for 7 days"
+          onClick={snoozeReminder}
         />
-      </Card>
-
-      <Button
-        fullWidth
-        leadingIcon={<Save aria-hidden="true" size={17} />}
-        onClick={handleSaveSettings}
-      >
-        Save all preferences
-      </Button>
-
-      <section className="space-y-3 pt-2">
-        <GroupedList title="Data & backup schedule">
-          <ListRow
-            title="Last backup exported"
-            value={
-              state.settings.lastBackupAt
-                ? formatDate(state.settings.lastBackupAt.slice(0, 10))
-                : "Not yet"
-            }
-          />
-          <ListRow title="Weekly reminder" value={reminderStatusLabel} />
-          <ListRow
-            leading={
-              <BellOff aria-hidden="true" size={17} className="text-muted" />
-            }
-            title="Snooze backup reminder for 7 days"
-            onClick={snoozeReminder}
-          />
-          <ListRow
-            title={
-              state.settings.backupReminderDismissedAt
-                ? "Re-enable weekly backup reminders"
-                : "Turn off backup reminders"
-            }
-            onClick={toggleDismissReminder}
-          />
-        </GroupedList>
-
-        <BackupRestorePanel
-          data={state}
-          onRestore={restoreBackupFromRaw}
-          onExportComplete={(exportedAt) => {
-            dispatch({ type: "RECORD_BACKUP_EXPORT", exportedAt })
-            showToast({ message: "Backup exported", tone: "success" })
-          }}
+        <ListRow
+          title={
+            state.settings.backupReminderDismissedAt
+              ? "Re-enable weekly backup reminders"
+              : "Turn off backup reminders"
+          }
+          onClick={toggleDismissReminder}
         />
-      </section>
+      </GroupedList>
 
-      <Card className="border-error/25 bg-error-soft/40 space-y-3">
+      <BackupRestorePanel
+        data={state}
+        onRestore={restoreBackupFromRaw}
+        onExportComplete={(exportedAt) => {
+          dispatch({ type: "RECORD_BACKUP_EXPORT", exportedAt })
+          showToast({ message: "Backup exported", tone: "success" })
+        }}
+      />
+    </div>
+  )
+
+  const renderReset = () => (
+    <div className="space-y-5 pb-8">
+      <ScreenHeader
+        title="Reset workspace"
+        subtitle="Clear all records or load sample data"
+        onBack={() => openPage("root")}
+        backLabel="Settings"
+        compact
+      />
+
+      <Card className="space-y-3 border-error/25 bg-error-soft/40">
         <div className="flex items-start gap-2.5">
           <ShieldAlert
             aria-hidden="true"
@@ -388,16 +580,16 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           />
           <div>
             <h2 className="text-sm font-semibold text-cocoa">
-              Reset workspace
+              Before resetting
             </h2>
-            <p className="mt-0.5 text-xs text-muted">
-              Start with a completely blank workspace or load the minimal
-              1-item starter sample. Export a backup first if you want to keep
-              your changes.
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              Start with a completely blank workspace or load the minimal 1-item
+              starter sample. Export a backup first if you want to keep your
+              changes.
             </p>
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 pt-1">
           <Button
             fullWidth
             variant="secondary"
@@ -416,8 +608,20 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           </Button>
         </div>
       </Card>
+    </div>
+  )
 
-      <GroupedList title="About">
+  const renderAbout = () => (
+    <div className="space-y-5 pb-8">
+      <ScreenHeader
+        title="About & updates"
+        subtitle="Version, storage engine, and updates"
+        onBack={() => openPage("root")}
+        backLabel="Settings"
+        compact
+      />
+
+      <GroupedList>
         <ListRow
           title="App version"
           value={`v${APP_VERSION} (Build ${APP_BUILD_CODE})`}
@@ -445,7 +649,9 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             <RefreshCw
               aria-hidden="true"
               size={16}
-              className={checkingUpdate ? "animate-spin text-sage-dark" : "text-muted"}
+              className={
+                checkingUpdate ? "animate-spin text-sage-dark" : "text-muted"
+              }
             />
           }
           title={checkingUpdate ? "Checking for updates..." : "Check for updates"}
@@ -533,6 +739,24 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           )}
         </Card>
       ) : null}
+    </div>
+  )
+
+  return (
+    <>
+      <PushView viewKey={activePage} isDetail={activePage !== "root"}>
+        {activePage === "root"
+          ? renderRoot()
+          : activePage === "profile"
+            ? renderProfile()
+            : activePage === "pricing"
+              ? renderPricing()
+              : activePage === "backup"
+                ? renderBackup()
+                : activePage === "reset"
+                  ? renderReset()
+                  : renderAbout()}
+      </PushView>
 
       <Dialog
         open={resetMode !== null}
@@ -586,6 +810,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             : "All current records on this device will be replaced with the minimal 1-customer, 1-product, 1-recipe, 1-order starter sample."}
         </p>
       </Dialog>
-    </div>
+    </>
   )
 }
