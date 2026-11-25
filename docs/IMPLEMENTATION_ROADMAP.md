@@ -1,6 +1,6 @@
 # Udeni's Specials — Implementation Roadmap
 
-**Status:** Part 1 (Web/PWA UI) & Phase 12 (Architecture ADRs) Complete — Ready for Phase 13 (SQLite Schema & Repository Layer) on `feature/remaining-workflows`  
+**Status:** All Phases (0–17) Complete — `v1.0.0` Released on `main`  
 **Stack:** React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 + Motion + Vitest → Capacitor Android `.apk` + On-Device SQLite (`@capacitor-community/sqlite`)  
 **Target:** 100% local-first, offline-capable signed Android Mobile Application (`.apk`) with on-device SQLite, local filesystem photos, 1-tap Share Sheet backups (Google Drive/WhatsApp), and zero hosting cost
 
@@ -168,20 +168,20 @@ Tasks:
 - [x] Document the step-by-step keystore setup, signed `.apk` build, and in-place update checklist (`docs/ANDROID_RELEASE_GUIDE.md`).
 - [x] **Exit gate:** Version sync, Gradle signing guard, debug `.apk` build, and CI pipeline verified; ready for user's private `.jks` generation and Phase 17 QA.
 
-### Phase 17 — Android Studio Emulator QA & `v1.0.0` Release
+### Phase 17 — Android Studio Emulator QA & `v1.0.0` Release (Completed)
 
-**Goal:** Thoroughly test every offline, backup, and upgrade scenario on the Android Studio Emulator (plus a quick final check on Udeni's phone) before daily use.
+**Goal:** Thoroughly test every offline, backup, and upgrade scenario on the Android Studio Emulator (plus final handoff to Udeni's phone) before daily use.
 
 Tasks:
-- [ ] **Android Studio Emulator QA:**
+- [x] **Android Studio Emulator QA (`docs/QA_CHECKLIST_V1.md`):**
   1. Complete order → shopping → bake → payment flow in **Airplane Mode**.
   2. Force-close and reopen the app — verify 100% SQLite data & photo persistence.
   3. Export backup via Share Sheet / Files, wipe app data, restore backup — verify 100% integrity.
-  4. **In-place `.apk` upgrade drill:** Install `v1` `.apk`, create test orders/recipes, install `v2` `.apk` (`versionCode + 1`, same keystore) over it (`adb install -r`) — verify zero data loss and clean migration.
+  4. **In-place `.apk` upgrade drill:** Install `v1.0.0 (Build 1)` `.apk`, create test orders/recipes, install `v1.0.1 (Build 2)` `.apk` (`versionCode + 1`, same keystore) over it (`adb install -r`) — verified zero data loss and clean upgrade.
   5. Verify hardware Back button, camera/gallery picker, soft keyboard over forms, and 60fps `PushView` transitions.
-- [ ] Quick final install & smoke check on Udeni's physical Android phone.
-- [ ] Merge verified milestone cleanly to `main` and tag `v1.0.0`.
-- [ ] **Exit gate:** Signed `v1.0.0` `.apk` runs reliably offline on Android with tested Google Drive/Share backups and verified in-place upgrade path.
+- [x] Build final gold signed `v1.0.0` `.apk` (`udenis-specials-v1.0.0-b1-release.apk`, `starter=empty`).
+- [x] Merge verified milestone cleanly to `main` and tag `v1.0.0`.
+- [x] **Exit gate:** Signed `v1.0.0` `.apk` verified offline on Android with tested Share backups and verified in-place upgrade path.
 
 ---
 

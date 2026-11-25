@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -13,7 +14,7 @@ if (!mode) {
   process.exit(1)
 }
 
-function run(command, args, cwd = ROOT_DIR) {
+function run(command, args, cwd = ROOT_DIR, extraEnv = {}) {
   const isWin = process.platform === "win32"
   const isBatch = isWin && /\.(bat|cmd)$/i.test(command)
   const execCmd = isBatch ? process.env.ComSpec || "cmd.exe" : command
@@ -21,6 +22,7 @@ function run(command, args, cwd = ROOT_DIR) {
 
   const result = spawnSync(execCmd, execArgs, {
     cwd,
+    env: { ...process.env, ...extraEnv },
     stdio: "inherit",
     shell: false,
   })
@@ -67,8 +69,15 @@ const gradleTask = mode === "release" ? "assembleRelease" : "assembleDebug"
 const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew"
 
-console.log(`1/3 Building web bundle for v${versionInfo.version} (build ${versionInfo.versionCode})...`)
-run(pnpmCmd, ["build"])
+const buildEnv =
+  mode === "release"
+    ? { VITE_STARTER_MODE: process.env.VITE_STARTER_MODE ?? "empty" }
+    : {}
+
+console.log(
+  `1/3 Building web bundle for v${versionInfo.version} (build ${versionInfo.versionCode}, starter=${buildEnv.VITE_STARTER_MODE ?? "default"})...`,
+)
+run(pnpmCmd, ["build"], ROOT_DIR, buildEnv)
 
 console.log("2/3 Syncing Capacitor Android project...")
 run(pnpmCmd, ["exec", "cap", "sync", "android"])
@@ -85,7 +94,9 @@ if (!fs.existsSync(apkPath)) {
 }
 
 const sizeMb = (fs.statSync(apkPath).size / (1024 * 1024)).toFixed(2)
+const sha256 = crypto.createHash("sha256").update(fs.readFileSync(apkPath)).digest("hex")
 console.log(`\nAPK built successfully: ${apkPath} (${sizeMb} MB)`)
+console.log(`SHA-256: ${sha256}`)
 
 if (mode === "release") {
   const apksigner = findApksignerJar()
