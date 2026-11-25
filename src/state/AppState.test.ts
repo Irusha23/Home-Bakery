@@ -2695,5 +2695,31 @@ describe("application reducer business rules", () => {
       quantityDelta: 1500,
       balanceAfter: 1500,
     })
+
+    // Allows changing type/unit on unused item, blocks once used in a recipe
+    const unusedState = createTestAppData({
+      inventory: [
+        createTestInventoryItem({
+          inventoryId: "essence-new",
+          name: "Vanilla",
+          physical: 0,
+          unit: "g",
+          category: "ingredient",
+        }),
+      ],
+    })
+    const switched = reducer(unusedState, {
+      type: "UPDATE_INVENTORY_ITEM",
+      inventoryId: "essence-new",
+      patch: { unit: "ml" },
+    })
+    expect(switched.inventory[0].unit).toBe("ml")
+    expect(
+      reducer(updated, {
+        type: "UPDATE_INVENTORY_ITEM",
+        inventoryId: "sugar",
+        patch: { unit: "ml" },
+      }),
+    ).toBe(updated)
   })
 })

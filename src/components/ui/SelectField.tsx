@@ -38,7 +38,9 @@ export default function SelectField({
       <span className="relative block">
         <select
           id={fieldId}
-          className={`min-h-touch w-full appearance-none rounded-control border bg-white px-4 pr-10 text-base text-cocoa outline-none transition-[border-color,box-shadow,background-color] duration-200 ease-out focus:ring-3 ${
+          className={`min-h-touch w-full appearance-none rounded-control border bg-white px-4 text-base text-cocoa outline-none transition-[border-color,box-shadow,background-color] duration-200 ease-out focus:ring-3 disabled:cursor-not-allowed disabled:bg-neutral-soft disabled:text-muted ${
+            props.disabled ? "pr-4" : "pr-10"
+          } ${
             error
               ? "border-error focus:border-error focus:ring-error/15"
               : "border-warm-border focus:border-sage focus:ring-sage/15"
@@ -55,11 +57,13 @@ export default function SelectField({
             </option>
           ))}
         </select>
-        <ChevronDown
-          aria-hidden="true"
-          className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted transition-transform duration-200"
-          size={18}
-        />
+        {!props.disabled ? (
+          <ChevronDown
+            aria-hidden="true"
+            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted transition-transform duration-200"
+            size={18}
+          />
+        ) : null}
       </span>
       <AnimatePresence initial={false}>
         {message ? (

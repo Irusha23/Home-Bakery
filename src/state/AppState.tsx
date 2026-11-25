@@ -225,6 +225,8 @@ type AppAction =
       patch: {
         name?: string
         image?: string | null
+        category?: "ingredient" | "packaging"
+        unit?: InventoryItem["unit"]
         physical?: number
         lowStockThreshold?: number
         averageUnitCost?: number
@@ -1773,7 +1775,62 @@ export function reducer(state: AppData, action: AppAction): AppData {
       )
       if (!target) return state
       const { patch } = action
+      const isChangingStructure =
+        (patch.category !== undefined &&
+          patch.category !== inventoryCategory(target)) ||
+        (patch.unit !== undefined && patch.unit !== target.unit)
+      const hasInventoryReferences =
+        target.physical > 0 ||
+        state.recipes.some(
+          (recipe) =>
+            recipe.ingredients.some(
+              (ing) => ing.inventoryId === action.inventoryId,
+            ) ||
+            recipe.packaging.some(
+              (pkg) => pkg.inventoryId === action.inventoryId,
+            ),
+        ) ||
+        state.purchases.some((p) => p.inventoryId === action.inventoryId) ||
+        state.inventoryMovements.some(
+          (m) => m.inventoryId === action.inventoryId,
+        ) ||
+        state.orders.some(
+          (o) =>
+            o.reservations.some((r) => r.inventoryId === action.inventoryId) ||
+            o.shortages.some((s) => s.inventoryId === action.inventoryId) ||
+            o.lines.some(
+              (l) =>
+                l.recipeSnapshot.ingredients.some(
+                  (i) => i.inventoryId === action.inventoryId,
+                ) ||
+                l.recipeSnapshot.packaging.some(
+                  (p) => p.inventoryId === action.inventoryId,
+                ),
+            ),
+        ) ||
+        state.extraStockPlans.some(
+          (ep) =>
+            ep.recipeSnapshot.ingredients.some(
+              (i) => i.inventoryId === action.inventoryId,
+            ) ||
+            ep.recipeSnapshot.packaging.some(
+              (p) => p.inventoryId === action.inventoryId,
+            ),
+        ) ||
+        (state.shoppingSelections[action.inventoryId] ?? 0) > 0
+      const resolvedNextCategory =
+        patch.category ??
+        (inventoryCategory(target) === "packaging" ? "packaging" : "ingredient")
+      const resolvedNextUnit = patch.unit ?? target.unit
       if (
+        (isChangingStructure &&
+          (inventoryCategory(target) === "finished" || hasInventoryReferences)) ||
+        (patch.category !== undefined &&
+          patch.category !== "ingredient" &&
+          patch.category !== "packaging") ||
+        (patch.unit !== undefined &&
+          !["g", "ml", "unit"].includes(patch.unit)) ||
+        (resolvedNextCategory === "packaging" && resolvedNextUnit !== "unit") ||
         (patch.name !== undefined && !patch.name.trim()) ||
         (patch.physical !== undefined &&
           (inventoryCategory(target) === "finished" ||
@@ -1802,6 +1859,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
           ...(patch.image !== undefined
             ? { image: patch.image ?? undefined }
             : {}),
+          ...(patch.category !== undefined ? { category: patch.category } : {}),
+          ...(patch.unit !== undefined ? { unit: patch.unit } : {}),
           ...(patch.physical !== undefined ? { physical: patch.physical } : {}),
           ...(patch.lowStockThreshold !== undefined
             ? { lowStockThreshold: patch.lowStockThreshold }

@@ -44,7 +44,7 @@ export default function InventoryItemSheet({
   onClose,
   onSaved,
 }: InventoryItemSheetProps) {
-  const { dispatchIfAccepted } = useAppState()
+  const { state, dispatchIfAccepted } = useAppState()
   const [name, setName] = useState("")
   const [image, setImage] = useState<string | undefined>(undefined)
   const [category, setCategory] =
@@ -112,6 +112,45 @@ export default function InventoryItemSheet({
       setLowStockInput("")
     }
   }, [defaultCategory, item?.inventoryId, open])
+
+  const isStructureLocked = Boolean(
+    item &&
+      (inventoryCategory(item) === "finished" ||
+        item.physical > 0 ||
+        state.recipes.some(
+          (recipe) =>
+            recipe.ingredients.some((i) => i.inventoryId === item.inventoryId) ||
+            recipe.packaging.some((p) => p.inventoryId === item.inventoryId),
+        ) ||
+        state.purchases.some((p) => p.inventoryId === item.inventoryId) ||
+        state.inventoryMovements.some(
+          (m) => m.inventoryId === item.inventoryId,
+        ) ||
+        state.orders.some(
+          (o) =>
+            o.reservations.some((r) => r.inventoryId === item.inventoryId) ||
+            o.shortages.some((s) => s.inventoryId === item.inventoryId) ||
+            o.lines.some(
+              (l) =>
+                l.recipeSnapshot.ingredients.some(
+                  (i) => i.inventoryId === item.inventoryId,
+                ) ||
+                l.recipeSnapshot.packaging.some(
+                  (p) => p.inventoryId === item.inventoryId,
+                ),
+            ),
+        ) ||
+        state.extraStockPlans.some(
+          (ep) =>
+            ep.recipeSnapshot.ingredients.some(
+              (i) => i.inventoryId === item.inventoryId,
+            ) ||
+            ep.recipeSnapshot.packaging.some(
+              (p) => p.inventoryId === item.inventoryId,
+            ),
+        ) ||
+        (state.shoppingSelections[item.inventoryId] ?? 0) > 0),
+  )
 
   const priceUnitLabel = getDisplayPriceUnitLabel(unit)
   const smartDryDefault = getDefaultGramsPerTsp(name || "")
@@ -193,6 +232,7 @@ export default function InventoryItemSheet({
         patch: {
           name: trimmedName,
           image: image ?? null,
+          ...(!isStructureLocked ? { category, unit } : {}),
           ...(baseCost !== undefined ? { averageUnitCost: baseCost } : {}),
           ...(unit === "g"
             ? { gramsPerTsp: parsedTspValue ?? null }
@@ -213,6 +253,7 @@ export default function InventoryItemSheet({
         ...item,
         name: trimmedName,
         image,
+        ...(!isStructureLocked ? { category, unit } : {}),
         trackStock,
         ...(trackStock
           ? { physical: physicalQty, lowStockThreshold: lowThreshold }
@@ -295,48 +336,56 @@ export default function InventoryItemSheet({
           }}
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <SelectField
-            label="Type"
-            value={category}
-            disabled={Boolean(item)}
-            options={[
-              { value: "ingredient", label: "Ingredient" },
-              { value: "packaging", label: "Packaging" },
-            ]}
-            onChange={(e) => {
-              const nextCat = e.target.value as Exclude<
-                InventoryCategory,
-                "finished"
-              >
-              setCategory(nextCat)
-              if (nextCat === "packaging") {
-                setUnit("unit")
-                setStockUnit("unit")
-              } else if (unit === "unit") {
-                setUnit("g")
-                setStockUnit("kg")
-              }
-            }}
-          />
-          <SelectField
-            label="Measured by"
-            value={unit}
-            disabled={Boolean(item) || category === "packaging"}
-            options={[
-              { value: "g", label: "Dry / weight (g · kg · tsp)" },
-              { value: "ml", label: "Liquid (ml · L · tsp · cup)" },
-              { value: "unit", label: "Pieces (unit)" },
-            ]}
-            onChange={(e) => {
-              const nextUnit = e.target.value as BaseUnit
-              setUnit(nextUnit)
-              setTspSizeInput("")
-              setStockUnit(
-                nextUnit === "g" ? "kg" : nextUnit === "ml" ? "L" : "unit",
-              )
-            }}
-          />
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField
+              label="Type"
+              value={category}
+              disabled={isStructureLocked}
+              options={[
+                { value: "ingredient", label: "Ingredient" },
+                { value: "packaging", label: "Packaging" },
+              ]}
+              onChange={(e) => {
+                const nextCat = e.target.value as Exclude<
+                  InventoryCategory,
+                  "finished"
+                >
+                setCategory(nextCat)
+                if (nextCat === "packaging") {
+                  setUnit("unit")
+                  setStockUnit("unit")
+                } else if (unit === "unit") {
+                  setUnit("g")
+                  setStockUnit("kg")
+                }
+              }}
+            />
+            <SelectField
+              label="Measured by"
+              value={unit}
+              disabled={isStructureLocked || category === "packaging"}
+              options={[
+                { value: "g", label: "Dry (g · kg · tsp)" },
+                { value: "ml", label: "Liquid (ml · L · tsp · cup)" },
+                { value: "unit", label: "Pieces (unit)" },
+              ]}
+              onChange={(e) => {
+                const nextUnit = e.target.value as BaseUnit
+                setUnit(nextUnit)
+                setTspSizeInput("")
+                setStockUnit(
+                  nextUnit === "g" ? "kg" : nextUnit === "ml" ? "L" : "unit",
+                )
+              }}
+            />
+          </div>
+          {isStructureLocked ? (
+            <p className="text-xs text-muted">
+              Type & unit are locked because this item is already used in recipes
+              or stock.
+            </p>
+          ) : null}
         </div>
 
         <Field
@@ -354,32 +403,33 @@ export default function InventoryItemSheet({
           helperText={`Used to calculate live recipe costs automatically from Rs. / ${priceUnitLabel}.`}
         />
 
+        {unit === "g" || unit === "ml" ? (
+          <Field
+            label={
+              unit === "g" ? "1 teaspoon equals (g)" : "1 teaspoon equals (ml)"
+            }
+            type="number"
+            min="0"
+            step="any"
+            inputMode="decimal"
+            placeholder={String(effectiveDefaultTsp)}
+            value={tspSizeInput}
+            onChange={(e) => {
+              setTspSizeInput(e.target.value)
+              setError("")
+            }}
+            helperText={
+              unit === "g"
+                ? `Default: ${smartDryDefault} g · 1 tbsp = ${Math.round(previewTspValue * 3 * 10) / 10} g`
+                : `Default: 5 ml · 1 tbsp = ${Math.round(previewTspValue * 3 * 10) / 10} ml · 1 cup = 250 ml`
+            }
+          />
+        ) : null}
+
         <Disclosure
-          title="Optional: Spoon conversion, available quantity & photo"
+          title="Optional: Available stock & photo"
           contentClassName="space-y-4 border-t border-warm-border p-3.5"
         >
-          {unit === "g" || unit === "ml" ? (
-            <Field
-              label={
-                unit === "g" ? "1 teaspoon equals (g)" : "1 teaspoon equals (ml)"
-              }
-              type="number"
-              min="0"
-              step="any"
-              inputMode="decimal"
-              placeholder={String(effectiveDefaultTsp)}
-              value={tspSizeInput}
-              onChange={(e) => {
-                setTspSizeInput(e.target.value)
-                setError("")
-              }}
-              helperText={
-                unit === "g"
-                  ? `Leave blank for default (${smartDryDefault} g). 1 tbsp = ${Math.round(previewTspValue * 3 * 10) / 10} g.`
-                  : `Metric default: 5 ml. 1 tbsp = ${Math.round(previewTspValue * 3 * 10) / 10} ml · 1 cup = 250 ml.`
-              }
-            />
-          ) : null}
 
           <div className="space-y-3">
             <CheckboxField
