@@ -146,7 +146,7 @@ Tasks:
 - [x] Upgrade `BackupRestorePanel.tsx` with 1-tap Share Sheet export (`src/lib/backupShare.ts` → Google Drive / WhatsApp / Download fallback) and optional password-protected AES-256-GCM encrypted backups (`src/lib/backupCrypto.ts`).
 - [x] **Exit gate:** MediaStore, backup encryption/decryption, v2 migration upgrade, and full order photo workflow pass automated tests (`npx tsc --noEmit`, `pnpm test`, `pnpm build`).
 
-### Phase 15 — Capacitor Android Setup & Native Mobile UX (Implemented — Pending Emulator Smoke Check)
+### Phase 15 — Capacitor Android Setup & Native Mobile UX (Completed)
 
 **Goal:** Wrap the React/Vite app in Capacitor Android and wire native hardware behavior so the app feels completely native on Android.
 
@@ -156,7 +156,7 @@ Tasks:
 - [x] Implement `CapacitorSqliteEngine`, `CapacitorFilesystemMediaStore`, and native Share Sheet backup export (`src/db/engines/capacitorSqliteEngine.ts`, `src/lib/mediaStore.ts`, `src/lib/backupShare.ts`).
 - [x] Wire Android **hardware/gesture Back button** (`src/lib/backStack.ts`, `src/lib/nativeBridge.ts`) into `Dialog`, `Sheet`, `ScreenHeader`, and root tab/exit flow, plus `StatusBar` & `Haptics`.
 - [x] Add lightweight **Check for Updates** card in `SettingsScreen.tsx` (`src/lib/appVersion.ts` reading `VITE_UPDATE_FEED_URL`).
-- [ ] Verify live boot inside **Android Studio Emulator** once Android Studio SDK is installed on your machine (paired with Phase 16 APK build & Phase 17 QA).
+- [x] Verify live boot, SQLite persistence, Airplane Mode workflows, Camera/Gallery photos, encrypted Share backups, and Hardware Back button inside **Android Studio Emulator**.
 
 ### Phase 16 — Release Signing, `.apk` Build Pipeline & CI (Next)
 
