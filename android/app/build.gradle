@@ -1,0 +1,128 @@
+apply plugin: 'com.android.application'
+
+def versionJsonFile = file('../../src/version.json')
+if (!versionJsonFile.exists()) {
+    throw new GradleException("Missing version file at ${versionJsonFile.absolutePath}")
+}
+def versionJsonText = versionJsonFile.getText('UTF-8')
+def versionNameMatcher = (versionJsonText =~ /"version"\s*:\s*"([^"]+)"/)
+def versionCodeMatcher = (versionJsonText =~ /"versionCode"\s*:\s*(\d+)/)
+if (!versionNameMatcher.find() || !versionCodeMatcher.find()) {
+    throw new GradleException("Invalid version format in ${versionJsonFile.absolutePath}")
+}
+def appVersionName = versionNameMatcher.group(1)
+def appVersionCode = versionCodeMatcher.group(1).toInteger()
+
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(stream)
+    }
+}
+
+def releaseStoreFilePath = (keystoreProperties.getProperty('storeFile') ?: System.getenv('RELEASE_STORE_FILE'))?.trim()
+def releaseStorePassword = (keystoreProperties.getProperty('storePassword') ?: System.getenv('RELEASE_STORE_PASSWORD'))?.trim()
+def releaseKeyAlias = (keystoreProperties.getProperty('keyAlias') ?: System.getenv('RELEASE_KEY_ALIAS'))?.trim()
+def releaseKeyPassword = (keystoreProperties.getProperty('keyPassword') ?: System.getenv('RELEASE_KEY_PASSWORD'))?.trim()
+def releaseStoreFile = releaseStoreFilePath ? file(releaseStoreFilePath) : null
+def hasReleaseSigningConfig = Boolean.valueOf(
+    releaseStoreFile != null &&
+    releaseStorePassword &&
+    releaseKeyAlias &&
+    releaseKeyPassword
+)
+
+android {
+    namespace "lk.udenisspecials.bakery"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "lk.udenisspecials.bakery"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (hasReleaseSigningConfig) {
+                storeFile releaseStoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "udenis-specials-v${appVersionName}-b${appVersionCode}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def requiresReleaseSigning = taskGraph.allTasks.any { task ->
+        task.path == ':app:assembleRelease' ||
+        task.path == ':app:bundleRelease' ||
+        task.path == ':app:packageRelease'
+    }
+    if (requiresReleaseSigning) {
+        if (!hasReleaseSigningConfig) {
+            throw new GradleException(
+                "Release signing is not configured. Copy android/keystore.properties.example to android/keystore.properties " +
+                "(or set RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD). " +
+                "See docs/ANDROID_RELEASE_GUIDE.md."
+            )
+        }
+        if (!releaseStoreFile.exists()) {
+            throw new GradleException(
+                "Release keystore file not found at: ${releaseStoreFile.absolutePath}. " +
+                "Check storeFile in android/keystore.properties."
+            )
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

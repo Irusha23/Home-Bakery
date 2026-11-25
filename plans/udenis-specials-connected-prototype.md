@@ -152,7 +152,7 @@ Create strongly typed entities in a central model:
 - `ShoppingRequirement` and `PurchaseRecord`
 - `Payment`, `Refund`, `Expense`, and `Sale`
 
-Use a central `useReducer` provider with domain-oriented actions. Persist only serializable app/domain state to a versioned local-storage key such as `udenis-specials-demo-v1`; keep transient navigation, open sheets, search terms, and unsaved form fields in component state. Provide a Reset demo data action under Settings.
+Use a central `useReducer` provider with domain-oriented actions. Persist only serializable app/domain state to a versioned local-storage key; the current prototype uses `udenis-specials-demo-v5` and recognizes v4, v3, and v2 as migration sources. Local backups use the `udenis-specials-backup` JSON format at backup schema version 1 and are validated before restore; current storage is copied to a recovery key before a verified replacement. If saved data cannot be read or safely normalized, preserve its raw value and pause normal app access and persistence until the user retries, exports it, restores a validated backup, or explicitly starts fresh. Keep transient navigation, open sheets, search terms, and unsaved form fields in component state. Provide a Reset demo data action under Settings.
 
 Seed internally consistent sample data, including products such as chocolate celebration cake, vanilla cupcakes, butter cake, and brownie boxes; customers with Sri Lankan names; metric quantities; and believable values formatted as `Rs. 12,500`. Use `Intl.NumberFormat("en-LK")` and explicit metric-unit helpers.
 

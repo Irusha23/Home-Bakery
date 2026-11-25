@@ -1,14 +1,23 @@
-import type { AppData, Order, Recipe, RecipeSnapshot } from "../types"
+import type {
+  AppData,
+  Order,
+  Recipe,
+  RecipeSnapshot,
+} from "../types"
+import { defaultBudgetPlan, defaultSettings } from "../data/defaults"
+import { BUILT_IN_EXPENSE_CATEGORIES } from "../lib/expenses"
 
 export const demoRecipes: Recipe[] = [
   {
     id: "recipe-chocolate-15",
     name: "Signature chocolate celebration cake",
+    image: "preset:chocolate-cake",
     productId: "product-cake",
     variantId: "cake-15kg",
     version: 3,
     yield: 1,
     yieldLabel: "1 × 1.5 kg cake",
+    expectedOutput: null,
     preparationMinutes: 150,
     ingredients: [
       {
@@ -51,11 +60,13 @@ export const demoRecipes: Recipe[] = [
   {
     id: "recipe-vanilla-cupcakes-12",
     name: "Vanilla buttercream cupcakes",
+    image: "preset:cupcake",
     productId: "product-cupcakes",
     variantId: "cupcakes-12",
     version: 2,
     yield: 1,
     yieldLabel: "1 box of 12",
+    expectedOutput: null,
     preparationMinutes: 75,
     ingredients: [
       {
@@ -91,11 +102,13 @@ export const demoRecipes: Recipe[] = [
   {
     id: "recipe-butter-cake-1kg",
     name: "Classic Sri Lankan butter cake",
+    image: "preset:loaf-cake",
     productId: "product-butter-cake",
     variantId: "butter-cake-1kg",
     version: 4,
     yield: 1,
     yieldLabel: "1 × 1 kg cake",
+    expectedOutput: null,
     preparationMinutes: 95,
     ingredients: [
       {
@@ -135,6 +148,19 @@ function snapshot(recipe: Recipe): RecipeSnapshot {
   return recipeSnapshot
 }
 
+function relativeIsoDate(offsetDays: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  return d.toISOString().slice(0, 10)
+}
+
+function relativeIsoTimestamp(offsetDays: number, hourUtc = 9): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  d.setUTCHours(hourUtc, 0, 0, 0)
+  return d.toISOString()
+}
+
 const sampleOrders: Order[] = [
   {
     id: "order-1008",
@@ -142,10 +168,10 @@ const sampleOrders: Order[] = [
     customerId: "customer-nadeesha",
     customerName: "Nadeesha Perera",
     isQuickOrder: false,
-    status: "In Progress",
-    preparationStatus: "In progress",
+    status: "Confirmed",
+    preparationStatus: "Awaiting preparation",
     paymentStatus: "Part paid",
-    collectionDate: "2025-04-15",
+    collectionDate: relativeIsoDate(0),
     collectionTime: "16:30",
     instructions: "Gold lettering: Happy Birthday Amaya.",
     lines: [
@@ -247,15 +273,15 @@ const sampleOrders: Order[] = [
     payments: [
       {
         id: "payment-1008-1",
-        date: "2025-04-10",
+        date: relativeIsoDate(-3),
         amount: 7500,
         method: "Bank transfer",
         note: "Deposit",
       },
     ],
-    createdAt: "2025-04-09T10:00:00.000Z",
-    updatedAt: "2025-04-15T08:30:00.000Z",
-    confirmedAt: "2025-04-10T07:20:00.000Z",
+    createdAt: relativeIsoTimestamp(-4, 8),
+    updatedAt: relativeIsoTimestamp(0, 7),
+    confirmedAt: relativeIsoTimestamp(-3, 7),
   },
   {
     id: "order-1009",
@@ -266,7 +292,7 @@ const sampleOrders: Order[] = [
     status: "Confirmed",
     preparationStatus: "Awaiting preparation",
     paymentStatus: "Paid",
-    collectionDate: "2025-04-16",
+    collectionDate: relativeIsoDate(1),
     collectionTime: "10:00",
     instructions: "Pastel green and ivory buttercream.",
     lines: [
@@ -350,14 +376,14 @@ const sampleOrders: Order[] = [
     payments: [
       {
         id: "payment-1009-1",
-        date: "2025-04-12",
+        date: relativeIsoDate(-2),
         amount: 9600,
         method: "Cash",
       },
     ],
-    createdAt: "2025-04-11T10:00:00.000Z",
-    updatedAt: "2025-04-12T09:00:00.000Z",
-    confirmedAt: "2025-04-11T10:30:00.000Z",
+    createdAt: relativeIsoTimestamp(-2, 10),
+    updatedAt: relativeIsoTimestamp(-1, 9),
+    confirmedAt: relativeIsoTimestamp(-2, 11),
   },
   {
     id: "order-1010",
@@ -368,7 +394,7 @@ const sampleOrders: Order[] = [
     status: "Draft",
     preparationStatus: "Not started",
     paymentStatus: "Unpaid",
-    collectionDate: "2025-04-18",
+    collectionDate: relativeIsoDate(3),
     collectionTime: "14:00",
     instructions: "",
     lines: [
@@ -394,8 +420,8 @@ const sampleOrders: Order[] = [
     reservations: [],
     shortages: [],
     payments: [],
-    createdAt: "2025-04-14T12:15:00.000Z",
-    updatedAt: "2025-04-14T12:15:00.000Z",
+    createdAt: relativeIsoTimestamp(-1, 12),
+    updatedAt: relativeIsoTimestamp(-1, 12),
     confirmedAt: null,
   },
   {
@@ -406,8 +432,8 @@ const sampleOrders: Order[] = [
     isQuickOrder: false,
     status: "Completed",
     preparationStatus: "Completed",
-    paymentStatus: "Unpaid",
-    collectionDate: "2025-04-12",
+    paymentStatus: "Paid",
+    collectionDate: relativeIsoDate(-2),
     collectionTime: "15:30",
     instructions: "Collected by customer.",
     lines: [
@@ -432,10 +458,18 @@ const sampleOrders: Order[] = [
     },
     reservations: [],
     shortages: [],
-    payments: [],
-    createdAt: "2025-04-08T09:00:00.000Z",
-    updatedAt: "2025-04-12T16:00:00.000Z",
-    confirmedAt: "2025-04-08T09:20:00.000Z",
+    payments: [
+      {
+        id: "payment-1005-1",
+        date: relativeIsoDate(-2),
+        amount: 10000,
+        method: "Cash",
+      },
+    ],
+    createdAt: relativeIsoTimestamp(-5, 9),
+    updatedAt: relativeIsoTimestamp(-2, 16),
+    confirmedAt: relativeIsoTimestamp(-5, 10),
+    collectedAt: relativeIsoTimestamp(-2, 16),
   },
 ]
 
@@ -449,6 +483,7 @@ export const demoData: AppData = {
     {
       id: "product-cake",
       name: "Chocolate celebration cake",
+      image: "preset:chocolate-cake",
       variants: [
         { id: "cake-1kg", name: "1 kg · 8 inch", unitLabel: "cake" },
         { id: "cake-15kg", name: "1.5 kg · 10 inch", unitLabel: "cake" },
@@ -457,6 +492,7 @@ export const demoData: AppData = {
     {
       id: "product-cupcakes",
       name: "Vanilla cupcakes",
+      image: "preset:cupcake",
       variants: [
         { id: "cupcakes-6", name: "Box of 6", unitLabel: "box" },
         { id: "cupcakes-12", name: "Box of 12", unitLabel: "box" },
@@ -465,6 +501,7 @@ export const demoData: AppData = {
     {
       id: "product-butter-cake",
       name: "Butter cake",
+      image: "preset:loaf-cake",
       variants: [
         { id: "butter-cake-500g", name: "500 g loaf", unitLabel: "loaf" },
         { id: "butter-cake-1kg", name: "1 kg loaf", unitLabel: "loaf" },
@@ -477,6 +514,7 @@ export const demoData: AppData = {
     {
       inventoryId: "flour",
       name: "All-purpose flour",
+      image: "preset:flour",
       physical: 500,
       unit: "g",
       category: "ingredient",
@@ -486,6 +524,7 @@ export const demoData: AppData = {
     {
       inventoryId: "sugar",
       name: "Caster sugar",
+      image: "preset:sugar",
       physical: 1600,
       unit: "g",
       category: "ingredient",
@@ -495,6 +534,7 @@ export const demoData: AppData = {
     {
       inventoryId: "butter",
       name: "Unsalted butter",
+      image: "preset:butter",
       physical: 900,
       unit: "g",
       category: "ingredient",
@@ -504,6 +544,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cocoa",
       name: "Cocoa powder",
+      image: "preset:cocoa",
       physical: 90,
       unit: "g",
       category: "ingredient",
@@ -513,6 +554,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cake-box-large",
       name: "Large cake box",
+      image: "preset:cake-box",
       physical: 1,
       unit: "unit",
       category: "packaging",
@@ -522,6 +564,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cake-board-12",
       name: "12-inch cake board",
+      image: "preset:cake-board",
       physical: 2,
       unit: "unit",
       category: "packaging",
@@ -531,6 +574,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cupcake-box-12",
       name: "12-cupcake window box",
+      image: "preset:cupcake-box",
       physical: 5,
       unit: "unit",
       category: "packaging",
@@ -540,6 +584,7 @@ export const demoData: AppData = {
     {
       inventoryId: "cake-box-medium",
       name: "Medium cake box",
+      image: "preset:cake-box",
       physical: 4,
       unit: "unit",
       category: "packaging",
@@ -552,6 +597,7 @@ export const demoData: AppData = {
       physical: 4,
       unit: "unit",
       category: "finished",
+      unbatchedLegacyQuantity: 4,
       lowStockThreshold: 1,
       averageUnitCost: 1850,
     },
@@ -561,13 +607,24 @@ export const demoData: AppData = {
       physical: 2,
       unit: "unit",
       category: "finished",
+      unbatchedLegacyQuantity: 2,
       lowStockThreshold: 1,
       averageUnitCost: 1400,
     },
   ],
   extraStockPlans: [],
+  extraStockPreparations: [],
+  finishedStockBatches: [],
+  finishedStockTransactions: [],
   purchases: [],
+  refunds: [],
+  expenseCategories: structuredClone(BUILT_IN_EXPENSE_CATEGORIES),
+  expenses: [],
+  expenseAllocationHistories: [],
   inventoryMovements: [],
   shoppingSelections: {},
+  shoppingTrips: [],
   preparationRecords: [],
+  settings: structuredClone(defaultSettings),
+  budgetPlan: structuredClone(defaultBudgetPlan),
 }

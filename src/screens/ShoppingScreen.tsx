@@ -1,483 +1,807 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
-  ChevronDown,
+  Check,
+  CheckSquare,
   CircleCheck,
-  PackagePlus,
   Plus,
-  ReceiptText,
+  ShoppingBag,
+  Square,
   Trash2,
 } from "lucide-react"
+import InventoryItemSheet from "../components/domain/InventoryItemSheet"
+import ShoppingReceiptSheet from "../components/domain/ShoppingReceiptSheet"
 import ScreenHeader from "../components/ScreenHeader"
 import Button, { IconButton } from "../components/ui/Button"
 import Card from "../components/ui/Card"
 import Field from "../components/ui/Field"
+import { GroupedList, ListRow } from "../components/ui/GroupedList"
+import Illustration from "../components/ui/Illustration"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
+import {
+  AnimatedItem,
+  AnimatedList,
+  TabView,
+} from "../components/ui/MotionPrimitives"
 import SegmentedControl from "../components/ui/SegmentedControl"
+import SelectField from "../components/ui/SelectField"
+import Sheet from "../components/ui/Sheet"
 import StatusBadge from "../components/ui/StatusBadge"
+import SwipeableRow from "../components/ui/SwipeableRow"
+import { useToast } from "../components/ui/Toast"
 import { formatDate, formatLkr, formatQuantity } from "../lib/format"
-import { inventoryCategory, selectShoppingRequirements } from "../lib/inventory"
-import { useAppState } from "../state/AppState"
+import { createId } from "../lib/id"
+import { isValidMoneyAmount } from "../lib/financials"
+import {
+  compatibleUnits,
+  inventoryCategory,
+  selectManualShoppingList,
+  toInventoryBaseQuantity,
+} from "../lib/inventory"
+import { makeShoppingReference, useAppState } from "../state/AppState"
 import type {
-  ExtraStockPlan,
-  ShoppingRequirement,
+  ExpenseAttribution,
+  ShoppingTripRecord,
   StarterAction,
+  Unit,
 } from "../types"
-import ExtraStockPlanForm from "./ExtraStockPlanForm"
-import PurchaseForm from "./PurchaseForm"
 
-type ShoppingCategory = "ingredient" | "packaging"
-type View = "list" | "plan" | "purchase"
+type ShoppingCategoryFilter = "all" | "ingredient" | "packaging"
 
 type ShoppingScreenProps = {
   starterAction: StarterAction | null
   onConsumeStarterAction: () => void
-  onFocusedChange: (focused: boolean) => void
-  onOpenInventory: (inventoryId?: string) => void
-}
-
-function requirementTone(item: ShoppingRequirement, low: boolean) {
-  if (item.shortage > 0) return "warning" as const
-  if (low) return "progress" as const
-  return "success" as const
 }
 
 export default function ShoppingScreen({
   starterAction,
   onConsumeStarterAction,
-  onFocusedChange,
-  onOpenInventory,
 }: ShoppingScreenProps) {
-  const { state, dispatch } = useAppState()
-  const [view, setView] = useState<View>("list")
-  const [category, setCategory] = useState<ShoppingCategory>("ingredient")
+  const { state, dispatch, dispatchIfAccepted } = useAppState()
+  const { showToast } = useToast()
+  const [category, setCategory] = useState<ShoppingCategoryFilter>("all")
   const [search, setSearch] = useState("")
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
-  const [purchaseInventoryId, setPurchaseInventoryId] =
-    useState<string | undefined>()
-  const [purchaseCompleteId, setPurchaseCompleteId] = useState<string | null>(
+  const [checkedExtraIds, setCheckedExtraIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+
+  const [addSheetOpen, setAddSheetOpen] = useState(false)
+  const [newItemSheetOpen, setNewItemSheetOpen] = useState(false)
+  const [finishSheetOpen, setFinishSheetOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<"to-buy" | "history">("to-buy")
+  const [selectedTrip, setSelectedTrip] = useState<ShoppingTripRecord | null>(
     null,
   )
-  const consumedAction = useRef<StarterAction | null>(null)
+  const [tripTotalInput, setTripTotalInput] = useState("")
+  const [tripError, setTripError] = useState("")
+  const [selectedItemId, setSelectedItemId] = useState("")
+  const [addQty, setAddQty] = useState("1")
+  const [addUnit, setAddUnit] = useState<Unit>("kg")
+  const [addError, setAddError] = useState("")
 
   useEffect(() => {
-    if (!starterAction || consumedAction.current === starterAction) return
-    consumedAction.current = starterAction
-    onConsumeStarterAction()
+    if (starterAction === "plan-shopping") {
+      onConsumeStarterAction()
+    }
   }, [starterAction, onConsumeStarterAction])
 
-  useEffect(() => {
-    onFocusedChange(view !== "list")
-    return () => onFocusedChange(false)
-  }, [view, onFocusedChange])
+  const selectableItems = useMemo(
+    () =>
+      state.inventory.filter(
+        (item) => inventoryCategory(item) !== "finished" && !item.archived,
+      ),
+    [state.inventory],
+  )
 
-  const requirements = useMemo(() => selectShoppingRequirements(state), [state])
-  const visibleRequirements = requirements.filter((item) => {
-    const matchesCategory = item.category === category
+  const openAddSheet = () => {
+    const first = selectableItems[0]
+    setSelectedItemId(first?.inventoryId ?? "")
+    if (first) {
+      setAddUnit(first.unit === "g" ? "kg" : first.unit === "ml" ? "L" : "unit")
+      setAddQty("1")
+    } else {
+      setAddUnit("unit")
+      setAddQty("1")
+    }
+    setAddError("")
+    setAddSheetOpen(true)
+  }
+
+  const allItems = useMemo(
+    () =>
+      selectManualShoppingList(state).map((item) => ({
+        ...item,
+        checked: item.isManualExtra
+          ? checkedExtraIds.has(item.inventoryId)
+          : item.checked,
+      })),
+    [checkedExtraIds, state],
+  )
+  const checkedCount = allItems.filter((item) => item.checked).length
+  const totalEstimatedValue = useMemo(
+    () => allItems.reduce((sum, item) => sum + (item.estimatedCost ?? 0), 0),
+    [allItems],
+  )
+  const unpricedCount = useMemo(
+    () => allItems.filter((item) => item.estimatedCost === null).length,
+    [allItems],
+  )
+
+  const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return (
-      matchesCategory && (!query || item.name.toLowerCase().includes(query))
-    )
-  })
-  const shortageCount = requirements.filter((item) => item.shortage > 0).length
-  const totalSelected = requirements.reduce(
-    (sum, item) => sum + (item.selectedPurchase > 0 ? 1 : 0),
-    0,
-  )
-  const editingPlan = state.extraStockPlans.find(
-    (plan) => plan.id === editingPlanId,
+    return allItems.filter((item) => {
+      if (category !== "all" && item.category !== category) return false
+      if (!query) return true
+      return (
+        item.name.toLowerCase().includes(query) ||
+        item.orders.some((o) =>
+          `${o.customerName} ${o.reference} ${o.productName}`
+            .toLowerCase()
+            .includes(query),
+        )
+      )
+    })
+  }, [allItems, category, search])
+
+  const selectedInventoryItem = selectableItems.find(
+    (item) => item.inventoryId === selectedItemId,
   )
 
-  if (view === "plan") {
-    return (
-      <ExtraStockPlanForm
-        plan={editingPlan}
-        onCancel={() => {
-          setEditingPlanId(null)
-          setView("list")
-        }}
-        onComplete={() => {
-          setEditingPlanId(null)
-          setView("list")
-        }}
-      />
+  const handleAddExtraItem = () => {
+    if (!selectedInventoryItem) {
+      setAddError("Select or create an item first.")
+      return
+    }
+    const rawQty = Number(addQty)
+    if (!Number.isFinite(rawQty) || rawQty <= 0) {
+      setAddError("Enter a quantity greater than 0.")
+      return
+    }
+    const baseQty = toInventoryBaseQuantity(
+      rawQty,
+      addUnit,
+      selectedInventoryItem,
     )
+    if (!Number.isFinite(baseQty) || baseQty <= 0) {
+      setAddError("Quantity unit does not match this item.")
+      return
+    }
+    const existingQty = state.shoppingSelections[selectedInventoryItem.inventoryId] ?? 0
+    dispatch({
+      type: "SET_PURCHASE_QUANTITY",
+      inventoryId: selectedInventoryItem.inventoryId,
+      quantity: existingQty + baseQty,
+    })
+    setCheckedExtraIds((prev) => {
+      const next = new Set(prev)
+      next.delete(selectedInventoryItem.inventoryId)
+      return next
+    })
+    setAddSheetOpen(false)
+    showToast({
+      message: `Added ${selectedInventoryItem.name} to shopping list`,
+      tone: "success",
+    })
   }
 
-  if (view === "purchase") {
-    return (
-      <PurchaseForm
-        initialInventoryId={purchaseInventoryId}
-        onCancel={() => setView("list")}
-        onComplete={(inventoryId) => {
-          setPurchaseCompleteId(inventoryId)
-          setView("list")
-        }}
-      />
-    )
+  const toggleItemChecked = (item: (typeof allItems)[number]) => {
+    if (item.isManualExtra) {
+      setCheckedExtraIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(item.inventoryId)) {
+          next.delete(item.inventoryId)
+        } else {
+          next.add(item.inventoryId)
+        }
+        return next
+      })
+    } else {
+      dispatch({
+        type: "UPDATE_SHOPPING_CHECKLIST_ITEM",
+        inventoryId: item.inventoryId,
+        checked: !item.checked,
+        boughtQuantity: item.boughtQuantity,
+      })
+    }
   }
 
-  const openPurchase = (inventoryId?: string) => {
-    setPurchaseInventoryId(inventoryId)
-    setView("purchase")
+  const resolveShoppingExpenseCategoryId = () => {
+    const existing = state.expenseCategories.find((cat) =>
+      /^(shopping|ingredients)/i.test(cat.name.trim()),
+    )
+    if (existing) return existing.id
+    const shoppingCatId = "expense-category-shopping"
+    const added = dispatchIfAccepted({
+      type: "ADD_EXPENSE_CATEGORY",
+      category: {
+        id: shoppingCatId,
+        name: "Shopping",
+        source: "custom",
+      },
+    })
+    if (added) return shoppingCatId
+    return state.expenseCategories[0]?.id ?? "expense-category-other"
+  }
+
+  const completeShopping = (expenseAmount?: number) => {
+    const checkedItems = allItems.filter((i) => i.checked)
+    const extraIds = checkedItems
+      .filter((i) => i.isManualExtra)
+      .map((i) => i.inventoryId)
+
+    let recordedExpense = false
+    let expenseId: string | undefined
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const nowIso = new Date().toISOString()
+
+    if (
+      expenseAmount !== undefined &&
+      isValidMoneyAmount(expenseAmount) &&
+      checkedItems.length > 0
+    ) {
+      const orderIds = new Set(
+        checkedItems.flatMap((i) => i.orders.map((o) => o.orderId)),
+      )
+      const hasManual = checkedItems.some((i) => i.isManualExtra)
+      let attribution: ExpenseAttribution = { type: "shared" }
+      if (!hasManual && orderIds.size === 1) {
+        const singleOrderId = [...orderIds][0]
+        const targetOrder = state.orders.find((o) => o.id === singleOrderId)
+        if (
+          targetOrder &&
+          !targetOrder.isQuickOrder &&
+          targetOrder.customerId !== null
+        ) {
+          attribution = { type: "direct", orderId: singleOrderId }
+        }
+      }
+      const description = `Shopping trip · ${checkedItems.length} ${
+        checkedItems.length === 1 ? "item" : "items"
+      }`
+      const candidateExpenseId = createId("exp")
+
+      recordedExpense = dispatchIfAccepted({
+        type: "RECORD_EXPENSE",
+        expense: {
+          id: candidateExpenseId,
+          amount: expenseAmount,
+          paidDate: todayIso,
+          categoryId: resolveShoppingExpenseCategoryId(),
+          description,
+          attribution,
+          createdAt: nowIso,
+        },
+      })
+      if (recordedExpense) {
+        expenseId = candidateExpenseId
+      }
+    }
+
+    if (checkedItems.length > 0) {
+      dispatchIfAccepted({
+        type: "ADD_SHOPPING_TRIP",
+        trip: {
+          id: createId("trip"),
+          reference: makeShoppingReference(state.shoppingTrips ?? []),
+          date: todayIso,
+          createdAt: nowIso,
+          totalSpent: recordedExpense ? (expenseAmount ?? null) : null,
+          ...(expenseId ? { expenseId } : {}),
+          items: checkedItems.map((item) => ({
+            inventoryId: item.inventoryId,
+            name: item.name,
+            category: item.category,
+            quantity: item.boughtQuantity,
+            unit: item.unit,
+            estimatedCost: item.estimatedCost,
+            orders: item.orders.map((o) => ({
+              orderId: o.orderId,
+              reference: o.reference,
+              customerName: o.customerName,
+              quantity: o.quantity,
+            })),
+          })),
+        },
+      })
+    }
+
+    dispatch({
+      type: "COMPLETE_SHOPPING_CHECKLIST",
+      extraInventoryIds: extraIds,
+    })
+    setCheckedExtraIds(new Set())
+    setFinishSheetOpen(false)
+    showToast({
+      message: recordedExpense
+        ? `Moved to pantry · ${formatLkr(expenseAmount!)} expense recorded`
+        : "Bought items moved to pantry!",
+      tone: "success",
+    })
+  }
+
+  const handleDoneClick = () => {
+    const checkedItems = allItems.filter((i) => i.checked)
+    if (!checkedItems.length) return
+    const hasUnpriced = checkedItems.some((i) => i.estimatedCost === null)
+    const estimatedTotal = Math.round(
+      checkedItems.reduce((sum, i) => sum + (i.estimatedCost ?? 0), 0),
+    )
+    if (!hasUnpriced && estimatedTotal > 0) {
+      completeShopping(estimatedTotal)
+      return
+    }
+    setTripTotalInput(estimatedTotal > 0 ? String(estimatedTotal) : "")
+    setTripError("")
+    setFinishSheetOpen(true)
   }
 
   return (
-    <div className="px-page pb-6">
-      <ScreenHeader
-        eyebrow="Consolidated planner"
-        title="Shopping"
-        subtitle="Orders and future stock"
-        action={
-          <Button
-            size="compact"
-            leadingIcon={<Plus aria-hidden="true" size={16} />}
-            onClick={() => {
-              setEditingPlanId(null)
-              setView("plan")
-            }}
-          >
-            Plan
-          </Button>
-        }
-      />
+    <>
+      <div className="space-y-4 pb-6">
+        <ScreenHeader
+          title="Shopping list"
+          subtitle="Tap items as you shop or add extras manually"
+          action={
+            viewMode === "to-buy" ? (
+              <Button
+                size="compact"
+                leadingIcon={<Plus aria-hidden="true" size={16} />}
+                onClick={openAddSheet}
+              >
+                Add
+              </Button>
+            ) : undefined
+          }
+        />
 
-      {purchaseCompleteId ? (
-        <Card tone="sage" className="mt-4 flex items-center gap-3">
-          <CircleCheck
-            aria-hidden="true"
-            className="shrink-0 text-success"
-            size={20}
+        {(state.shoppingTrips?.length ?? 0) > 0 ? (
+          <SegmentedControl
+            label="Shopping view"
+            value={viewMode}
+            onChange={(value) => setViewMode(value as "to-buy" | "history")}
+            segments={[
+              { value: "to-buy", label: `To buy (${allItems.length})` },
+              {
+                value: "history",
+                label: `History (${state.shoppingTrips?.length ?? 0})`,
+              },
+            ]}
           />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-cocoa">
-              Purchase recorded once
-            </p>
-            <p className="mt-0.5 text-xs text-muted">
-              Physical and available stock updated.
-            </p>
-          </div>
-          <Button
-            size="compact"
-            variant="secondary"
-            onClick={() => onOpenInventory(purchaseCompleteId)}
-          >
-            Inventory
-          </Button>
-        </Card>
-      ) : null}
+        ) : null}
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Card className="p-3 text-center">
-          <p className="text-xl font-bold tabular-nums text-cocoa">
-            {requirements.length}
-          </p>
-          <p className="mt-1 text-nav font-bold uppercase text-muted">Items</p>
-        </Card>
-        <Card
-          tone={shortageCount ? "warning" : "sage"}
-          className="p-3 text-center"
-        >
-          <p
-            className={`text-xl font-bold tabular-nums ${
-              shortageCount ? "text-warning" : "text-success"
-            }`}
-          >
-            {shortageCount}
-          </p>
-          <p className="mt-1 text-nav font-bold uppercase text-muted">Short</p>
-        </Card>
-        <Card className="p-3 text-center">
-          <p className="text-xl font-bold tabular-nums text-sage-dark">
-            {totalSelected}
-          </p>
-          <p className="mt-1 text-nav font-bold uppercase text-muted">To buy</p>
-        </Card>
-      </div>
-
-      {state.extraStockPlans.length ? (
-        <section className="mt-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-lg font-semibold text-cocoa">
-              Extra-stock plans
-            </div>
-            <StatusBadge tone="progress">
-              {state.extraStockPlans.length}
-            </StatusBadge>
-          </div>
-          <div className="space-y-2">
-            {state.extraStockPlans.map((plan) => (
-              <ExtraStockPlanRow
-                key={plan.id}
-                plan={plan}
-                onEdit={() => {
-                  setEditingPlanId(plan.id)
-                  setView("plan")
-                }}
-                onRemove={() =>
-                  dispatch({
-                    type: "REMOVE_EXTRA_STOCK_PLAN",
-                    planId: plan.id,
-                  })
+        <TabView viewKey={viewMode} className="space-y-4">
+        {viewMode === "history" ? (
+          <GroupedList title="Saved shopping trips">
+            {(state.shoppingTrips ?? []).map((trip) => (
+              <ListRow
+                key={trip.id}
+                title={`${trip.reference} · ${trip.items.length} ${
+                  trip.items.length === 1 ? "item" : "items"
+                }`}
+                subtitle={formatDate(trip.date)}
+                value={
+                  trip.totalSpent !== null ? formatLkr(trip.totalSpent) : "—"
                 }
+                showChevron
+                onClick={() => setSelectedTrip(trip)}
               />
             ))}
-          </div>
-        </section>
-      ) : null}
-
-      <div className="mt-5">
-        <Field
-          label="Search shopping items"
-          hideLabel
-          isSearch
-          placeholder="Search ingredients or packaging"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </div>
-      <div className="mt-3">
-        <SegmentedControl
-          label="Shopping category"
-          value={category}
-          segments={[
-            { value: "ingredient", label: "Ingredients" },
-            { value: "packaging", label: "Packaging" },
-          ]}
-          onChange={setCategory}
-        />
-      </div>
-
-      <section className="mt-4 space-y-3">
-        {visibleRequirements.length ? (
-          visibleRequirements.map((item) => (
-            <RequirementCard
-              key={item.inventoryId}
-              item={item}
-              low={
-                item.shortage === 0 &&
-                item.available <=
-                  (state.inventory.find(
-                    (entry) => entry.inventoryId === item.inventoryId,
-                  )?.lowStockThreshold ?? 0)
-              }
-              onQuantityChange={(quantity) =>
-                dispatch({
-                  type: "SET_PURCHASE_QUANTITY",
-                  inventoryId: item.inventoryId,
-                  quantity,
-                })
-              }
-              onPurchase={() => openPurchase(item.inventoryId)}
-            />
-          ))
+          </GroupedList>
         ) : (
-          <Card className="py-8 text-center">
-            <CircleCheck
-              aria-hidden="true"
-              className="mx-auto text-success"
-              size={25}
+          <>
+            {checkedCount > 0 ? (
+          <Card
+            tone="sage"
+            className="flex items-center justify-between gap-3 py-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-cocoa">
+                {checkedCount} {checkedCount === 1 ? "item" : "items"} marked
+                bought
+              </p>
+              <p className="text-xs text-muted">
+                Move checked items to your pantry.
+              </p>
+            </div>
+            <Button
+              size="compact"
+              leadingIcon={<Check aria-hidden="true" size={15} />}
+              onClick={handleDoneClick}
+            >
+              Done ({checkedCount})
+            </Button>
+          </Card>
+        ) : null}
+
+        {allItems.length > 0 ? (
+          <>
+            <Card className="flex items-center justify-between gap-3 py-3.5">
+              <div>
+                <p className="text-xs font-medium text-muted">
+                  Estimated list total
+                </p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-cocoa">
+                  {formatLkr(totalEstimatedValue)}
+                </p>
+              </div>
+              <div className="text-right text-xs text-muted">
+                <div>
+                  {allItems.length} {allItems.length === 1 ? "item" : "items"}
+                </div>
+                <div>
+                  {unpricedCount > 0
+                    ? `${unpricedCount} without unit price`
+                    : "All items priced"}
+                </div>
+              </div>
+            </Card>
+
+            <Field
+              label="Search shopping list"
+              hideLabel
+              isSearch
+              placeholder="Search ingredients or customer..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
             />
-            <p className="mt-3 text-sm font-semibold text-cocoa">
-              Nothing required in this category
+
+            <SegmentedControl
+              label="Shopping category"
+              value={category}
+              segments={[
+                { value: "all", label: `All (${allItems.length})` },
+                { value: "ingredient", label: "Ingredients" },
+                { value: "packaging", label: "Packaging" },
+              ]}
+              onChange={setCategory}
+            />
+          </>
+        ) : null}
+
+        {visibleItems.length > 0 ? (
+          <AnimatedList className="space-y-3">
+            {visibleItems.map((item, index) => {
+              const inventoryItem = state.inventory.find(
+                (inv) => inv.inventoryId === item.inventoryId,
+              )
+              return (
+              <AnimatedItem key={item.inventoryId} index={index}>
+                <SwipeableRow
+                  actionLabel="Remove"
+                  disabled={!item.isManualExtra}
+                  onAction={() => {
+                    dispatch({
+                      type: "REMOVE_MANUAL_SHOPPING_ITEM",
+                      inventoryId: item.inventoryId,
+                    })
+                    setCheckedExtraIds((prev) => {
+                      const next = new Set(prev)
+                      next.delete(item.inventoryId)
+                      return next
+                    })
+                  }}
+                >
+                  <Card
+                    className={`space-y-3 transition ${
+                      item.checked ? "border-sage bg-sage-soft/50" : ""
+                    }`}
+                  >
+                <div className="flex items-start justify-between gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleItemChecked(item)}
+                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+                    aria-pressed={item.checked}
+                  >
+                    <span className="mt-0.5 shrink-0 text-sage-dark">
+                      {item.checked ? (
+                        <CheckSquare
+                          aria-hidden="true"
+                          size={20}
+                          className="text-success"
+                        />
+                      ) : (
+                        <Square
+                          aria-hidden="true"
+                          size={20}
+                          className="text-muted"
+                        />
+                      )}
+                    </span>
+                    <ItemThumbnail
+                      image={inventoryItem?.image}
+                      alt={item.name}
+                      size="sm"
+                    />
+                    <span className="min-w-0">
+                      <span
+                        className={`block text-sm font-semibold text-cocoa ${
+                          item.checked ? "line-through opacity-75" : ""
+                        }`}
+                      >
+                        {item.name}
+                      </span>
+                      {item.orders.length > 0 ? (
+                        <span className="mt-1.5 block space-y-1">
+                          {item.orders.map((o) => (
+                            <span
+                              key={o.orderId}
+                              className="flex items-center justify-between gap-3 text-xs text-muted"
+                            >
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span
+                                  aria-hidden="true"
+                                  className="size-1 shrink-0 rounded-full bg-muted-light"
+                                />
+                                <span className="leading-snug">
+                                  {o.customerName}
+                                </span>
+                              </span>
+                              <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">
+                                {formatQuantity(o.quantity, item.unit)}
+                              </span>
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="mt-0.5 block text-xs text-muted">
+                          Added manually
+                        </span>
+                      )}
+                    </span>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="text-right">
+                      <StatusBadge tone={item.checked ? "success" : "warning"}>
+                        {item.checked
+                          ? "Bought"
+                          : formatQuantity(item.boughtQuantity, item.unit)}
+                      </StatusBadge>
+                      <div className="mt-1 text-[11px] font-semibold tabular-nums text-cocoa">
+                        {item.estimatedCost !== null
+                          ? formatLkr(item.estimatedCost)
+                          : "No price"}
+                      </div>
+                    </div>
+                    {item.isManualExtra ? (
+                      <IconButton
+                        label={`Remove ${item.name}`}
+                        className="size-8"
+                        onClick={() => {
+                          dispatch({
+                            type: "REMOVE_MANUAL_SHOPPING_ITEM",
+                            inventoryId: item.inventoryId,
+                          })
+                          setCheckedExtraIds((prev) => {
+                            const next = new Set(prev)
+                            next.delete(item.inventoryId)
+                            return next
+                          })
+                        }}
+                      >
+                        <Trash2 aria-hidden="true" size={14} />
+                      </IconButton>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border-t border-warm-border/70 pt-2.5 text-xs">
+                  <span className="text-muted">
+                    Qty to buy ({item.unit}):
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
+                    aria-label={`Quantity to buy for ${item.name}`}
+                    value={item.boughtQuantity}
+                    onChange={(event) => {
+                      const val = Number(event.target.value)
+                      dispatch({
+                        type: "UPDATE_SHOPPING_CHECKLIST_ITEM",
+                        inventoryId: item.inventoryId,
+                        checked: item.checked,
+                        boughtQuantity:
+                          Number.isFinite(val) && val >= 0
+                            ? val
+                            : item.neededQuantity,
+                      })
+                    }}
+                    className="w-28 rounded-control border border-warm-border bg-white px-2.5 py-1 text-right text-xs font-semibold text-cocoa outline-none focus:border-sage"
+                  />
+                </div>
+              </Card>
+              </SwipeableRow>
+              </AnimatedItem>
+              )
+            })}
+          </AnimatedList>
+        ) : (
+          <Card className="px-5 py-8 text-center">
+            <Illustration name="shopping-cart" size="md" />
+            <p className="mt-2 text-base font-semibold text-cocoa">
+              {allItems.length === 0
+                ? "Shopping list is clear"
+                : "No matching items"}
+            </p>
+            <p className="mx-auto mt-1 max-w-empty text-xs leading-relaxed text-muted">
+              {allItems.length === 0
+                ? "Mark missing order items as “Need to buy”, or tap + Add above to add any extra ingredients."
+                : "Try another search or category filter."}
             </p>
           </Card>
         )}
-      </section>
-
-      <div className="mt-5">
-        <Button
-          fullWidth
-          variant="secondary"
-          leadingIcon={<PackagePlus aria-hidden="true" size={17} />}
-          onClick={() => openPurchase()}
-        >
-          Record another purchase
-        </Button>
+          </>
+        )}
+        </TabView>
       </div>
 
-      <details className="mt-4 rounded-card border border-warm-border bg-white shadow-subtle">
-        <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-cocoa">
-          <span className="flex items-center gap-2">
-            <ReceiptText aria-hidden="true" className="text-sage" size={17} />
-            Purchase history
-          </span>
-          <span className="text-xs text-muted">{state.purchases.length}</span>
-        </summary>
-        <div className="divide-y divide-warm-border border-t border-warm-border">
-          {state.purchases.length ? (
-            state.purchases.map((purchase) => {
-              const item = state.inventory.find(
-                (entry) => entry.inventoryId === purchase.inventoryId,
-              )
-              return (
-                <div key={purchase.id} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-cocoa">
-                        {item?.name}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">
-                        {formatDate(purchase.date)} · Usable{" "}
-                        {formatQuantity(
-                          purchase.usableBaseQuantity,
-                          item?.unit ?? "unit",
-                        )}
-                      </p>
-                    </div>
-                    <p className="text-sm font-semibold tabular-nums text-cocoa">
-                      {formatLkr(purchase.totalPrice)}
-                    </p>
-                  </div>
-                </div>
-              )
-            })
-          ) : (
-            <p className="p-4 text-sm text-muted">No purchases recorded yet.</p>
-          )}
-        </div>
-      </details>
-    </div>
-  )
-}
-
-type ExtraStockPlanRowProps = {
-  plan: ExtraStockPlan
-  onEdit: () => void
-  onRemove: () => void
-}
-
-function ExtraStockPlanRow({ plan, onEdit, onRemove }: ExtraStockPlanRowProps) {
-  return (
-    <Card className="flex items-center gap-3 p-3">
-      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-control bg-sage-soft text-sage-dark">
-        <PackagePlus aria-hidden="true" size={19} />
-      </span>
-      <button
-        type="button"
-        onClick={onEdit}
-        className="min-w-0 flex-1 text-left"
+      <Sheet
+        open={addSheetOpen}
+        title="Add to shopping list"
+        subtitle="Pick a saved ingredient or create a new one"
+        onClose={() => setAddSheetOpen(false)}
+        footer={
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setAddSheetOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              leadingIcon={<Plus aria-hidden="true" size={16} />}
+              onClick={handleAddExtraItem}
+            >
+              Add
+            </Button>
+          </div>
+        }
       >
-        <span className="block truncate text-sm font-semibold text-cocoa">
-          {plan.recipeSnapshot.name}
-        </span>
-        <span className="mt-0.5 block text-xs text-muted">
-          Qty {plan.quantity} · Recipe v{plan.recipeSnapshot.version}
-          {plan.bestBefore
-            ? ` · Best before ${formatDate(plan.bestBefore)}`
-            : ""}
-        </span>
-      </button>
-      <IconButton
-        label={`Remove ${plan.recipeSnapshot.name} plan`}
-        className="size-9 border-error/20 text-error shadow-none"
-        onClick={onRemove}
-      >
-        <Trash2 aria-hidden="true" size={16} />
-      </IconButton>
-    </Card>
-  )
-}
-
-type RequirementCardProps = {
-  item: ShoppingRequirement
-  low: boolean
-  onQuantityChange: (quantity: number) => void
-  onPurchase: () => void
-}
-
-function RequirementCard({
-  item,
-  low,
-  onQuantityChange,
-  onPurchase,
-}: RequirementCardProps) {
-  return (
-    <Card className="p-0">
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-cocoa">{item.name}</p>
-            <p className="mt-1 text-xs text-muted">
-              Available {formatQuantity(item.available, item.unit)}
-            </p>
-          </div>
-          <StatusBadge tone={requirementTone(item, low)}>
-            {item.shortage > 0
-              ? `Short ${formatQuantity(item.shortage, item.unit)}`
-              : low
-                ? "Low"
-                : "Sufficient"}
-          </StatusBadge>
-        </div>
-
-        <div className="mt-3 grid grid-cols-3 gap-2 rounded-control bg-ivory p-3 text-center">
-          <div>
-            <p className="text-nav font-bold uppercase text-muted">Required</p>
-            <p className="mt-1 text-xs font-semibold text-cocoa">
-              {formatQuantity(item.required, item.unit)}
-            </p>
-          </div>
-          <div className="border-x border-warm-border">
-            <p className="text-nav font-bold uppercase text-muted">Physical</p>
-            <p className="mt-1 text-xs font-semibold text-cocoa">
-              {formatQuantity(item.physical, item.unit)}
-            </p>
-          </div>
-          <div>
-            <p className="text-nav font-bold uppercase text-muted">Reserved</p>
-            <p className="mt-1 text-xs font-semibold text-cocoa">
-              {formatQuantity(item.reserved, item.unit)}
-            </p>
-          </div>
-        </div>
-
-        <details className="mt-3">
-          <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-xs font-semibold text-sage-dark">
-            Demand sources
-            <ChevronDown aria-hidden="true" size={16} />
-          </summary>
-          <div className="divide-y divide-warm-border rounded-control border border-warm-border">
-            {item.sources.map((source) => (
-              <div
-                key={source.id}
-                className="flex items-center justify-between gap-3 p-3 text-xs"
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted">
+                Ingredient or packaging
+              </span>
+              <button
+                type="button"
+                onClick={() => setNewItemSheetOpen(true)}
+                className="text-xs font-semibold text-rose hover:underline"
               >
-                <div>
-                  <p className="font-semibold text-cocoa">{source.label}</p>
-                  <p className="mt-0.5 text-muted">
-                    {source.type === "customer-order"
-                      ? `Customer order · ${source.reference}`
-                      : "Extra-stock plan"}
-                  </p>
-                </div>
-                <p className="font-semibold text-cocoa">
-                  {formatQuantity(source.quantity, item.unit)}
-                </p>
-              </div>
-            ))}
+                + New item
+              </button>
+            </div>
+            <SelectField
+              label="Select item"
+              value={selectedItemId}
+              options={
+                selectableItems.length > 0
+                  ? selectableItems.map((i) => ({
+                      value: i.inventoryId,
+                      label: i.name,
+                    }))
+                  : [{ value: "", label: "No items saved yet" }]
+              }
+              onChange={(e) => {
+                const next = selectableItems.find(
+                  (i) => i.inventoryId === e.target.value,
+                )
+                setSelectedItemId(e.target.value)
+                if (next) {
+                  setAddUnit(
+                    next.unit === "g"
+                      ? "kg"
+                      : next.unit === "ml"
+                        ? "L"
+                        : "unit",
+                  )
+                }
+                setAddError("")
+              }}
+            />
           </div>
-        </details>
-      </div>
 
-      <div className="grid grid-cols-purchase-action items-end gap-3 border-t border-warm-border bg-neutral-soft/60 p-3">
-        <Field
-          label={`Purchase quantity (${item.unit})`}
-          type="number"
-          min="0"
-          step="any"
-          inputMode="decimal"
-          value={item.selectedPurchase}
-          onChange={(event) =>
-            onQuantityChange(Math.max(0, Number(event.target.value)))
-          }
-          helperText={`Suggested ${formatQuantity(
-            item.suggestedPurchase,
-            item.unit,
-          )}`}
-        />
-        <Button size="compact" onClick={onPurchase}>
-          Record
-        </Button>
-      </div>
-    </Card>
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Quantity to buy"
+              type="number"
+              min="0"
+              step="any"
+              inputMode="decimal"
+              value={addQty}
+              onChange={(e) => {
+                setAddQty(e.target.value)
+                setAddError("")
+              }}
+            />
+            <SelectField
+              label="Unit"
+              value={addUnit}
+              options={(selectedInventoryItem
+                ? compatibleUnits(selectedInventoryItem.unit)
+                : (["g", "kg", "ml", "L", "unit"] as Unit[])
+              ).map((u) => ({ value: u, label: u }))}
+              onChange={(e) => setAddUnit(e.target.value as Unit)}
+            />
+          </div>
+
+          {addError ? (
+            <p className="text-sm font-medium text-error">{addError}</p>
+          ) : null}
+        </div>
+      </Sheet>
+
+      <InventoryItemSheet
+        open={newItemSheetOpen}
+        onClose={() => setNewItemSheetOpen(false)}
+        onSaved={(newItem) => {
+          setSelectedItemId(newItem.inventoryId)
+          setAddUnit(
+            newItem.unit === "g" ? "kg" : newItem.unit === "ml" ? "L" : "unit",
+          )
+          setAddQty("1")
+        }}
+      />
+
+      <Sheet
+        open={finishSheetOpen}
+        title="Record shopping expense"
+        subtitle="Some checked items don't have a unit price yet"
+        onClose={() => setFinishSheetOpen(false)}
+        footer={
+          <div className="space-y-2">
+            <Button
+              fullWidth
+              onClick={() => {
+                const parsed = Number(tripTotalInput)
+                if (!isValidMoneyAmount(parsed)) {
+                  setTripError("Enter a positive whole LKR amount.")
+                  return
+                }
+                completeShopping(parsed)
+              }}
+            >
+              Save expense & move to pantry
+            </Button>
+            <Button
+              fullWidth
+              variant="ghost"
+              onClick={() => completeShopping(undefined)}
+            >
+              Move without expense
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <Field
+            label="Total spent (LKR)"
+            type="number"
+            min="1"
+            step="1"
+            inputMode="numeric"
+            placeholder="e.g., 1500"
+            value={tripTotalInput}
+            onChange={(event) => {
+              setTripTotalInput(event.target.value)
+              setTripError("")
+            }}
+          />
+          {tripError ? (
+            <p role="alert" className="text-sm font-medium text-error">
+              {tripError}
+            </p>
+          ) : null}
+        </div>
+      </Sheet>
+      <ShoppingReceiptSheet
+        trip={selectedTrip}
+        onClose={() => setSelectedTrip(null)}
+      />
+    </>
   )
 }

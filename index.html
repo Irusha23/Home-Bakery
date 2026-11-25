@@ -1,15 +1,59 @@
 <!doctype html>
-<html lang="<!-- figma:lang -->">
+<html lang="en">
   <head>
     <!-- figma:head-start -->
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title><!-- figma:title --></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f8fafc" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Udeni's Specials" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <title>Udeni's Specials — Home Bakery</title>
     <!-- figma:head-end -->
+    <style>
+      @keyframes splash-bob {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+      .app-boot-splash {
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        color: #64748b;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .app-boot-cupcake {
+        width: 96px;
+        height: 80px;
+        animation: splash-bob 1.8s ease-in-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app-boot-cupcake { animation: none; }
+      }
+    </style>
   </head>
   <body>
     <!-- figma:body-start -->
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-boot-splash" aria-label="Loading bakery app">
+        <svg class="app-boot-cupcake" viewBox="0 0 160 124" fill="none" aria-hidden="true">
+          <ellipse cx="80" cy="106" rx="40" ry="6.5" fill="#DBEAFE" />
+          <circle cx="36" cy="42" r="4" fill="#FBBF24" />
+          <circle cx="125" cy="46" r="5" fill="#6EE7B7" />
+          <circle cx="116" cy="24" r="3" fill="#60A5FA" />
+          <path d="M52 66h56l-7 34c-.5 2.3-2.5 4-4.9 4H63.9c-2.4 0-4.4-1.7-4.9-4L52 66Z" fill="#FBBF24" stroke="#0F172A" stroke-width="3" stroke-linejoin="round" />
+          <path d="M46 64c0-9 8-15 17-15 2-9 10-15 19-15 10 0 18 6 19 15 9 0 15 6 15 15 0 5-4 8-9 8H55c-5 0-9-3-9-8Z" fill="#FFF1F2" stroke="#0F172A" stroke-width="3" stroke-linejoin="round" />
+          <path d="M80 34c2-7 8-11 13-11" stroke="#059669" stroke-width="2.8" stroke-linecap="round" />
+          <circle cx="80" cy="31" r="7.5" fill="#E11D48" stroke="#0F172A" stroke-width="2.8" />
+        </svg>
+        <p style="margin: 10px 0 0; font-size: 12px; font-weight: 600;">Warming up the oven...</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- figma:body-end -->
   </body>

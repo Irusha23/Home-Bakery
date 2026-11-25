@@ -1,12 +1,12 @@
 # Udeni's Specials — Architecture & Requirements Design
 
-**Document version:** 1.0  
-**Status:** Requirements baseline established; ready for UI/UX design preparation  
-**Platform:** Android  
-**Business:** Udeni's Specials — Home Bakery  
+**Document version:** 2.0  
+**Status:** Part 1 Web/PWA UI Complete (`feature/remaining-workflows`); Local-First Capacitor Android `.apk` + On-Device SQLite Architecture Approved (Phase 12)  
+**Platform:** Mobile-first React 19 + Vite 8 Web/PWA packaged as an offline-first Android `.apk` (Capacitor)  
+**Business:** Udeni's Specials — Home Kitchen & Bakery  
 **Currency:** Sri Lankan Rupee (LKR)  
 **Measurement system:** Metric  
-**Initial deployment model:** Local-first, single-device application
+**Deployment model:** 100% local-first, single-device Android `.apk` with on-device SQLite and user-controlled off-device backups
 
 ---
 
@@ -103,26 +103,20 @@ Future additions must be evaluated against actual bakery needs before being intr
 
 | Area | Technology |
 |---|---|
-| Mobile application | React Native |
-| Development tooling | Expo |
-| Programming language | TypeScript |
-| Navigation | Expo Router |
-| UI component library | React Native Paper |
-| Local database | SQLite using Expo-compatible tooling |
-| Forms | React Hook Form |
-| Input validation | Zod |
-| State management | React state initially |
-| Optional shared state | Zustand, only if justified |
-| Unit and component testing | Jest and React Native Testing Library |
-| Version control | Git and GitHub |
-| Design exploration | Figma Make |
-| Approved design reference | Figma |
-| Currency | LKR |
-| Measurement system | Metric |
+| UI & Application Framework | React 19 + Vite 8 + TypeScript 5.7 |
+| Styling & Design Tokens | Tailwind CSS v4 (`oklch(...)` perceptual color tokens) |
+| Motion & Physics | `motion/react` (mass-scaled critically damped & elastic springs) |
+| Icons | `lucide-react` + custom SVG illustrations (`Illustration.tsx`) |
+| Android APK Packaging | **Capacitor (`@capacitor/android`)** |
+| Local Database | **On-Device SQLite** (`@capacitor-community/sqlite` on Android; browser dev adapter for Chrome testing) |
+| Native Device Plugins | `@capacitor/camera`, `@capacitor/filesystem`, `@capacitor/share`, `@capacitor/app`, `@capacitor/status-bar`, `@capacitor/keyboard`, `@capacitor/haptics` |
+| State & Domain Logic | React reducer (`AppState.tsx`) + pure TypeScript domain modules (`src/lib/*`) + Repository/Unit-of-Work layer |
+| Unit & Integration Testing | Vitest (`pnpm test`) |
+| Android Testing & Build | Android Studio Emulator + Gradle signed `.apk` (no physical phone required until final QA) |
+| Version Control & CI | Git, GitHub, and GitHub Actions |
+| Currency & Units | Whole LKR (`INTEGER`) + Metric (`g`/`kg`, `ml`/`L`, `unit`) |
 
-Exact package versions and compatibility must be verified when implementation begins. Dependencies must be compatible with the selected Expo SDK.
-
-The initial application must run on an Android device without requiring a network connection for its core business workflows.
+The application runs **100% locally on an Android device** with zero cloud server dependency, zero hosting cost, and full airplane-mode usability.
 
 ---
 
@@ -143,26 +137,24 @@ The application should be organized into the following layers:
 
 ### 4.2 Logical architecture
 
-```text
-React Native Presentation
-        |
-        v
-Expo Router Screens and Components
-        |
-        v
-Application Services / Use Cases
-        |
-        v
-Domain Rules and Calculations
-        |
-        v
-Repository Interfaces
-        |
-        v
-SQLite Repository Implementations
-        |
-        v
-SQLite Database
+```mermaid
+flowchart TD
+  subgraph APK["Android Phone (Signed Capacitor APK — 100% Local & Offline)"]
+    UI["React 19 + Vite + Tailwind v4 + Motion UI"]
+    App["Application Services / Use Cases"]
+    Domain["Pure Domain Rules & Calculations (src/lib/*)"]
+    Repo["Repository & Unit-of-Work Layer"]
+    SQLite[("On-Device SQLite DB\n(Versioned SQL Migrations)")]
+    FS["Local Photo Files\n(@capacitor/filesystem + @capacitor/camera)"]
+    Share["Off-Device Backup\n(@capacitor/share → Google Drive / WhatsApp)"]
+
+    UI --> App --> Domain
+    App --> Repo --> SQLite
+    App --> FS
+    App --> Share
+  end
+
+  Updates["Signed .apk Updates\n(Same Keystore + Higher versionCode\n→ In-Place Upgrade, Zero Data Loss)"] -.-> APK
 ```
 
 ### 4.3 Presentation layer
@@ -250,14 +242,14 @@ The primary navigation should remain appropriate for a phone.
 
 ### 5.1 Main sections
 
-1. Dashboard.
-2. Orders.
-3. Recipe Library.
-4. Shopping.
-5. Inventory.
-6. Finances.
+The implemented mobile shell uses a 4-tab bottom navigation bar so every daily workflow is reachable in one tap without crowding narrow screens:
 
-Customers, reports, settings, extra-stock preparation, and backup should remain accessible without overcrowding the primary navigation.
+1. **Home** (`today`) — `Up next` priority card, `New order`, contextual **Payments due** alert, 2×2 snapshot (`Due today`, `Ready`, `To buy`, `This month`), `Upcoming pickups`, Notifications bell, and `Settings`.
+2. **Orders** (`orders`) — `Active`, `Ready`, `Due`, `Done`, and `All` filters, search, `CreateOrderFlow`, `OrderDetailScreen`, `PreparationProductScreen`, and `CustomersScreen`.
+3. **Kitchen** (`kitchen`) — Consolidated **Shopping** (`To buy`) list and **Recipes & Products** catalogue (`RecipesScreen`).
+4. **Money** (`money`) — Minimalistic **Overview** (with tappable unpaid/part-paid breakdown & CSV exports), **Expenses**, and **Budget**.
+
+Customers, settings, backup/restore, and extra-stock workflows remain accessible from `Home` and `Orders` without overcrowding primary navigation.
 
 ### 5.2 Dashboard
 
@@ -295,15 +287,16 @@ A repeat-order action should copy relevant customer and product details into a n
 
 ## 6. Product Catalogue and Variants
 
-Products represent the types of items Udeni sells or prepares.
+Products represent the types of food and baked items Udeni sells or prepares.
 
 Examples include:
 
-- Chocolate cake.
-- Butter cake.
-- Vanilla cupcakes.
-- Brownies.
-- Cookies.
+- Cakes (chocolate celebration cake, butter cake, sponge cakes).
+- Pastries & sweets (cupcakes, brownies, cookies, short-eats).
+- Pizzas & savories (pizzas, rolls, cutlets).
+- Condiments & bottled specials (chili paste, chutneys, spice mixes).
+
+Products, recipes, ingredients, and packaging support visual thumbnails from the built-in multi-category SVG food library (`preset:*`) or compressed local photos captured/picked from the device gallery.
 
 A product can have multiple variants.
 
@@ -1002,16 +995,9 @@ Selling-price changes and cost recosting are separate actions.
 
 ### 15.6 Money precision
 
-Represent authoritative monetary values as integer minor units.
+Represent authoritative monetary values (order `agreedPrice`, `costSnapshot` totals, `payments`, `refunds`, `expenses`, `purchases.totalPrice`, `BudgetPlan` targets/limits, and rounded `suggestedPrice`) as **whole LKR `INTEGER`** values (`Number.isSafeInteger`).
 
-For LKR:
-
-- Rs. 1.00 = 100 minor units.
-- Rs. 0.01 is the minimum stored monetary unit.
-
-Use explicit rounding rules and test them.
-
-Where intermediate unit costs require more precision, retain sufficient decimal precision for calculation, but use defined rounding boundaries for stored monetary amounts.
+Where intermediate unit costs require sub-rupee precision (such as per-gram or per-ml `average_unit_cost` in moving weighted-average inventory valuation), retain decimal precision (`REAL` / `NUMERIC` in SQLite) during calculation, and apply explicit half-away-from-zero rounding at stored line/total boundaries.
 
 Cost lines must follow the approved line-level rounding rules before totals are summed.
 
@@ -1099,6 +1085,10 @@ Changes that affect confirmed cost snapshots must be identified and require expl
 Reports must distinguish historical recorded or approved costs from the latest approved view.
 
 An expense must not be counted both as a direct cost and again as an allocated shared expense.
+
+### 17.6 Persistence defaults
+
+Built-in expense categories are `Utilities` and `Other`, identified by stable IDs; custom categories use their own stable IDs. Phase 11 separated runtime defaults (`src/data/defaults.ts`) and the minimal 1-item UI verification starter slice (`src/data/starterData.ts`) from test fixtures (`src/test/demoFixture.ts`), ensuring empty or restored workspaces never receive injected mock inventory. Schema v7 local data and v2 backup files migrate forward cleanly into on-device SQLite (Phase 13).
 
 ---
 
@@ -1313,9 +1303,9 @@ Recommended metadata includes:
 - Creation timestamp.
 - Application version.
 
-### 22.2 Manual backup
+### 22.2 Manual & off-device backup
 
-Udeni can create a backup manually and choose where to save it.
+Udeni can create a backup manually at any time. In the Android `.apk` (Phase 14+), **1-tap backup export** uses `@capacitor/filesystem` + `@capacitor/share` so she can save the `.json` (or password-encrypted) backup directly to her free **Google Drive**, WhatsApp, or device Downloads folder with zero cloud server required.
 
 The application must show the last successful backup date.
 
@@ -1460,78 +1450,7 @@ The app must support the complete practical workflow from receiving a customer o
 
 ## 25. Implementation Roadmap
 
-Implementation should begin only after requirements and the primary Figma journeys have been approved.
-
-### Phase 1 — Requirements and design
-
-- Finalize the requirements baseline.
-- Prepare the Figma Make design brief.
-- Establish the visual direction and navigation.
-- Design the dashboard and core workflows.
-- Validate interactions and edge cases.
-- Approve the design reference.
-
-### Phase 2 — Technical foundation
-
-- Create the Expo React Native TypeScript project.
-- Establish the folder structure.
-- Configure navigation and reusable UI components.
-- Implement the SQLite database.
-- Create versioned migrations.
-- Establish repository interfaces and implementations.
-- Add automated testing.
-
-### Phase 3 — Products and recipes
-
-- Implement product and variant management.
-- Implement the Recipe Library.
-- Implement recipe yields and scaling.
-- Implement recipe history and order-specific snapshots.
-- Add recipe selection and creation during order entry.
-
-### Phase 4 — Orders
-
-- Implement customer management.
-- Implement draft and confirmed orders.
-- Implement order snapshots and inventory reservations.
-- Implement explicit order changes and cancellation.
-- Implement collection and order completion states.
-
-### Phase 5 — Shopping and inventory
-
-- Implement inventory records and movements.
-- Implement the recipe shopping cart.
-- Implement consolidated shopping lists.
-- Implement purchase recording and corrections.
-- Implement weighted-average costing.
-- Implement reservations, actual consumption, and stock adjustments.
-
-### Phase 6 — Preparation and extra stock
-
-- Implement product-level preparation.
-- Implement actual usage adjustment.
-- Implement preparation completion.
-- Implement extra-stock batches.
-- Implement finished-product stock, quick sales, and waste.
-
-### Phase 7 — Finances and reporting
-
-- Implement estimated and actual costing.
-- Implement pricing calculations.
-- Implement labour costing.
-- Implement direct and shared expenses.
-- Implement payments, refunds, and cancellation settlements.
-- Implement reports and outstanding-balance summaries.
-
-### Phase 8 — Backup, validation, and release
-
-- Implement JSON export.
-- Implement optional encrypted backups.
-- Implement weekly reminders.
-- Implement validated restoration.
-- Run unit, integration, and end-to-end tests.
-- Validate the application on an Android emulator and physical device.
-- Resolve defects before release.
+The authoritative phase-by-phase implementation plan (Part 1: Completed Web/PWA UI Phases 0–11; Part 2: Local-First SQLite, Native Plugins & Signed Android `.apk` Phases 12–17) is maintained in [`docs/IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md).
 
 ---
 
@@ -1599,3 +1518,60 @@ Its core concepts must remain distinct:
 These concepts work together through explicit, testable rules. They must not be collapsed into a single record or updated implicitly in ways that destroy historical information.
 
 The first release should prioritize correctness, simplicity, traceability, offline reliability, and a natural baking workflow over feature count or architectural sophistication.
+
+---
+
+## 29. Architecture Decision Records (v2.0 — Phase 12 Gate)
+
+### ADR-001: Package as a Local-First Android `.apk` via Capacitor
+- **Context:** The original spec envisioned an Expo React Native port, while Phases 0–11 delivered a polished React 19 + Vite 8 + Tailwind v4 + Motion UI with 270 passing tests.
+- **Decision:** Package `dist/` directly into an Android `.apk` using **Capacitor (`@capacitor/android`)** instead of rewriting the UI in React Native.
+- **Consequences:** 100% UI, animation, and domain test reuse; zero rewrite risk; full access to native Android SQLite, Camera, Filesystem, Share Sheet, and Hardware Back button.
+
+### ADR-002: 100% Local-First Operation (No Cloud Backend Server)
+- **Context:** Udeni's Specials is a personal single-owner app. Free cloud databases sleep or expire (e.g., 7-day/30-day limits), require login/network, and add sync-conflict complexity.
+- **Decision:** Run the entire application **100% locally on Udeni's Android phone** with no cloud backend server, no user login wall, and \$0/month hosting cost.
+- **Consequences:** Instant airplane-mode operation, complete privacy, and single-database simplicity. Multi-device live sync is deferred unless a future business need justifies it.
+
+### ADR-003: On-Device SQLite with Versioned Migrations
+- **Context:** `localStorage` has ~5 MB limits and is vulnerable to browser cache clears.
+- **Decision:** Replace `localStorage` with on-device **SQLite** (`@capacitor-community/sqlite` on Android, with a browser storage adapter for fast Chrome development) accessed through a transactional Repository / Unit-of-Work layer and versioned SQL migrations.
+- **Consequences:** ACID multi-table transactions, unlimited practical storage for years of orders, and safe automatic schema upgrades across `.apk` updates.
+
+### ADR-004: Expanded Multi-Category Food Domain & Local Filesystem Media
+- **Context:** The business prepares cakes, pastries, pizzas, savories, chili pastes, and custom foods. Base64 photos bloat JSON backups.
+- **Decision:** Maintain the multi-category SVG food preset library (`src/lib/imageLibrary.ts`) and store captured/uploaded photos (including future customer order reference photos) as compressed files via `@capacitor/filesystem` + `@capacitor/camera`.
+- **Consequences:** Fast DB queries, compact JSON backups, and rich visual identification across orders, recipes, preparation, and stock.
+
+### ADR-005: Off-Device Backups via Android Share Sheet & Validated v2 JSON Restore
+- **Context:** With no cloud DB, phone loss/damage must be mitigated without friction.
+- **Decision:** Keep the weekly backup reminder and v2 JSON (plus optional password-encrypted) backup format, enhanced with 1-tap Android Share Sheet export (`@capacitor/share`) straight to Udeni's free **Google Drive** or WhatsApp.
+- **Consequences:** Zero-cost cloud backup safety controlled directly by Udeni, with strict pre-restore validation.
+
+### ADR-006: Monetary Precision Reconciliation
+- **Context:** Original §15.6 specified minor units (`× 100`), whereas the implemented domain and all 270 tests operate in whole LKR integers (`Number.isSafeInteger`).
+- **Decision:** Store authoritative monetary amounts (`agreedPrice`, `payments`, `refunds`, `expenses`, `purchases.totalPrice`, `BudgetPlan`) as **whole LKR `INTEGER`**, while keeping decimal precision (`REAL`) for per-gram/ml `average_unit_cost`.
+- **Consequences:** Eliminates mismatch between spec, UI, and tests while keeping weighted-average costing accurate.
+
+### ADR-007: Post-Release Updates via Consistently Signed `.apk` In-Place Upgrades
+- **Context:** Bug fixes and new features must reach Udeni's phone without wiping her existing bakery records.
+- **Decision:** Sign every release `.apk` with the **same release keystore (`.jks`, stored safely outside Git)** and increment Android `versionCode` on each release, paired with an optional lightweight in-app update check reading a static `version.json` on GitHub Releases when online.
+- **Consequences:** Tapping "Update" on a newly sent `.apk` upgrades the app in place, preserves all SQLite data and photos, and runs any new SQLite migrations automatically.
+
+---
+
+## 30. Implemented UI & Navigation Specification (Reference)
+
+Architecture and UX decisions finalized in the implemented React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 application (`src/`):
+
+- **4-Tab Information Architecture:**
+  - **`Home` (`today`):** Greeting, `Up next` priority card, `New order` CTA, contextual **Payments due** warning banner (shown whenever non-draft, non-cancelled orders have `outstandingOrderBalance > 0`), 2×2 snapshot (`Due today`, `Ready`, `To buy`, `This month`), `Upcoming pickups`, Notifications bell (`selectAttentionItems`, swipe-to-clear with Undo), and `Settings`.
+  - **`Orders` (`orders`):** `Active`, `Ready`, `Due (N)`, `Done`, and `All` filter pills; `OrderCard` with live `dd:hh:mm:ss` pickup countdowns (`CountdownBadge`), `Due Rs. X` balance cues, and contextual quick actions (`Confirm`, `To buy`, `Bake`, `Collected`, `Add payment`). Confirming `Collected` with a remaining balance automatically opens the **Record payment** dialog pre-filled with the balance due. Payment methods use a structured dropdown (`Cash`, `Online transaction`, `Other` with optional custom label) shared across order deposits and step-by-step payments.
+  - **`Kitchen` (`kitchen`):**
+    - **Shopping (`To buy`):** Driven by manual pantry checklist toggles (`Have` / `Buy`) on order items (`SET_PANTRY_CHECKLIST_ITEM`). Consolidates minimal total quantities across orders, displays calculated per-item and total estimated `Rs.` values from inventory unit prices (`Rs./kg | L | unit`), and records actual purchases via `ShoppingTripSheet`.
+    - **Recipes & Products:** Products define customer-facing items and size/pack variants, with an optional **"Copy recipe from existing"** selector when creating a new product (`ProductEditorSheet`). Recipes hold ingredients, packaging, inline `Rs./kg | L | unit` unit prices, batch scaling (`0.5×`–`10×`), `PricingCalculatorSheet`, preparation steps, and version history.
+    - **Direct Order-Linked Preparation (`PreparationProductScreen`):** Tapping `Start bake` dispatches `START_PREPARATION` (`startedAt` timestamp) and switches to a minimalistic **Baking State** view showing scaled recipe quantities, numbered preparation steps, `Cook mode`, and a live `dd:hh:mm:ss` recipe timer (`startedAt + preparationMinutes`). `Mark ready` is gated until all steps are checked and redirects directly back to the order's `Ready for pickup` page.
+  - **`Money` (`money`):** Minimalistic **Overview** (`Sales earned`, `Cash received`, `Money spent`, `Monthly goal`, tappable `Unpaid customer orders` row opening the **Unpaid & part-paid orders** sheet, and collapsible `Breakdown & exports` with CSV exports), **Expenses**, and **Budget**.
+- **Monthly Budgeting (`BudgetPlan`):** Supports both revenue/profit targets and per-category / ingredient spending limits evaluated against the `Asia/Colombo` calendar month, with 80% warning and 100% over-limit alerts surfaced on `Home` and `Money`.
+- **Motion, Accessibility & Error Resilience:** Top-level `ErrorBoundary`, physics-based spring tokens (`src/lib/motion.ts`), OKLCH color continuity, `TouchRipple` feedback, and clipped zero-pop `PushView` transitions.
+

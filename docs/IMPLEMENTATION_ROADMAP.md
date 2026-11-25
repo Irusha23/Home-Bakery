@@ -1,194 +1,199 @@
 # Udeni's Specials — Implementation Roadmap
 
-**Status:** Proposed  
-**Development environment:** VS Code + GitHub Copilot  
-**Target:** Android-first, offline-capable application
+**Status:** All Phases (0–17) Complete — `v1.0.0` Released on `main`  
+**Stack:** React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4 + Motion + Vitest → Capacitor Android `.apk` + On-Device SQLite (`@capacitor-community/sqlite`)  
+**Target:** 100% local-first, offline-capable signed Android Mobile Application (`.apk`) with on-device SQLite, local filesystem photos, 1-tap Share Sheet backups (Google Drive/WhatsApp), and zero hosting cost
 
-## Phase 0 — Planning approval
+---
+
+## Phase Dependency Overview
+
+```mermaid
+flowchart TD
+  P11["Phases 0–11 (Done)\nUI Prototype + Purified Starter Slice + 270 Tests"] --> P12["Phase 12 (Done)\nArchitecture & Tech Stack ADRs (v2.0)"]
+  P12 --> P13["Phase 13\nSQLite Schema, Migrations & Repository Layer"]
+  P13 --> P14["Phase 14\nLocal Filesystem Media & Android Share Backups"]
+  P14 --> P15["Phase 15\nCapacitor Android Setup & Native Mobile UX"]
+  P15 --> P16["Phase 16\nRelease Signing, .apk Build Pipeline & CI"]
+  P16 --> P17["Phase 17\nAndroid Studio Emulator QA & v1.0.0 Release"]
+```
+
+---
+
+## Part 1 — Frontend Prototype & UI Refinements (Completed)
+
+### Phase 0 — Planning approval (Completed)
 
 Deliverables:
-- Approved architecture decision record.
-- Approved Copilot project instructions.
-- Approved Figma Make design brief.
-- Agreed business rules and acceptance criteria.
+- [x] Architecture & requirements design (`docs/ARCHITECTURE_DECISIONS.md`).
+- [x] Domain business rules and financial terminology agreed.
+- [x] Minimalistic 4-tab mobile UX direction established.
 
-Acceptance:
-- No unresolved architectural issue blocks the initial project setup.
-- Scope boundaries are explicit.
-- Core financial terminology is agreed.
+### Phase 1 — Project foundation & tooling (Completed)
 
-## Phase 1 — Development environment and project foundation
+Completed:
+- [x] Vite 8 + React 19 + TypeScript 5.7 + Tailwind CSS v4 scaffold (`package.json`, `vite.config.ts`).
+- [x] Git repository, feature branching (`feature/remaining-workflows`), and remote tracking.
+- [x] Type checking (`npx tsc --noEmit`), Vitest suite (`pnpm test --run`), and production build (`pnpm build`).
 
-Tasks:
-- Verify Node.js, Git, VS Code, Android Studio and Android SDK setup.
-- Create the Expo React Native TypeScript project.
-- Establish the initial Git repository and checkpoint.
-- Configure Expo Router and React Native Paper.
-- Configure the shared application theme.
-- Establish TypeScript, linting and test commands.
-- Verify the project starts on the Android emulator.
+### Phase 2 — Design system and 4-tab navigation (Completed)
 
-Acceptance:
-- Application launches successfully on the emulator.
-- Navigation shell renders correctly.
-- Type checking, tests and production-oriented build checks are available.
-- Dependencies are compatible and recorded in the lockfile.
-- No business features have been added prematurely.
+Completed:
+- [x] Shared warm bakery design tokens (`src/index.css`) and reusable UI primitives (`Button`, `Card`, `Dialog`, `Field`, `SelectField`, `Sheet`, `GroupedList`, `StatusBadge`, `SegmentedControl`, `CountdownBadge`, `Toast`).
+- [x] 4-tab bottom navigation (`Home`, `Orders`, `Kitchen`, `Money`) with stack transitions (`useNavigationStack.ts`) and sub-screens (`CustomersScreen`, `SettingsScreen`).
+- [x] Narrow mobile viewport layout, empty states, and confirmation dialogs.
 
-## Phase 2 — Design system and navigation
+### Phase 3 — Domain models and financial rules (Completed)
 
-Tasks:
-- Implement shared typography, colours, spacing and component conventions.
-- Implement the approved navigation structure.
-- Create the six core screen shells.
-- Add reusable inputs, cards, status indicators and dialogs.
-- Implement empty and error states.
+Completed:
+- [x] Typed domain models (`src/types.ts`) for products, variants, recipes, orders, order lines, preparation records, payments, refunds, expenses, shared allocations, and budgets.
+- [x] Pure domain calculators and validators (`src/lib/pricing.ts`, `src/lib/financials.ts`, `src/lib/expenses.ts`, `src/lib/budget.ts`, `src/lib/countdown.ts`).
+- [x] Automated unit tests covering margin/markup pricing, payment balances, refunds, expenses, and `dd:hh:mm:ss` countdowns.
 
-Acceptance:
-- The six main screen destinations are reachable.
-- Screens follow the approved Figma design.
-- Layouts remain usable on narrow Android screens.
-- Common components behave consistently.
+### Phase 4 — Orders, products, recipes, and baking workflow (Completed)
 
-## Phase 3 — Domain models and financial rules
+Completed:
+- [x] Multi-line order creation and editing (`CreateOrderFlow.tsx`) with saved recipes or `+ Customise` one-off recipes.
+- [x] Product & variant catalogue (`ProductEditorSheet.tsx`) with optional **"Copy recipe from existing"** starter cloning, plus Recipe Library (`RecipeEditorSheet.tsx`, `RecipesScreen.tsx`) with inline `Rs./kg | L | unit` pricing, batch scaling, and version history.
+- [x] Direct order-linked baking workflow (`PreparationProductScreen`): pantry checklist gate (`Have` / `Buy`) → `Start bake` transitions into minimalistic **Baking State** (scaled recipe + steps + `Cook mode` + live `dd:hh:mm:ss` recipe timer) → `Mark ready` (step-gated) redirects to the order's `Ready for pickup` page.
+- [x] Live `dd:hh:mm:ss` pickup countdowns on `OrderCard` and `OrderDetailScreen`, plus `REPEAT_ORDER` drafts.
 
-Tasks:
-- Define typed models for products, recipes, orders, order lines, expenses, payments and shared allocations.
-- Define money and quantity representations.
-- Implement recipe costing and order cost calculations.
-- Implement margin and markup pricing.
-- Implement payment balance calculations.
-- Implement shared expense allocation validation.
-- Add tests for normal and invalid cases.
+### Phase 5 — Shopping, purchases, and expenses (Completed)
 
-Acceptance:
-- A Rs. 1,000 cost with a 30% margin produces Rs. 1,428.57 before rounding.
-- The same cost with a 30% markup produces Rs. 1,300.
-- Invalid margin inputs are rejected.
-- Shared allocations cannot exceed the source expense.
-- Tests verify payment balances and cost calculations.
-- Historical snapshots have defined semantics.
+Completed:
+- [x] Manual pantry checklist-driven **Shopping** (`To buy`) list (`ShoppingScreen.tsx`) consolidating minimal total quantities across orders with calculated per-item and total `Rs.` estimates.
+- [x] Purchase recording (`ShoppingTripSheet.tsx`, `PurchaseForm.tsx`) updating inventory quantities and unit costs.
+- [x] Direct and shared expense recording and allocation (`MoneyScreen.tsx` → `Expenses`, `FinancesScreen.tsx`).
 
-## Phase 4 — Orders and products
+### Phase 6 — Pricing, payments, and due-balance tracking (Completed)
 
-Tasks:
-- Create and edit orders.
-- Add multiple product lines.
-- Maintain reusable recipes and custom one-off products.
-- Add order status and due-date handling.
-- Capture the relevant recipe and costing snapshot.
-- Implement order details and validation.
+Completed:
+- [x] Integrated `PricingCalculatorSheet` supporting margin/markup modes and manual agreed prices.
+- [x] Step-by-step partial payments, refunds, and `Collected` auto-prompt to record remaining balance when due.
+- [x] Standardized payment method dropdown (`Cash`, `Online transaction`, `Other` with optional specification).
+- [x] Unpaid & part-paid visibility across the app: `Orders → Due` filter + `Due Rs. X` card cues, `Home` contextual **Payments due** banner, and tappable **Unpaid customer orders** sheet in `Money`.
 
-Acceptance:
-- An order can contain multiple products.
-- Both recipe-based and custom products are supported.
-- Editing a reusable recipe does not silently rewrite existing order costs.
-- Invalid or incomplete order data is handled safely.
+### Phase 7 — Local persistence and migrations (Completed for Web Prototype)
 
-## Phase 5 — Shopping and expenses
+Completed:
+- [x] Versioned `localStorage` persistence (`src/state/persistence.ts`) with schema migration support and `PersistenceRecoveryScreen.tsx`.
+- [x] Centralized validated reducer (`src/state/AppState.tsx`) with `dispatchIfAccepted` safety guards.
+- [x] Persistence and reducer lifecycle test suites (`AppState.test.ts`, `ExtraStockLifecycle.test.ts`, `persistence.test.ts`).
 
-Tasks:
-- Generate shopping requirements from selected orders.
-- Consolidate compatible ingredient requirements.
-- Record actual purchases.
-- Record order-specific expenses.
-- Record shared shopping and transport expenses.
-- Allocate shared expenses and display unallocated balances.
+### Phase 8 — Dashboard, reporting, and budgeting (Completed)
 
-Acceptance:
-- Shopping requirements combine matching ingredients correctly.
-- Purchase spending is distinguished from ingredient consumption cost.
-- Shared expenses are recorded once and allocated consistently.
-- Related database updates use transactions where required.
+Completed:
+- [x] `HomeScreen` driven by live selectors (`todaySelectors.ts`): `Up next`, workload counts, `Upcoming pickups`, `Due` payment alerts, and `Notifications`.
+- [x] Minimalistic `MoneyScreen` with period filters, `Sales earned`, `Cash received`, `Money spent`, `Monthly goal`, category spend limits (`Budget`), and CSV exports (`orders`, `expenses`, `purchases`).
 
-## Phase 6 — Pricing and payments
+### Phase 9 — Backup, restore, and data recovery (Completed)
 
-Tasks:
-- Integrate the pricing calculator with order costing.
-- Support margin and markup modes.
-- Support price suggestions and manual agreed prices.
-- Record payments and outstanding balances.
-- Distinguish estimated profit from actual profit.
+Completed:
+- [x] Versioned JSON export and validated import (`BackupRestorePanel.tsx` in `SettingsScreen.tsx`).
+- [x] Weekly backup reminders with dismiss/snooze controls.
+- [x] Safe rejection of invalid backup files without corrupting live state.
 
-Acceptance:
-- The calculator uses the agreed business rules.
-- Changing an estimate does not silently overwrite an agreed price.
-- Partial payments produce the correct outstanding balance.
-- Missing cost information is clearly identified.
-- Payment records and financial summaries remain consistent.
+### Phase 10 — UI Polish, Motion Physics & PWA Shell (Completed)
 
-## Phase 7 — SQLite persistence
+Completed:
+- [x] Expanded multi-category food image library (`src/lib/imageLibrary.ts`) for cakes, pastries, pizzas, savories, and chili pastes, plus gallery photo upload & compression (`src/lib/imageUpload.ts`).
+- [x] Swipe-to-clear notifications with Undo (`SwipeableRow.tsx`, `notificationState.ts`) and custom SVG illustrations (`Illustration.tsx`).
+- [x] Physics-based spring motion system (`src/lib/motion.ts`), OKLCH color transitions, touch ripples (`TouchRipple.tsx`), hierarchical stagger choreography, and clipped zero-pop `PushView` page transitions.
+- [x] Top-level `ErrorBoundary.tsx`, LAN-safe `createId()` (`src/lib/id.ts`), and PWA manifest/meta tags (`index.html`, `public/manifest.webmanifest`).
+
+### Phase 11 — UI Purification & Minimal Starter Dataset (Completed)
+
+Completed:
+- [x] Split `src/data/demoData.ts` into `src/data/defaults.ts` (empty defaults), `src/data/starterData.ts` (1 customer, 1 product + 1 variant, 1 recipe with 6 inventory items, 1 order + `VITE_STARTER_MODE=minimal|empty`), and `src/test/demoFixture.ts`.
+- [x] Fixed `migrateState()` so mock inventory is never injected into empty/restored workspaces, and added **Clear workspace (start empty)** / **Load minimal starter sample** in `SettingsScreen.tsx`.
+- [x] Hardened empty states (`CreateOrderFlow.tsx`, `InventoryScreen.tsx`, `PersistenceRecoveryScreen.tsx`) and verified all 270 tests + production build.
+
+---
+
+## Part 2 — Local-First SQLite, Native Integration & Signed Android `.apk`
+
+> [!NOTE]
+> Each phase below is executed **one at a time**, ending with a verified test/build gate and Git commit before starting the next phase. This roadmap is a living document and will be updated whenever practical findings emerge.
+
+### Phase 12 — Architecture & Tech Stack Decision Gate (`ARCHITECTURE_DECISIONS.md` v2.0) (Completed)
+
+Completed:
+- [x] Upgraded `docs/ARCHITECTURE_DECISIONS.md` to **v2.0** locking the **Local-First Capacitor Android `.apk` + On-Device SQLite** architecture (zero cloud server/hosting cost, 100% offline usability, 100% UI reuse).
+- [x] Documented formal **ADR-001 through ADR-007** covering Capacitor packaging, local-first operation, SQLite migrations, multi-category food media, Share Sheet off-device backups, Whole LKR money precision, and consistently signed in-place `.apk` updates.
+
+### Phase 13 — SQLite Database Schema, Migrations & Repository Layer (Completed)
+
+**Goal:** Design the relational SQLite schema, versioned migrations, and transactional Repository / Unit-of-Work layer so business data moves from `localStorage` to rock-solid on-device SQLite. *(Tested fast in Chrome + Vitest; Android Studio not required yet.)*
 
 Tasks:
-- Implement repository interfaces.
-- Implement SQLite repositories and schema migrations.
-- Configure database initialisation and error handling.
-- Persist all required business records.
-- Add transactions and database constraints.
-- Verify data across app restarts.
+- [x] Author `docs/DATABASE_SCHEMA.md` with Mermaid ERD, SQLite tables, foreign keys, `CHECK` constraints (non-negative stock, positive quantities, valid status enums), and indexes covering:
+  - Settings, budget plan, notification preferences
+  - Products, variants, recipes, immutable recipe versions, ingredients, packaging
+  - Inventory items, append-only inventory movements, purchases, shopping trips & selections
+  - Customers, orders, order lines (immutable recipe & cost snapshots), stock reservations, preparation records, extra-stock plans/batches/transactions
+  - Append-only payments & refunds, expense categories, expenses, versioned expense allocations
+- [x] Create versioned SQL migration runner (`0001_initial_schema`) in `src/db/migrator.ts` with idempotency-key support.
+- [x] Build the `AppRepository` / `SqliteAppRepository` / `IndexedDbAppRepository` layers (`src/db/*`) and wire `AppStateProvider` with automatic one-time `localStorage` → repository import (`bootstrapAppRepository`).
+- [x] **Exit gate:** Migration, constraint, transaction-rollback, round-trip, legacy-import, and idempotency tests pass in Vitest; `npx tsc --noEmit` and `pnpm build` succeed.
 
-Acceptance:
-- Core workflows operate offline.
-- Saved data survives application restarts.
-- Related records remain consistent after failures.
-- Migrations work against supported database versions.
-- Invalid database operations fail safely.
+### Phase 14 — Native Local Media Storage & Android Off-Device Backups (Completed)
 
-## Phase 8 — Dashboard and history
+**Goal:** Store uploaded photos locally via a clean `MediaStore` abstraction, unlock customer order reference photos, and enable password-protected + 1-tap Share Sheet backups.
 
 Tasks:
-- Populate the dashboard from saved records.
-- Add upcoming-order and outstanding-payment summaries.
-- Add completed-order history.
-- Add basic date filtering and financial summaries.
+- [x] Implement `MediaStore` (`IndexedDbMediaStore` + `MemoryMediaStore`) in `src/lib/mediaStore.ts` with backup photo hydration (`resolveAppDataMediaForExport`) so Phase 15 Capacitor `@capacitor/filesystem` swaps in cleanly.
+- [x] Unlock **Customer Order Reference Photo** attachment across `CreateOrderFlow.tsx`, `OrderDetailScreen.tsx`, `ImagePickerSheet.tsx`, `AppState.tsx`, and SQLite migration `0002_order_reference_photo`.
+- [x] Upgrade `BackupRestorePanel.tsx` with 1-tap Share Sheet export (`src/lib/backupShare.ts` → Google Drive / WhatsApp / Download fallback) and optional password-protected AES-256-GCM encrypted backups (`src/lib/backupCrypto.ts`).
+- [x] **Exit gate:** MediaStore, backup encryption/decryption, v2 migration upgrade, and full order photo workflow pass automated tests (`npx tsc --noEmit`, `pnpm test`, `pnpm build`).
 
-Acceptance:
-- Dashboard figures are derived from consistent underlying records.
-- Estimated and actual results are clearly differentiated.
-- Cancelled and completed orders are handled correctly.
-- Empty states work when no orders exist.
+### Phase 15 — Capacitor Android Setup & Native Mobile UX (Completed)
 
-## Phase 9 — Backup, restore and data recovery
+**Goal:** Wrap the React/Vite app in Capacitor Android and wire native hardware behavior so the app feels completely native on Android.
 
 Tasks:
-- Design a versioned export format.
-- Export required business records.
-- Validate imported data before restoration.
-- Define how duplicate or conflicting records are handled.
-- Add recovery guidance and destructive-action confirmation.
+- [x] Initialize `@capacitor/core`, `@capacitor/cli`, `@capacitor/android`, `@capacitor-community/sqlite`, and native plugins pointing at `dist/`.
+- [x] Configure Android app identity (`lk.udenisspecials.bakery`, app name *"Udeni's Specials"*), splash/icon resources, and `usesCleartextTraffic="false"`.
+- [x] Implement `CapacitorSqliteEngine`, `CapacitorFilesystemMediaStore`, and native Share Sheet backup export (`src/db/engines/capacitorSqliteEngine.ts`, `src/lib/mediaStore.ts`, `src/lib/backupShare.ts`).
+- [x] Wire Android **hardware/gesture Back button** (`src/lib/backStack.ts`, `src/lib/nativeBridge.ts`) into `Dialog`, `Sheet`, `ScreenHeader`, and root tab/exit flow, plus `StatusBar` & `Haptics`.
+- [x] Add lightweight **Check for Updates** card in `SettingsScreen.tsx` (`src/lib/appVersion.ts` reading `VITE_UPDATE_FEED_URL`).
+- [x] Verify live boot, SQLite persistence, Airplane Mode workflows, Camera/Gallery photos, encrypted Share backups, and Hardware Back button inside **Android Studio Emulator**.
 
-Acceptance:
-- A valid export can be restored successfully.
-- Invalid files are rejected without corrupting existing records.
-- Restore operations are transactional where practical.
-- Backup and restore are tested on the Android application.
+### Phase 16 — Release Signing, `.apk` Build Pipeline & CI (Completed)
 
-## Phase 10 — Release readiness
+**Goal:** Establish repeatable, consistently signed `.apk` builds so future bug fixes and updates upgrade Udeni's phone in place without losing data.
 
 Tasks:
-- Complete emulator-based functional testing.
-- Test on the physical Android phone.
-- Verify keyboard behaviour, touch targets and scrolling.
-- Test offline use, restart behaviour and data recovery.
-- Fix high-priority usability and data-integrity defects.
-- Prepare installation and user guidance.
+- [x] Configure single-source `versionCode` / `versionName` management (`src/version.json`, `scripts/release-tools.mjs`, `src/lib/appVersion.ts`) and Gradle release `.apk` signing (`android/app/build.gradle`, `android/keystore.properties.example`, `scripts/build-apk.mjs`) with fail-fast guard against unsigned releases.
+- [x] Set up GitHub Actions CI (`.github/workflows/ci.yml`) running `web-verify` (`typecheck`, `vitest`, `vite build`) and `android-debug-check` (`cap sync` + `./gradlew assembleDebug`) on every push/PR.
+- [x] Document the step-by-step keystore setup, signed `.apk` build, and in-place update checklist (`docs/ANDROID_RELEASE_GUIDE.md`).
+- [x] **Exit gate:** Version sync, Gradle signing guard, debug `.apk` build, and CI pipeline verified; ready for user's private `.jks` generation and Phase 17 QA.
 
-Acceptance:
-- All critical end-to-end workflows pass.
-- No known critical data-loss or financial-calculation defect remains.
-- Physical-device testing is documented.
-- Known limitations are disclosed before real business use.
+### Phase 17 — Android Studio Emulator QA & `v1.0.0` Release (Completed)
+
+**Goal:** Thoroughly test every offline, backup, and upgrade scenario on the Android Studio Emulator (plus final handoff to Udeni's phone) before daily use.
+
+Tasks:
+- [x] **Android Studio Emulator QA (`docs/QA_CHECKLIST_V1.md`):**
+  1. Complete order → shopping → bake → payment flow in **Airplane Mode**.
+  2. Force-close and reopen the app — verify 100% SQLite data & photo persistence.
+  3. Export backup via Share Sheet / Files, wipe app data, restore backup — verify 100% integrity.
+  4. **In-place `.apk` upgrade drill:** Install `v1.0.0 (Build 1)` `.apk`, create test orders/recipes, install `v1.0.1 (Build 2)` `.apk` (`versionCode + 1`, same keystore) over it (`adb install -r`) — verified zero data loss and clean upgrade.
+  5. Verify hardware Back button, camera/gallery picker, soft keyboard over forms, and 60fps `PushView` transitions.
+- [x] Build final gold signed `v1.0.0` `.apk` (`udenis-specials-v1.0.0-b1-release.apk`, `starter=empty`).
+- [x] Merge verified milestone cleanly to `main` and tag `v1.0.0`.
+- [x] **Exit gate:** Signed `v1.0.0` `.apk` verified offline on Android with tested Share backups and verified in-place upgrade path.
+
+---
 
 ## Development rules
 
-- Work on one milestone at a time.
-- Use small Git commits at stable checkpoints.
-- Require human review of AI-generated changes.
-- Run relevant tests before marking a task complete.
-- Do not skip earlier acceptance criteria to add later features.
-- Do not introduce a backend without an approved architectural change.
-- Maintain a record of incomplete work and known limitations.
+- Work on one milestone at a time and keep this roadmap updated as decisions evolve.
+- Use small, conventional Git commits at verified checkpoints and push to `origin`.
+- Require human review of architecture decisions, schema changes, and AI-generated changes.
+- Run typecheck, automated tests, and build verification before marking a phase complete.
+- Never lose or rotate the release signing keystore (required for in-place `.apk` updates).
+- Maintain a clear record of incomplete work and known limitations.
 
 ## Definition of project completion
 
-The initial release is complete when the owner can manage real orders, calculate prices accurately, record expenses and payments, retrieve saved records offline, and recover her business data through a tested backup and restore workflow.
+The release is complete when Udeni can manage real orders, recipes, inventory, shopping, preparation, expenses, payments, and photos reliably offline in an **installed, signed Android `.apk`** backed by on-device SQLite, 1-tap Google Drive/Share backups, and a verified in-place `.apk` update workflow.

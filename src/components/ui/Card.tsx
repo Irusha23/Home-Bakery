@@ -19,7 +19,7 @@ export default function Card({
 }: CardProps) {
   return (
     <div
-      className={`rounded-card border p-4 shadow-subtle ${toneClasses[tone]} ${className}`}
+      className={`rounded-card border p-4 shadow-subtle transition-[background-color,border-color,box-shadow] duration-200 ease-out ${toneClasses[tone]} ${className}`}
       {...props}
     >
       {children}

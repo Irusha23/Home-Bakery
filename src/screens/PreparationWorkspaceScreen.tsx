@@ -1,19 +1,24 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
   AlertTriangle,
   CalendarDays,
   Check,
+  CheckCheck,
   ChefHat,
   ClipboardCheck,
   Clock3,
-  PackageCheck,
+  Flame,
+  ShoppingBag,
 } from "lucide-react"
+import KitchenModeOverlay from "../components/domain/KitchenModeOverlay"
 import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
 import Card from "../components/ui/Card"
-import Dialog from "../components/ui/Dialog"
-import Field from "../components/ui/Field"
+import CountdownBadge from "../components/ui/CountdownBadge"
+import ItemThumbnail from "../components/ui/ItemThumbnail"
 import StatusBadge from "../components/ui/StatusBadge"
+import { useToast } from "../components/ui/Toast"
+import { getBakeTargetMs } from "../lib/countdown"
 import {
   formatDate,
   formatLkr,
@@ -21,10 +26,9 @@ import {
   formatTime,
 } from "../lib/format"
 import {
-  selectAvailableInventory,
-  selectReservedByItem,
+  hasUnpurchasedShoppingItems,
+  isUsageInPantry,
 } from "../lib/inventory"
-import { validatePreparationCompletion } from "../lib/preparation"
 import { useAppState } from "../state/AppState"
 import type { PreparationProductStatus } from "../types"
 
@@ -67,29 +71,26 @@ export default function PreparationWorkspaceScreen({
   ).length
 
   return (
-    <div className="px-page pb-6">
+    <div className="space-y-4 pb-6">
       <ScreenHeader
-        eyebrow="Kitchen workspace"
-        title="Preparation"
-        subtitle={`${records.length - ready} products still need attention`}
+        title="Bake queue"
+        subtitle={`${records.length - ready} active bakes`}
         onBack={onBack}
         backLabel="Back to orders"
       />
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <Card tone="warning" className="p-3 text-center">
           <p className="text-xl font-bold text-warning">
             {records.length - ready - inProgress}
           </p>
           <p className="mt-1 text-nav font-bold uppercase text-muted">
-            Awaiting
+            To start
           </p>
         </Card>
         <Card tone="sage" className="p-3 text-center">
           <p className="text-xl font-bold text-sage-dark">{inProgress}</p>
-          <p className="mt-1 text-nav font-bold uppercase text-muted">
-            In progress
-          </p>
+          <p className="mt-1 text-nav font-bold uppercase text-muted">Baking</p>
         </Card>
         <Card className="p-3 text-center">
           <p className="text-xl font-bold text-success">{ready}</p>
@@ -97,13 +98,17 @@ export default function PreparationWorkspaceScreen({
         </Card>
       </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="space-y-3">
         {records.map((record) => {
           const order = state.orders.find((item) => item.id === record.orderId)
           const line = order?.lines.find(
             (item) => item.id === record.orderLineId,
           )
           if (!order || !line) return null
+          const toBuyCount = record.actualUsage.filter(
+            (u) => !isUsageInPantry(order, record, u),
+          ).length
+
           return (
             <button
               key={record.id}
@@ -136,14 +141,10 @@ export default function PreparationWorkspaceScreen({
                     {formatTime(order.collectionTime)}
                   </span>
                 </span>
-                {order.shortages.some(
-                  (shortage) => shortage.lineId === line.id,
-                ) ? (
-                  <AlertTriangle
-                    aria-label="Stock shortage"
-                    className="shrink-0 text-warning"
-                    size={18}
-                  />
+                {toBuyCount > 0 && record.status !== "Ready" ? (
+                  <StatusBadge tone="warning">
+                    Shop first ({toBuyCount})
+                  </StatusBadge>
                 ) : null}
               </span>
             </button>
@@ -154,153 +155,338 @@ export default function PreparationWorkspaceScreen({
   )
 }
 
-type PreparationProductScreenProps = {
-  preparationId: string
-  onBack: () => void
-}
-
 export function PreparationProductScreen({
   preparationId,
   onBack,
-}: PreparationProductScreenProps) {
-  const { state, dispatch } = useAppState()
-  const [reviewUsage, setReviewUsage] = useState(false)
-  const [issues, setIssues] = useState<string[]>([])
-  const [confirmOpen, setConfirmOpen] = useState(false)
+  onOpenShopping,
+}: {
+  preparationId: string
+  onBack: () => void
+  onOpenShopping?: () => void
+}) {
+  const { state, dispatch, dispatchIfAccepted } = useAppState()
+  const { showToast } = useToast()
+  const [kitchenOpen, setKitchenOpen] = useState(false)
+
   const record = state.preparationRecords.find(
     (item) => item.id === preparationId,
   )
   const order = state.orders.find((item) => item.id === record?.orderId)
   const line = order?.lines.find((item) => item.id === record?.orderLineId)
-  const reservedByItem = useMemo(() => selectReservedByItem(state), [state])
 
   if (!record || !order || !line) {
     return (
-      <div className="px-page">
+      <div className="py-2">
         <ScreenHeader title="Preparation unavailable" onBack={onBack} />
       </div>
     )
   }
 
-  const complete = () => {
-    const validation = validatePreparationCompletion(state, record)
-    if (!validation.valid) {
-      setIssues(validation.issues)
-      setConfirmOpen(false)
+  const shortageItems = record.actualUsage.filter(
+    (usage) => !isUsageInPantry(order, record, usage),
+  )
+  const hasShortages = hasUnpurchasedShoppingItems(order, record)
+  const totalSteps = record.recipeSnapshot.instructions.length
+  const allStepsChecked = record.recipeSnapshot.instructions.every(
+    (_, index) => record.completedSteps.includes(index),
+  )
+
+  const finishBake = () => {
+    if (!allStepsChecked) {
+      showToast({
+        message: "Check off all baking steps before marking ready.",
+        tone: "warning",
+      })
       return
     }
-    dispatch({ type: "COMPLETE_PREPARATION", preparationId: record.id })
-    setConfirmOpen(false)
-    setIssues([])
+    const accepted = dispatchIfAccepted({
+      type: "FINISH_PREPARATION_SIMPLE",
+      preparationId: record.id,
+    })
+    if (!accepted) {
+      showToast({
+        message: "Buy all shopping list items or check all steps before finishing.",
+        tone: "warning",
+      })
+      return
+    }
+    showToast({ message: "Bake marked ready for pickup!", tone: "success" })
+    onBack()
   }
 
   return (
     <>
-      <div className="px-page pb-6">
+      <div className="space-y-5 pb-6">
         <ScreenHeader
           eyebrow={`${order.reference} · ${order.customerName}`}
           title={line.productName}
-          subtitle={`${line.variantName} · Quantity ${line.quantity}`}
+          subtitle={`${line.variantName} · Qty ${line.quantity}`}
           onBack={onBack}
-          backLabel="Back to preparation queue"
+          backLabel="Back"
           compact
         />
 
-        <Card tone="sage" className="mt-4">
+        <Card tone="sage">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-cocoa">
-                {record.recipeSnapshot.name}
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                Frozen recipe v{record.recipeSnapshot.version} ·{" "}
-                {record.recipeSnapshot.preparationMinutes} min
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <ItemThumbnail
+                image={
+                  record.recipeSnapshot.image ??
+                  state.products.find((p) => p.id === line.productId)?.image
+                }
+                alt={line.productName}
+                size="md"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-cocoa">
+                  {record.recipeSnapshot.name}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {record.recipeSnapshot.preparationMinutes} mins prep ·{" "}
+                  {record.actualUsage.length} items
+                </p>
+              </div>
             </div>
-            <StatusBadge tone={preparationTone(record.status)}>
-              {record.status}
-            </StatusBadge>
+            <div className="flex flex-col items-end gap-1.5">
+              <StatusBadge tone={preparationTone(record.status)}>
+                {record.status}
+              </StatusBadge>
+              {record.status === "In progress" ? (
+                <CountdownBadge
+                  targetMs={getBakeTargetMs(
+                    record.startedAt ?? record.updatedAt,
+                    record.recipeSnapshot.preparationMinutes,
+                  )}
+                  overdueLabel="Time up"
+                  urgentThresholdMs={15 * 60_000}
+                />
+              ) : null}
+            </div>
           </div>
         </Card>
 
         {record.status === "Ready" ? (
-          <ReadySummary record={record} />
-        ) : reviewUsage && record.status === "In progress" ? (
-          <UsageReview
-            preparationId={record.id}
-            issues={issues}
-            onBack={() => {
-              setReviewUsage(false)
-              setIssues([])
-            }}
-            onComplete={() => {
-              const validation = validatePreparationCompletion(state, record)
-              if (!validation.valid) setIssues(validation.issues)
-              else setConfirmOpen(true)
-            }}
-          />
+          <ReadySummary record={record} onBack={onBack} />
         ) : (
           <>
-            <section className="mt-5">
-              <div className="mb-3 text-lg font-semibold text-cocoa">
-                Ingredients
-              </div>
-              <Card className="divide-y divide-warm-border p-0">
-                {record.actualUsage
-                  .filter((usage) => usage.category === "ingredient")
-                  .map((usage) => (
-                    <div
-                      key={usage.inventoryId}
-                      className="flex items-center justify-between gap-3 p-4"
-                    >
-                      <span className="text-sm text-cocoa">{usage.name}</span>
-                      <span className="text-sm font-semibold text-cocoa">
-                        {formatQuantity(usage.plannedQuantity, usage.unit)}
-                      </span>
-                    </div>
-                  ))}
-              </Card>
-            </section>
-
-            <section className="mt-5">
-              <div className="mb-3 text-lg font-semibold text-cocoa">
-                Packaging
-              </div>
-              <Card className="space-y-3">
-                {record.actualUsage
-                  .filter((usage) => usage.category === "packaging")
-                  .map((usage) => (
-                    <div
-                      key={usage.inventoryId}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span className="flex items-center gap-2 text-sm text-cocoa">
-                        <PackageCheck
-                          aria-hidden="true"
-                          className="text-sage"
-                          size={16}
-                        />
-                        {usage.name}
-                      </span>
-                      <span className="text-sm font-semibold text-cocoa">
-                        {formatQuantity(usage.plannedQuantity, usage.unit)}
-                      </span>
-                    </div>
-                  ))}
-              </Card>
-            </section>
-
-            <section className="mt-5">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="text-lg font-semibold text-cocoa">
-                  Instructions
-                </div>
-                {record.status === "In progress" ? (
-                  <span className="text-xs font-semibold text-sage-dark">
-                    {record.completedSteps.length}/
-                    {record.recipeSnapshot.instructions.length}
+            {record.status === "In progress" ? (
+              <section className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-cocoa">
+                    Recipe
+                  </h2>
+                  <span className="text-xs text-muted">
+                    {record.recipeSnapshot.yieldLabel}
                   </span>
+                </div>
+                <Card className="divide-y divide-warm-border p-0">
+                  {record.actualUsage.map((usage) => {
+                    const invItem = state.inventory.find(
+                      (inv) => inv.inventoryId === usage.inventoryId,
+                    )
+                    return (
+                      <div
+                        key={usage.inventoryId}
+                        className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <ItemThumbnail
+                            image={invItem?.image}
+                            alt={usage.name}
+                            size="sm"
+                          />
+                          <span className="truncate text-sm font-medium text-cocoa">
+                            {usage.name}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-muted">
+                          {formatQuantity(usage.plannedQuantity, usage.unit)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </Card>
+              </section>
+            ) : (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-base font-semibold text-cocoa">
+                      1. Pantry checklist
+                    </h2>
+                    <p className="text-xs text-muted">
+                      Add missing items to your shopping list before starting.
+                    </p>
+                  </div>
+                  <Button
+                    size="compact"
+                    variant="secondary"
+                    leadingIcon={
+                      <CheckCheck
+                        aria-hidden="true"
+                        size={14}
+                        className="text-success"
+                      />
+                    }
+                    onClick={() => {
+                      dispatch({
+                        type: "MARK_ALL_PANTRY_CHECKLIST",
+                        preparationId: record.id,
+                        inPantry: true,
+                      })
+                      showToast("All items marked in pantry")
+                    }}
+                  >
+                    All ready
+                  </Button>
+                </div>
+
+                {hasShortages ? (
+                  <Card tone="warning" className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle
+                          aria-hidden="true"
+                          size={17}
+                          className="mt-0.5 shrink-0 text-warning"
+                        />
+                        <div>
+                          <p className="text-xs font-semibold text-cocoa">
+                            Buy {shortageItems.length}{" "}
+                            {shortageItems.length === 1 ? "item" : "items"} before
+                            baking
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted">
+                            Baking is locked until all missing items are bought or
+                            marked In pantry.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {onOpenShopping ? (
+                      <Button
+                        fullWidth
+                        size="compact"
+                        variant="secondary"
+                        leadingIcon={<ShoppingBag aria-hidden="true" size={14} />}
+                        onClick={onOpenShopping}
+                      >
+                        To buy ({shortageItems.length})
+                      </Button>
+                    ) : null}
+                  </Card>
                 ) : null}
+
+                <Card className="divide-y divide-warm-border p-0">
+                  {record.actualUsage.map((usage) => {
+                    const inPantry = isUsageInPantry(order, record, usage)
+                    const invItem = state.inventory.find(
+                      (inv) => inv.inventoryId === usage.inventoryId,
+                    )
+                    return (
+                      <div
+                        key={usage.inventoryId}
+                        className="flex items-center justify-between gap-3 p-3.5"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <ItemThumbnail
+                            image={invItem?.image}
+                            alt={usage.name}
+                            size="sm"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-cocoa">
+                              {usage.name}
+                            </div>
+                            <div className="text-xs text-muted">
+                              {formatQuantity(usage.plannedQuantity, usage.unit)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="inline-flex shrink-0 rounded-full border border-warm-border bg-ivory p-0.5 text-xs font-semibold">
+                          <button
+                            type="button"
+                            aria-label={`${usage.name} in pantry`}
+                            onClick={() =>
+                              dispatch({
+                                type: "SET_PANTRY_CHECKLIST_ITEM",
+                                preparationId: record.id,
+                                inventoryId: usage.inventoryId,
+                                inPantry: true,
+                              })
+                            }
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                              inPantry
+                                ? "bg-success text-white shadow-subtle"
+                                : "text-muted hover:text-cocoa"
+                            }`}
+                          >
+                            <Check aria-hidden="true" size={12} />
+                            Have
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Add ${usage.name} to shopping list`}
+                            onClick={() =>
+                              dispatch({
+                                type: "SET_PANTRY_CHECKLIST_ITEM",
+                                preparationId: record.id,
+                                inventoryId: usage.inventoryId,
+                                inPantry: false,
+                                toBuyQuantity: usage.plannedQuantity,
+                              })
+                            }
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                              !inPantry
+                                ? "bg-warning text-white shadow-subtle"
+                                : "text-muted hover:text-cocoa"
+                            }`}
+                          >
+                            <ShoppingBag aria-hidden="true" size={12} />
+                            Buy
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </Card>
+              </section>
+            )}
+
+            <section className={`space-y-3 ${hasShortages ? "opacity-55" : ""}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-cocoa">
+                    {record.status === "In progress"
+                      ? "Preparation steps"
+                      : "2. Baking steps"}
+                  </h2>
+                  {record.status === "In progress" && !hasShortages ? (
+                    <span className="text-xs font-semibold text-sage-dark">
+                      {record.completedSteps.length}/
+                      {record.recipeSnapshot.instructions.length}
+                    </span>
+                  ) : null}
+                </div>
+                <Button
+                  size="compact"
+                  variant="soft"
+                  disabled={hasShortages}
+                  leadingIcon={<Flame aria-hidden="true" size={14} />}
+                  onClick={() => {
+                    if (hasShortages) return
+                    if (record.status === "Awaiting preparation") {
+                      dispatch({
+                        type: "START_PREPARATION",
+                        preparationId: record.id,
+                      })
+                    }
+                    setKitchenOpen(true)
+                  }}
+                >
+                  Cook mode
+                </Button>
               </div>
               <Card className="space-y-2">
                 {record.recipeSnapshot.instructions.map(
@@ -310,15 +496,22 @@ export function PreparationProductScreen({
                       <button
                         key={`${index}-${instruction}`}
                         type="button"
-                        disabled={record.status !== "In progress"}
-                        onClick={() =>
+                        disabled={hasShortages}
+                        onClick={() => {
+                          if (hasShortages) return
+                          if (record.status === "Awaiting preparation") {
+                            dispatch({
+                              type: "START_PREPARATION",
+                              preparationId: record.id,
+                            })
+                          }
                           dispatch({
                             type: "TOGGLE_PREPARATION_STEP",
                             preparationId: record.id,
                             stepIndex: index,
                           })
-                        }
-                        className={`flex w-full items-start gap-3 rounded-control p-3 text-left transition ${
+                        }}
+                        className={`flex w-full items-start gap-3 rounded-control p-3 text-left transition disabled:cursor-not-allowed ${
                           checked ? "bg-success-soft" : "bg-ivory"
                         }`}
                       >
@@ -349,207 +542,113 @@ export function PreparationProductScreen({
               </Card>
             </section>
 
-            <div className="sticky bottom-0 z-20 -mx-page mt-6 border-t border-warm-border bg-ivory/95 px-page pb-3 pt-3 backdrop-blur-nav">
-              {record.status === "Awaiting preparation" ? (
+            <div className="sticky bottom-0 z-20 -mx-5 mt-6 space-y-2 border-t border-warm-border bg-ivory/95 px-5 pb-3 pt-3 backdrop-blur-nav">
+              {hasShortages ? (
+                onOpenShopping ? (
+                  <Button
+                    fullWidth
+                    leadingIcon={<ShoppingBag aria-hidden="true" size={17} />}
+                    onClick={onOpenShopping}
+                  >
+                    To buy ({shortageItems.length})
+                  </Button>
+                ) : (
+                  <Button
+                    fullWidth
+                    disabled
+                    leadingIcon={<ShoppingBag aria-hidden="true" size={17} />}
+                  >
+                    To buy ({shortageItems.length})
+                  </Button>
+                )
+              ) : record.status === "Awaiting preparation" ? (
                 <Button
                   fullWidth
                   leadingIcon={<ChefHat aria-hidden="true" size={18} />}
                   onClick={() =>
-                    dispatch({
+                    dispatchIfAccepted({
                       type: "START_PREPARATION",
                       preparationId: record.id,
                     })
                   }
                 >
-                  Start preparation
+                  Start bake
                 </Button>
               ) : (
-                <Button
-                  fullWidth
-                  leadingIcon={<ClipboardCheck aria-hidden="true" size={18} />}
-                  onClick={() => setReviewUsage(true)}
-                >
-                  Review actual usage
-                </Button>
+                <>
+                  {!allStepsChecked ? (
+                    <p className="text-center text-xs font-medium text-muted">
+                      Check all baking steps ({record.completedSteps.length}/
+                      {totalSteps}) to mark ready
+                    </p>
+                  ) : null}
+                  <Button
+                    fullWidth
+                    disabled={!allStepsChecked}
+                    leadingIcon={<ClipboardCheck aria-hidden="true" size={18} />}
+                    onClick={finishBake}
+                  >
+                    Mark ready
+                  </Button>
+                </>
               )}
             </div>
           </>
         )}
       </div>
 
-      <Dialog
-        open={confirmOpen}
-        title="Complete preparation?"
-        description="Actual stock will be consumed and this product will become ready."
-        onClose={() => setConfirmOpen(false)}
-        footer={
-          <div className="space-y-2">
-            <Button fullWidth onClick={complete}>
-              Complete preparation
-            </Button>
-            <Button
-              fullWidth
-              variant="ghost"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Review again
-            </Button>
-          </div>
-        }
-      >
-        <p className="text-sm leading-relaxed text-muted">
-          This operation is recorded once and cannot be edited after completion.
-        </p>
-      </Dialog>
+      <KitchenModeOverlay
+        open={kitchenOpen && !hasShortages}
+        title={line.productName}
+        subtitle={`${line.variantName} · Qty ${line.quantity} · ${order.reference}`}
+        steps={record.recipeSnapshot.instructions}
+        completedSteps={record.completedSteps}
+        onToggleStep={(stepIndex) => {
+          if (hasShortages) return
+          dispatch({
+            type: "TOGGLE_PREPARATION_STEP",
+            preparationId: record.id,
+            stepIndex,
+          })
+        }}
+        onFinishAll={() => {
+          if (hasShortages) return
+          setKitchenOpen(false)
+          finishBake()
+        }}
+        onClose={() => setKitchenOpen(false)}
+      />
     </>
   )
-
-  function UsageReview({
-    preparationId,
-    issues,
-    onBack,
-    onComplete,
-  }: {
-    preparationId: string
-    issues: string[]
-    onBack: () => void
-    onComplete: () => void
-  }) {
-    return (
-      <>
-        <section className="mt-5">
-          <div className="mb-1 text-lg font-semibold text-cocoa">
-            Actual usage
-          </div>
-          <p className="text-xs text-muted">
-            Planned values are prefilled. Edit only what changed.
-          </p>
-          {issues.length ? (
-            <Card tone="warning" className="mt-3">
-              <div className="space-y-2">
-                {issues.map((issue) => (
-                  <p
-                    key={issue}
-                    className="flex items-start gap-2 text-xs leading-relaxed text-cocoa"
-                  >
-                    <AlertTriangle
-                      aria-hidden="true"
-                      className="mt-0.5 shrink-0 text-warning"
-                      size={15}
-                    />
-                    {issue}
-                  </p>
-                ))}
-              </div>
-            </Card>
-          ) : null}
-          <div className="mt-4 space-y-3">
-            {record.actualUsage.map((usage) => {
-              const availability = selectAvailableInventory(
-                state,
-                usage.inventoryId,
-              )
-              const difference = usage.actualQuantity - usage.plannedQuantity
-              return (
-                <Card key={usage.inventoryId}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-cocoa">
-                        {usage.name}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">
-                        Planned{" "}
-                        {formatQuantity(usage.plannedQuantity, usage.unit)} ·
-                        Physical{" "}
-                        {formatQuantity(availability.physical, usage.unit)}
-                      </p>
-                    </div>
-                    {difference !== 0 ? (
-                      <StatusBadge
-                        tone={difference > 0 ? "warning" : "progress"}
-                      >
-                        {difference > 0 ? "+" : ""}
-                        {formatQuantity(difference, usage.unit)}
-                      </StatusBadge>
-                    ) : (
-                      <StatusBadge tone="neutral">As planned</StatusBadge>
-                    )}
-                  </div>
-                  <div className="mt-3">
-                    <Field
-                      label={`Actual quantity (${usage.unit})`}
-                      type="number"
-                      min="0"
-                      step="any"
-                      inputMode="decimal"
-                      value={usage.actualQuantity}
-                      onChange={(event) => {
-                        const quantity = Number(event.target.value)
-                        dispatch({
-                          type: "UPDATE_PREPARATION_USAGE",
-                          preparationId,
-                          inventoryId: usage.inventoryId,
-                          quantity,
-                        })
-                      }}
-                      helperText={`${formatQuantity(
-                        reservedByItem.get(usage.inventoryId) ?? 0,
-                        usage.unit,
-                      )} reserved across active products`}
-                    />
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-        </section>
-        <div className="sticky bottom-0 z-20 -mx-page mt-6 space-y-2 border-t border-warm-border bg-ivory/95 px-page pb-3 pt-3 backdrop-blur-nav">
-          <Button fullWidth onClick={onComplete}>
-            Complete preparation
-          </Button>
-          <Button fullWidth variant="ghost" onClick={onBack}>
-            Back to recipe
-          </Button>
-        </div>
-      </>
-    )
-  }
 }
 
 function ReadySummary({
   record,
+  onBack,
 }: {
-  record: NonNullable<ReturnType<typeof useAppState>["state"]["preparationRecords"][number]>
+  record: NonNullable<
+    ReturnType<typeof useAppState>["state"]["preparationRecords"][number]
+  >
+  onBack: () => void
 }) {
   return (
-    <div className="mt-5">
+    <div className="mt-5 space-y-4">
       <Card tone="sage" className="text-center">
         <span className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-white text-success">
           <Check aria-hidden="true" size={23} />
         </span>
         <p className="mt-3 text-lg font-semibold text-cocoa">
-          Ready for collection
+          Ready for pickup
         </p>
-        <p className="mt-1 text-sm text-muted">
-          Actual cost {formatLkr(record.actualCost ?? 0)}
-        </p>
-        <p className="mt-2 text-xs text-muted">
-          Collection and payment remain separate order actions.
-        </p>
+        {record.actualCost !== null ? (
+          <p className="mt-1 text-sm text-muted">
+            Estimated material cost {formatLkr(record.actualCost)}
+          </p>
+        ) : null}
       </Card>
-      <div className="mt-4 space-y-2">
-        {record.actualUsage.map((usage) => (
-          <div
-            key={usage.inventoryId}
-            className="flex items-center justify-between rounded-control bg-white px-4 py-3 text-sm"
-          >
-            <span className="text-muted">{usage.name}</span>
-            <span className="font-semibold text-cocoa">
-              {formatQuantity(usage.actualQuantity, usage.unit)}
-            </span>
-          </div>
-        ))}
-      </div>
+      <Button fullWidth onClick={onBack}>
+        Back to order
+      </Button>
     </div>
   )
 }

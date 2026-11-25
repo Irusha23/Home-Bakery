@@ -1,29 +1,54 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react"
+import { Check, Loader2 } from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import {
+  REDUCED_MOTION_TRANSITION,
+  SPRING_CONTROL,
+  SPRING_ELASTIC,
+  SPRING_MICRO,
+  SPRING_NUDGE,
+} from "../../lib/motion"
+import { TouchRippleLayer, useTouchRipple } from "./TouchRipple"
 
 type ButtonVariant = "primary" | "secondary" | "soft" | "ghost"
 type ButtonSize = "default" | "compact"
+type ButtonFeedbackState = "idle" | "success" | "error"
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type SafeButtonHtmlProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart"
+>
+
+type ButtonProps = SafeButtonHtmlProps & {
   children: ReactNode
   leadingIcon?: ReactNode
   trailingIcon?: ReactNode
   variant?: ButtonVariant
   size?: ButtonSize
   fullWidth?: boolean
+  disabledReason?: string
+  loading?: boolean
+  feedbackState?: ButtonFeedbackState
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    "bg-sage text-white shadow-button hover:bg-sage-dark active:scale-button",
-  secondary:
-    "border border-warm-border bg-white text-cocoa hover:bg-ivory active:scale-button",
-  soft: "bg-sage-soft text-sage-dark hover:bg-sage-soft-strong active:scale-button",
-  ghost: "bg-transparent text-cocoa hover:bg-sage-soft active:scale-button",
+  primary: "bg-sage text-white shadow-button hover:bg-sage-dark",
+  secondary: "border border-warm-border bg-white text-cocoa hover:bg-ivory",
+  soft: "bg-sage-soft text-sage-dark hover:bg-sage-soft-strong",
+  ghost: "bg-transparent text-cocoa hover:bg-sage-soft",
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
   default: "min-h-touch rounded-control px-5 py-3 text-sm",
-  compact: "min-h-touch rounded-control px-3 py-2 text-sm",
+  compact: "min-h-touch rounded-control px-3.5 py-1.5 text-xs",
 }
 
 export default function Button({
@@ -34,44 +59,249 @@ export default function Button({
   variant = "primary",
   size = "default",
   fullWidth = false,
+  disabled = false,
+  disabledReason,
+  loading = false,
+  feedbackState = "idle",
   type = "button",
+  onClick,
+  onPointerDown,
   ...props
 }: ButtonProps) {
+  const reducedMotion = useReducedMotion()
+  const { ripples, triggerRipple, removeRipple } = useTouchRipple()
+  const [nudgeCount, setNudgeCount] = useState(0)
+  const [showReason, setShowReason] = useState(false)
+  const reasonTimerRef = useRef<number | null>(null)
+  const isBlocked = Boolean(disabled || loading)
+
+  useEffect(() => {
+    return () => {
+      if (reasonTimerRef.current !== null) {
+        window.clearTimeout(reasonTimerRef.current)
+      }
+    }
+  }, [])
+
+  const triggerBlockedFeedback = () => {
+    setNudgeCount((c) => c + 1)
+    if (disabled) {
+      setShowReason(true)
+      if (reasonTimerRef.current !== null) {
+        window.clearTimeout(reasonTimerRef.current)
+      }
+      reasonTimerRef.current = window.setTimeout(() => {
+        setShowReason(false)
+      }, 1800)
+    }
+  }
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    triggerRipple(event)
+    onPointerDown?.(event)
+  }
+
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (isBlocked) {
+      event.preventDefault()
+      event.stopPropagation()
+      triggerBlockedFeedback()
+      return
+    }
+    onClick?.(event)
+  }
+
+  const stateColorOverride =
+    feedbackState === "success"
+      ? "!bg-success !text-white !border-success"
+      : feedbackState === "error"
+        ? "!bg-error !text-white !border-error"
+        : ""
+
+  const isLightRipple =
+    variant === "primary" || feedbackState !== "idle"
+
   return (
-    <button
+    <motion.button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 font-semibold transition duration-ui ease-out focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 disabled:pointer-events-none disabled:opacity-45 ${variantClasses[variant]} ${sizeClasses[size]} ${
-        fullWidth ? "w-full" : ""
-      } ${className}`}
+      aria-disabled={isBlocked || undefined}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
+      whileTap={
+        reducedMotion
+          ? undefined
+          : { scale: isBlocked ? 0.98 : 0.96 }
+      }
+      whileHover={
+        reducedMotion || isBlocked ? undefined : { y: -0.5 }
+      }
+      animate={
+        nudgeCount > 0
+          ? reducedMotion
+            ? { opacity: [0.48, 0.72, 0.48] }
+            : { x: [0, -5, 4, -2, 0] }
+          : feedbackState === "error" && !reducedMotion
+            ? { x: [0, -4, 4, -2, 0] }
+            : { x: 0, opacity: disabled ? 0.5 : 1 }
+      }
+      transition={
+        nudgeCount > 0 || feedbackState === "error"
+          ? SPRING_NUDGE
+          : reducedMotion
+            ? REDUCED_MOTION_TRANSITION
+            : SPRING_CONTROL
+      }
+      className={`relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-[color,background-color,border-color,box-shadow] duration-200 ease-out focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 ${variantClasses[variant]} ${sizeClasses[size]} ${stateColorOverride} ${
+        disabled ? "cursor-not-allowed opacity-50" : ""
+      } ${fullWidth ? "w-full" : ""} ${className}`.trim()}
       {...props}
     >
-      {leadingIcon}
-      <span>{children}</span>
+      <TouchRippleLayer
+        ripples={ripples}
+        onDone={removeRipple}
+        tone={isLightRipple ? "light" : "dark"}
+      />
+
+      <AnimatePresence>
+        {showReason ? (
+          <motion.span
+            role="status"
+            initial={
+              reducedMotion
+                ? { opacity: 0 }
+                : { opacity: 0, y: 4, scale: 0.9 }
+            }
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={
+              reducedMotion
+                ? { opacity: 0 }
+                : { opacity: 0, y: 4, scale: 0.9 }
+            }
+            transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_MICRO}
+            className="pointer-events-none absolute -top-9 left-1/2 z-30 origin-bottom -translate-x-1/2 whitespace-nowrap rounded-full bg-cocoa px-2.5 py-1 text-[11px] font-medium text-white shadow-card"
+          >
+            {disabledReason ?? "Unavailable right now"}
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
+
+      {loading ? (
+        <Loader2 aria-hidden="true" size={15} className="animate-spin" />
+      ) : feedbackState === "success" ? (
+        <motion.span
+          initial={reducedMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={
+            reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_ELASTIC
+          }
+          className="inline-flex"
+        >
+          <Check aria-hidden="true" size={15} />
+        </motion.span>
+      ) : (
+        leadingIcon
+      )}
+      <span className="relative z-10">{children}</span>
       {trailingIcon}
-    </button>
+    </motion.button>
   )
 }
 
-type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type IconButtonProps = SafeButtonHtmlProps & {
   label: string
   children: ReactNode
+  disabledReason?: string
 }
 
 export function IconButton({
   label,
   children,
   className = "",
+  disabled = false,
+  disabledReason,
   type = "button",
+  onClick,
+  onPointerDown,
   ...props
 }: IconButtonProps) {
+  const reducedMotion = useReducedMotion()
+  const { ripples, triggerRipple, removeRipple } = useTouchRipple()
+  const [nudgeCount, setNudgeCount] = useState(0)
+  const [showReason, setShowReason] = useState(false)
+  const timerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    triggerRipple(event)
+    onPointerDown?.(event)
+  }
+
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      event.preventDefault()
+      event.stopPropagation()
+      setNudgeCount((c) => c + 1)
+      if (disabledReason) {
+        setShowReason(true)
+        if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+        timerRef.current = window.setTimeout(() => setShowReason(false), 1800)
+      }
+      return
+    }
+    onClick?.(event)
+  }
+
   return (
-    <button
+    <motion.button
       type={type}
       aria-label={label}
-      className={`inline-flex size-touch shrink-0 items-center justify-center rounded-full border border-warm-border bg-white text-cocoa shadow-subtle transition duration-ui hover:bg-sage-soft active:scale-button focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 ${className}`}
+      aria-disabled={disabled || undefined}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
+      whileTap={reducedMotion ? undefined : { scale: disabled ? 0.97 : 0.94 }}
+      whileHover={reducedMotion || disabled ? undefined : { scale: 1.03 }}
+      animate={
+        nudgeCount > 0
+          ? reducedMotion
+            ? { opacity: [0.48, 0.72, 0.48] }
+            : { x: [0, -4, 3, 0] }
+          : { x: 0, opacity: disabled ? 0.5 : 1 }
+      }
+      transition={
+        nudgeCount > 0
+          ? SPRING_NUDGE
+          : reducedMotion
+            ? REDUCED_MOTION_TRANSITION
+            : SPRING_MICRO
+      }
+      className={`relative inline-flex size-touch shrink-0 items-center justify-center rounded-full border border-warm-border bg-white text-cocoa shadow-subtle transition-[color,background-color,border-color,box-shadow] duration-200 ease-out hover:bg-sage-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 ${
+        disabled ? "cursor-not-allowed opacity-50" : ""
+      } ${className}`.trim()}
       {...props}
     >
-      {children}
-    </button>
+      <TouchRippleLayer ripples={ripples} onDone={removeRipple} tone="dark" />
+      <AnimatePresence>
+        {showReason && disabledReason ? (
+          <motion.span
+            role="status"
+            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.9 }}
+            transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_MICRO}
+            className="pointer-events-none absolute -top-9 left-1/2 z-30 origin-bottom -translate-x-1/2 whitespace-nowrap rounded-full bg-cocoa px-2.5 py-1 text-[11px] font-medium text-white shadow-card"
+          >
+            {disabledReason}
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
+      <span className="relative z-10 inline-flex items-center justify-center">
+        {children}
+      </span>
+    </motion.button>
   )
 }

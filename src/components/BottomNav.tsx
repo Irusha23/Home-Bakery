@@ -1,12 +1,12 @@
 import {
-  BookOpen,
+  ChefHat,
   ClipboardList,
   Home,
-  Package,
-  ShoppingBasket,
   WalletCards,
   type LucideIcon,
 } from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
+import { INSTANT_TRANSITION, PILL_SPRING } from "../lib/motion"
 import type { TabId } from "../types"
 
 type NavItem = {
@@ -16,12 +16,10 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { id: "home", label: "Home", icon: Home },
+  { id: "today", label: "Today", icon: Home },
   { id: "orders", label: "Orders", icon: ClipboardList },
-  { id: "recipes", label: "Recipes", icon: BookOpen },
-  { id: "shopping", label: "Shopping", icon: ShoppingBasket },
-  { id: "inventory", label: "Inventory", icon: Package },
-  { id: "finances", label: "Finances", icon: WalletCards },
+  { id: "kitchen", label: "Kitchen", icon: ChefHat },
+  { id: "money", label: "Money", icon: WalletCards },
 ]
 
 type BottomNavProps = {
@@ -30,35 +28,47 @@ type BottomNavProps = {
 }
 
 export default function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
+  const reducedMotion = useReducedMotion()
+
   return (
     <nav
-      className="bottom-nav-safe fixed left-1/2 z-40 w-nav -translate-x-1/2 rounded-nav border border-white/80 bg-white/95 px-1 py-1.5 shadow-nav backdrop-blur-nav"
+      className="pointer-events-auto w-nav rounded-nav border border-warm-border/90 bg-white/95 p-1.5 shadow-nav backdrop-blur-nav"
       aria-label="Primary navigation"
     >
-      <div className="grid grid-cols-6">
+      <div className="grid grid-cols-4 gap-1">
         {navItems.map(({ id, label, icon: Icon }) => {
           const selected = activeTab === id
           return (
-            <button
+            <motion.button
               key={id}
               type="button"
               aria-current={selected ? "page" : undefined}
               onClick={() => onNavigate(id)}
-              className={`group flex min-h-nav-item min-w-0 flex-col items-center justify-center gap-1 rounded-nav-item transition duration-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/30 ${
+              whileTap={reducedMotion ? undefined : { scale: 0.95 }}
+              className={`relative flex min-h-[3.5rem] flex-col items-center justify-center gap-1 rounded-nav-item px-2 py-2 transition-colors duration-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/30 ${
                 selected
-                  ? "bg-sage-soft text-sage-dark"
-                  : "text-muted hover:bg-ivory hover:text-cocoa"
+                  ? "text-white"
+                  : "text-muted hover:text-cocoa"
               }`}
             >
+              {selected ? (
+                <motion.span
+                  layoutId="bottom-nav-active-pill"
+                  transition={reducedMotion ? INSTANT_TRANSITION : PILL_SPRING}
+                  aria-hidden="true"
+                  className="absolute inset-0 rounded-nav-item bg-sage"
+                />
+              ) : null}
               <Icon
                 aria-hidden="true"
-                size={19}
-                strokeWidth={selected ? 2.4 : 2}
+                size={20}
+                strokeWidth={selected ? 2.25 : 1.9}
+                className="relative z-10"
               />
-              <span className="max-w-full text-nav font-semibold leading-none tracking-tight">
+              <span className="relative z-10 text-[11px] font-semibold leading-none tracking-tight">
                 {label}
               </span>
-            </button>
+            </motion.button>
           )
         })}
       </div>

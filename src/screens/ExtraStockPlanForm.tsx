@@ -7,6 +7,7 @@ import Field from "../components/ui/Field"
 import QuantityControl from "../components/ui/QuantityControl"
 import SelectField from "../components/ui/SelectField"
 import { formatQuantity } from "../lib/format"
+import { createId } from "../lib/id"
 import { snapshotRecipe, useAppState } from "../state/AppState"
 import type { ExtraStockPlan } from "../types"
 
@@ -85,7 +86,7 @@ export default function ExtraStockPlanForm({
     dispatch({
       type: "UPSERT_EXTRA_STOCK_PLAN",
       plan: {
-        id: plan?.id ?? `extra-plan-${crypto.randomUUID()}`,
+        id: plan?.id ?? createId("extra-plan"),
         productId,
         variantId,
         recipeId: recipe.id,
@@ -104,7 +105,7 @@ export default function ExtraStockPlanForm({
     : []
 
   return (
-    <div className="focused-flow px-page pb-2">
+    <div className="focused-flow pb-2">
       <ScreenHeader
         eyebrow="Future sales"
         title={plan ? "Edit extra-stock plan" : "Plan extra stock"}
@@ -218,7 +219,7 @@ export default function ExtraStockPlanForm({
         ) : null}
       </div>
 
-      <div className="sticky bottom-0 z-20 -mx-page mt-auto border-t border-warm-border bg-ivory/95 px-page pb-3 pt-3 backdrop-blur-nav">
+      <div className="sticky bottom-0 z-20 -mx-5 mt-auto border-t border-warm-border bg-ivory/95 px-5 pb-3 pt-3 backdrop-blur-nav">
         <Button
           fullWidth
           leadingIcon={<Save aria-hidden="true" size={17} />}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { ArrowRight, PackagePlus } from "lucide-react"
 import ScreenHeader from "../components/ScreenHeader"
 import Button from "../components/ui/Button"
@@ -13,6 +13,8 @@ import {
   toBaseQuantity,
 } from "../lib/inventory"
 import { formatQuantity } from "../lib/format"
+import { createId } from "../lib/id"
+import { submitPurchaseIfAccepted } from "../lib/purchaseSubmission"
 import { useAppState } from "../state/AppState"
 import type { Unit } from "../types"
 
@@ -31,7 +33,7 @@ export default function PurchaseForm({
   onCancel,
   onComplete,
 }: PurchaseFormProps) {
-  const { state, dispatch } = useAppState()
+  const { state, dispatchIfAccepted } = useAppState()
   const purchasableItems = state.inventory.filter(
     (item) => inventoryCategory(item) !== "finished",
   )
@@ -43,7 +45,7 @@ export default function PurchaseForm({
     requirements.find((item) => item.inventoryId === initialItem?.inventoryId)
       ?.selectedPurchase ?? 0
 
-  const [purchaseId] = useState(() => `purchase-${crypto.randomUUID()}`)
+  const [purchaseId] = useState(() => createId("purchase"))
   const [inventoryId, setInventoryId] = useState(initialItem?.inventoryId ?? "")
   const [purchasedQuantity, setPurchasedQuantity] = useState(
     suggested > 0 ? String(suggested) : "",
@@ -60,6 +62,7 @@ export default function PurchaseForm({
   const [note, setNote] = useState("")
   const [error, setError] = useState("")
   const [submitted, setSubmitted] = useState(false)
+  const submitting = useRef(false)
 
   const selectedItem = useMemo(
     () => state.inventory.find((item) => item.inventoryId === inventoryId),
@@ -87,7 +90,7 @@ export default function PurchaseForm({
   }
 
   const submit = () => {
-    if (!selectedItem || submitted) return
+    if (!selectedItem || submitting.current) return
     const purchased = Number(purchasedQuantity)
     const usable = Number(usableQuantity)
     const price = Number(totalPrice)
@@ -96,41 +99,62 @@ export default function PurchaseForm({
       usableUnit,
       selectedItem.unit,
     )
+    const purchasedBaseQuantity = toBaseQuantity(
+      purchased,
+      purchasedUnit,
+      selectedItem.unit,
+    )
     if (
+      !Number.isFinite(purchased) ||
       purchased <= 0 ||
+      !Number.isFinite(usable) ||
       usable <= 0 ||
+      !Number.isSafeInteger(price) ||
       price <= 0 ||
       !date ||
-      !Number.isFinite(usableBaseQuantity)
+      !Number.isFinite(purchasedBaseQuantity) ||
+      !Number.isFinite(usableBaseQuantity) ||
+      usableBaseQuantity > purchasedBaseQuantity
     ) {
       setError(
-        "Enter positive purchased, usable and price values in compatible units.",
+        "Enter compatible positive quantities, ensure usable stock does not exceed the purchased amount, and enter a whole-LKR purchase total.",
       )
       return
     }
 
+    submitting.current = true
     setSubmitted(true)
-    dispatch({
-      type: "RECORD_PURCHASE",
-      purchase: {
-        id: purchaseId,
-        inventoryId,
-        purchasedQuantity: purchased,
-        purchasedUnit,
-        usableQuantity: usable,
-        usableUnit,
-        usableBaseQuantity,
-        totalPrice: price,
-        date,
-        note: note.trim(),
-        createdAt: new Date().toISOString(),
+    const accepted = submitPurchaseIfAccepted(
+      {
+        type: "RECORD_PURCHASE",
+        purchase: {
+          id: purchaseId,
+          inventoryId,
+          purchasedQuantity: purchased,
+          purchasedUnit,
+          usableQuantity: usable,
+          usableUnit,
+          usableBaseQuantity,
+          totalPrice: price,
+          date,
+          note: note.trim(),
+          createdAt: new Date().toISOString(),
+        },
       },
-    })
-    onComplete(inventoryId)
+      dispatchIfAccepted,
+      () => onComplete(inventoryId),
+    )
+    if (!accepted) {
+      submitting.current = false
+      setSubmitted(false)
+      setError(
+        "Purchase was not recorded. Inventory may have changed or the purchase details may be invalid. Review the values and try again.",
+      )
+    }
   }
 
   return (
-    <div className="focused-flow px-page pb-2">
+    <div className="focused-flow pb-2">
       <ScreenHeader
         eyebrow="Inventory intake"
         title="Record purchase"
@@ -142,7 +166,10 @@ export default function PurchaseForm({
 
       <div className="mt-4 space-y-4">
         {error ? (
-          <div className="rounded-control bg-warning-soft p-3 text-sm text-cocoa">
+          <div
+            role="alert"
+            className="rounded-control bg-warning-soft p-3 text-sm text-cocoa"
+          >
             {error}
           </div>
         ) : null}
@@ -222,9 +249,9 @@ export default function PurchaseForm({
           <Field
             label="Total price (Rs.)"
             type="number"
-            min="0"
-            step="any"
-            inputMode="decimal"
+            min="1"
+            step="1"
+            inputMode="numeric"
             value={totalPrice}
             onChange={(event) => setTotalPrice(event.target.value)}
           />
@@ -243,7 +270,7 @@ export default function PurchaseForm({
         </Card>
       </div>
 
-      <div className="sticky bottom-0 z-20 -mx-page mt-auto border-t border-warm-border bg-ivory/95 px-page pb-3 pt-3 backdrop-blur-nav">
+      <div className="sticky bottom-0 z-20 -mx-5 mt-auto border-t border-warm-border bg-ivory/95 px-5 pb-3 pt-3 backdrop-blur-nav">
         <Button
           fullWidth
           disabled={submitted}
