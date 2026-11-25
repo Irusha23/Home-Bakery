@@ -37,13 +37,15 @@ export function calculateOrderProfit(
   >,
 ): OrderProfitSummary {
   const collectedLkr = netRetainedPayments(order, state.refunds)
-  const incomeLkr =
-    order.status === "Cancelled" ? collectedLkr : order.agreedPrice
+  const isCancelled = order.status === "Cancelled"
+  const incomeLkr = isCancelled
+    ? (order.cancellationFee ?? 0)
+    : order.agreedPrice
 
-  const ingredientsLkr = order.costSnapshot.ingredients
-  const packagingLkr = order.costSnapshot.packaging
-  const labourLkr = order.costSnapshot.labour
-  const recipeCostLkr = order.costSnapshot.estimatedTotal
+  const ingredientsLkr = isCancelled ? 0 : order.costSnapshot.ingredients
+  const packagingLkr = isCancelled ? 0 : order.costSnapshot.packaging
+  const labourLkr = isCancelled ? 0 : order.costSnapshot.labour
+  const recipeCostLkr = isCancelled ? 0 : order.costSnapshot.estimatedTotal
 
   const shoppingExpenseIds = new Set(
     (state.shoppingTrips ?? [])

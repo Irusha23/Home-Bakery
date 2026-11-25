@@ -156,10 +156,11 @@ describe("calculateOrderProfit", () => {
     expect(result.profitLkr).toBe(4000)
   })
 
-  it("uses retained payments as income for cancelled orders", () => {
+  it("uses cancellation fee as income with zero recipe cost for cancelled orders", () => {
     const order = makeOrder({
       status: "Cancelled",
       agreedPrice: 10000,
+      cancellationFee: 500,
       payments: [
         { id: "pay-1", date: "2026-11-21", amount: 3000, method: "Cash" },
       ],
@@ -181,8 +182,9 @@ describe("calculateOrderProfit", () => {
     )
 
     expect(result.collectedLkr).toBe(2000)
-    expect(result.incomeLkr).toBe(2000)
-    expect(result.profitLkr).toBe(-4000)
+    expect(result.incomeLkr).toBe(500)
+    expect(result.recipeCostLkr).toBe(0)
+    expect(result.profitLkr).toBe(500)
   })
 
   it("returns negative profit when expenses exceed income", () => {

@@ -386,4 +386,18 @@ describe("pricing calculations", () => {
       estimatedCost: 630,
     })
   })
+
+  it("avoids IEEE 754 float overshoot when rounding prices to currency steps", () => {
+    const result = calculateSuggestedPrice(605, {
+      mode: "margin",
+      marginPercent: 45,
+      markupPercent: 100,
+      roundingStep: 50,
+    })
+    // 605 / 0.55 = 1100 exactly mathematically, even though float division yields 1100.0000000000002
+    expect(result.valid).toBe(true)
+    if (result.valid) {
+      expect(result.suggestedPrice).toBe(1100)
+    }
+  })
 })

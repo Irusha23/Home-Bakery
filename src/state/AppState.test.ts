@@ -2182,6 +2182,7 @@ describe("application reducer business rules", () => {
       status: "Completed",
       preparationStatus: "Completed",
       paymentStatus: "Paid",
+      cancellationFee: 1500,
       payments: [
         {
           id: "repeat-payment",
@@ -2240,13 +2241,14 @@ describe("application reducer business rules", () => {
       status: "Draft",
       preparationStatus: "Not started",
       paymentStatus: "Unpaid",
-      agreedPrice: 28800,
+      agreedPrice: 21850,
       reservations: [],
       shortages: [],
       payments: [],
       confirmedAt: null,
     })
     expect(draft.id).toBe("repeat-generated-order")
+    expect(draft.cancellationFee).toBeUndefined()
     expect(draft.id).not.toBe(source.id)
     expect(draft.reference).not.toBe(source.reference)
     expect(draft.status).toBe("Draft")
@@ -2491,5 +2493,156 @@ describe("application reducer business rules", () => {
         trip: withFirst.shoppingTrips![0],
       }),
     ).toBe(withFirst)
+  })
+
+  it("deducts pantry stock up to zero on FINISH_PREPARATION_SIMPLE and appends movement", () => {
+    const line = createTestOrderLine("simple-line")
+    const order = createTestOrder("simple-order", [line], {
+      status: "In Progress",
+      preparationStatus: "In progress",
+    })
+    const prep = createTestPreparationRecord(order.id, line, {
+      status: "In progress",
+      completedSteps: line.recipeSnapshot.instructions.map((_, i) => i),
+      actualUsage: [
+        {
+          inventoryId: "flour",
+          name: "All-purpose flour",
+          plannedQuantity: 500,
+          actualQuantity: 500,
+          unit: "g",
+          category: "ingredient",
+          inPantry: true,
+        },
+      ],
+    })
+    const state = createTestAppData({
+      inventory: [
+        createTestInventoryItem({ physical: 300, averageUnitCost: 0.4 }),
+      ],
+      orders: [order],
+      preparationRecords: [prep],
+    })
+
+    const next = reducer(state, {
+      type: "FINISH_PREPARATION_SIMPLE",
+      preparationId: prep.id,
+    })
+
+    expect(next.inventory[0].physical).toBe(0)
+    expect(next.inventoryMovements[0]).toMatchObject({
+      type: "Preparation consumption",
+      quantityDelta: -300,
+      balanceAfter: 0,
+    })
+    expect(next.preparationRecords[0].status).toBe("Ready")
+  })
+
+  it("enforces cancellation refund cap, supports atomic RECORD_REFUNDS, and scopes shopping selection cleanup", () => {
+    const order = createTestOrder("cancelled-refund-cap", [createTestOrderLine("l1")], {
+      status: "Cancelled",
+      agreedPrice: 5000,
+      cancellationFee: 1000,
+      payments: [
+        { id: "p1", date: "2026-10-01", amount: 2000, method: "Cash" },
+        { id: "p2", date: "2026-10-02", amount: 1500, method: "Bank transfer" },
+      ],
+    })
+    const state = createTestAppData({ orders: [order] })
+
+    // Remaining refundable after Rs. 1000 cancellation fee is 2500
+    expect(
+      reducer(state, {
+        type: "RECORD_REFUNDS",
+        refunds: [
+          {
+            id: "r1",
+            orderId: order.id,
+            paymentId: "p1",
+            date: "2026-10-03",
+            amount: 2000,
+            reason: "Cancel refund",
+          },
+          {
+            id: "r2",
+            orderId: order.id,
+            paymentId: "p2",
+            date: "2026-10-03",
+            amount: 1000, // exceeds cap (2000 + 1000 = 3000 > 2500)
+            reason: "Cancel refund",
+          },
+        ],
+      }),
+    ).toBe(state)
+
+    const refunded = reducer(state, {
+      type: "RECORD_REFUNDS",
+      refunds: [
+        {
+          id: "r1",
+          orderId: order.id,
+          paymentId: "p1",
+          date: "2026-10-03",
+          amount: 2000,
+          reason: "Cancel refund",
+        },
+        {
+          id: "r2",
+          orderId: order.id,
+          paymentId: "p2",
+          date: "2026-10-03",
+          amount: 500,
+          reason: "Cancel refund",
+        },
+      ],
+    })
+    expect(refunded.refunds).toHaveLength(2)
+
+    // SET_PANTRY_CHECKLIST_ITEM preserves shoppingSelections when another order still needs the item
+    const lA = createTestOrderLine("la")
+    const lB = createTestOrderLine("lb")
+    const oA = createTestOrder("oA", [lA], { status: "Confirmed" })
+    const oB = createTestOrder("oB", [lB], { status: "Confirmed" })
+    const pA = createTestPreparationRecord(oA.id, lA, {
+      actualUsage: [
+        {
+          inventoryId: "flour",
+          name: "Flour",
+          plannedQuantity: 500,
+          actualQuantity: 500,
+          unit: "g",
+          category: "ingredient",
+          inPantry: false,
+          toBuyQuantity: 500,
+        },
+      ],
+    })
+    const pB = createTestPreparationRecord(oB.id, lB, {
+      actualUsage: [
+        {
+          inventoryId: "flour",
+          name: "Flour",
+          plannedQuantity: 500,
+          actualQuantity: 500,
+          unit: "g",
+          category: "ingredient",
+          inPantry: false,
+          toBuyQuantity: 500,
+        },
+      ],
+    })
+    const multiState = createTestAppData({
+      inventory: [createTestInventoryItem({ inventoryId: "flour" })],
+      orders: [oA, oB],
+      preparationRecords: [pA, pB],
+      shoppingSelections: { flour: 1200 },
+    })
+    const afterOneInPantry = reducer(multiState, {
+      type: "SET_PANTRY_CHECKLIST_ITEM",
+      preparationId: pA.id,
+      inventoryId: "flour",
+      inPantry: true,
+    })
+    expect(afterOneInPantry.shoppingSelections.flour).toBe(1200)
   })
 })

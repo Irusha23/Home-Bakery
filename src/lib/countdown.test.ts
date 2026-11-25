@@ -4,6 +4,7 @@ import {
   getBakeTargetMs,
   getCollectionTargetMs,
 } from "./countdown"
+import { getColomboTodayIso, shiftColomboIsoDate } from "./format"
 
 describe("countdown helpers", () => {
   it("formats positive durations as dd:hh:mm:ss", () => {
@@ -33,7 +34,7 @@ describe("countdown helpers", () => {
 
   it("computes collection and bake target timestamps", () => {
     const collectionMs = getCollectionTargetMs("2026-11-18", "15:30")
-    expect(collectionMs).toBe(new Date("2026-11-18T15:30:00").getTime())
+    expect(collectionMs).toBe(new Date("2026-11-18T15:30:00+05:30").getTime())
     expect(getCollectionTargetMs("")).toBeNull()
 
     const startedAt = "2026-11-17T10:00:00.000Z"
@@ -41,5 +42,13 @@ describe("countdown helpers", () => {
       new Date(startedAt).getTime() + 90 * 60_000,
     )
     expect(getBakeTargetMs(null, 90)).toBeNull()
+  })
+
+  it("computes Colombo calendar dates cleanly across UTC midnight boundaries", () => {
+    // 20:00Z is 01:30 next day in Asia/Colombo (+05:30)
+    const utcEvening = new Date("2026-11-24T20:00:00.000Z")
+    expect(getColomboTodayIso(utcEvening)).toBe("2026-11-25")
+    expect(shiftColomboIsoDate(1, utcEvening)).toBe("2026-11-26")
+    expect(shiftColomboIsoDate(-1, new Date("2026-11-01T10:00:00.000Z"))).toBe("2026-10-31")
   })
 })

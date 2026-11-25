@@ -20,6 +20,7 @@ import PersistenceRecoveryScreen from "../components/PersistenceRecoveryScreen"
 import { createDefaultAppRepository } from "../db/createAppRepository"
 import { bootstrapAppRepository } from "../db/legacyImport"
 import type { AppRepository } from "../db/repository"
+import { getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
 import {
   ingestAppDataMediaForRestore,
@@ -41,6 +42,7 @@ import {
   isValidMoneyAmount,
   netRetainedPayments,
   outstandingOrderBalance,
+  pendingCancellationRefund,
   remainingRefundableAmount,
 } from "../lib/financials"
 import {
@@ -114,6 +116,7 @@ type AppAction =
       payment: Order["payments"][number]
     }
   | { type: "RECORD_REFUND"; refund: Refund }
+  | { type: "RECORD_REFUNDS"; refunds: Refund[] }
   | { type: "SET_CANCELLATION_FEE"; orderId: string; fee: number }
   | { type: "RECORD_EXPENSE"; expense: Expense }
   | { type: "ADD_EXPENSE_CATEGORY"; category: ExpenseCategory }
@@ -250,6 +253,7 @@ type AppAction =
   | {
       type: "COMPLETE_SHOPPING_CHECKLIST"
       extraInventoryIds?: string[]
+      checkedInventoryIds?: string[]
     }
   | {
       type: "ADD_SHOPPING_TRIP"
@@ -653,19 +657,31 @@ export function migrateState(source: AppData): AppData {
 }
 
 export function makeReference(orders: Order[]) {
-  const highest = orders.reduce((max, order) => {
-    const number = Number(order.reference.replace(/\D/g, ""))
-    return Number.isFinite(number) ? Math.max(max, number) : max
-  }, 1000)
-  return `US-${highest + 1}`
+  const existing = new Set(orders.map((order) => order.reference))
+  let next =
+    orders.reduce((max, order) => {
+      const digits = order.reference.replace(/\D/g, "")
+      const number = digits ? Number(digits) : Number.NaN
+      return Number.isSafeInteger(number) ? Math.max(max, number) : max
+    }, 1000) + 1
+  while (existing.has(`US-${next}`)) {
+    next += 1
+  }
+  return `US-${next}`
 }
 
 export function makeShoppingReference(trips: ShoppingTripRecord[]) {
-  const highest = trips.reduce((max, trip) => {
-    const number = Number(trip.reference.replace(/\D/g, ""))
-    return Number.isFinite(number) ? Math.max(max, number) : max
-  }, 1000)
-  return `SHP-${highest + 1}`
+  const existing = new Set(trips.map((trip) => trip.reference))
+  let next =
+    trips.reduce((max, trip) => {
+      const digits = trip.reference.replace(/\D/g, "")
+      const number = digits ? Number(digits) : Number.NaN
+      return Number.isSafeInteger(number) ? Math.max(max, number) : max
+    }, 1000) + 1
+  while (existing.has(`SHP-${next}`)) {
+    next += 1
+  }
+  return `SHP-${next}`
 }
 
 function makeUniqueId(prefix: string, existingIds: Set<string>) {
@@ -893,7 +909,7 @@ function applyFinishedStockTransaction(
         quantityDelta: -transaction.quantity,
         unit: "unit",
         balanceAfter,
-        date: occurredAt.slice(0, 10),
+        date: getColomboTodayIso(new Date(occurredAt)),
         reason,
         createdAt: occurredAt,
       },
@@ -906,14 +922,27 @@ export function reducer(state: AppData, action: AppAction): AppData {
   switch (action.type) {
     case "UPSERT_DRAFT": {
       const now = new Date().toISOString()
-      const existing = action.payload.id
-        ? state.orders.find((order) => order.id === action.payload.id)
+      const payload = action.payload
+      if (
+        !payload ||
+        typeof payload.customerName !== "string" ||
+        !payload.customerName.trim() ||
+        !Array.isArray(payload.lines) ||
+        payload.lines.length === 0 ||
+        !Number.isSafeInteger(payload.agreedPrice) ||
+        payload.agreedPrice < 0
+      ) {
+        return state
+      }
+      const existing = payload.id
+        ? state.orders.find((order) => order.id === payload.id)
         : undefined
       if (existing && existing.status !== "Draft") return state
 
+      const clonedPayload = structuredClone(payload)
       const order: Order = {
-        ...action.payload,
-        id: existing?.id ?? action.payload.id ?? createId("order"),
+        ...clonedPayload,
+        id: existing?.id ?? clonedPayload.id ?? createId("order"),
         reference: existing?.reference ?? makeReference(state.orders),
         status: "Draft",
         preparationStatus: "Not started",
@@ -941,7 +970,16 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
     case "CONFIRM_ORDER": {
       const order = state.orders.find((item) => item.id === action.orderId)
-      if (!order || order.status !== "Draft") return state
+      if (
+        !order ||
+        order.status !== "Draft" ||
+        order.lines.length === 0 ||
+        !isValidDate(order.collectionDate) ||
+        !Number.isSafeInteger(order.agreedPrice) ||
+        order.agreedPrice < 0
+      ) {
+        return state
+      }
 
       const requirements = calculateLineRequirements(
         state,
@@ -1111,11 +1149,18 @@ export function reducer(state: AppData, action: AppAction): AppData {
         state.orders.flatMap((item) => item.lines.map((line) => line.id)),
       )
       const lines = source.lines.map((line) => {
-        const currentRecipe = state.recipes.find(
-          (recipe) =>
-            recipe.productId === line.productId &&
-            recipe.variantId === line.variantId,
-        )
+        const currentRecipe =
+          (line.recipeId
+            ? state.recipes.find(
+                (recipe) => recipe.id === line.recipeId && !recipe.archived,
+              )
+            : undefined) ??
+          state.recipes.find(
+            (recipe) =>
+              recipe.productId === line.productId &&
+              recipe.variantId === line.variantId &&
+              !recipe.archived,
+          )
         return {
           ...line,
           id: makeUniqueId("line", existingLineIds),
@@ -1125,8 +1170,12 @@ export function reducer(state: AppData, action: AppAction): AppData {
             : structuredClone(line.recipeSnapshot),
         }
       })
-      const costSnapshot = calculateCostSnapshot(lines)
-      const { referencePhoto: _ignoredRefPhoto, ...repeatSource } = source
+      const costSnapshot = calculateCostSnapshot(lines, state)
+      const {
+        referencePhoto: _ignoredRefPhoto,
+        cancellationFee: _ignoredCancellationFee,
+        ...repeatSource
+      } = source
       const order: Order = {
         ...repeatSource,
         id: action.newOrderId,
@@ -1241,6 +1290,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         order && payment
           ? remainingRefundableAmount(order, state.refunds, payment.id)
           : Number.NaN
+      const maxCancellationRefund =
+        order?.status === "Cancelled"
+          ? pendingCancellationRefund(order, state.refunds)
+          : Number.POSITIVE_INFINITY
       if (
         !refund ||
         !order ||
@@ -1253,7 +1306,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
         typeof refund.reason !== "string" ||
         !refund.reason.trim() ||
         !Number.isSafeInteger(refundableAmount) ||
-        refund.amount > refundableAmount
+        refund.amount > refundableAmount ||
+        refund.amount > maxCancellationRefund
       ) {
         return state
       }
@@ -1268,6 +1322,63 @@ export function reducer(state: AppData, action: AppAction): AppData {
                 ...item,
                 paymentStatus: derivePaymentStatus(item, refunds),
                 updatedAt: new Date().toISOString(),
+              }
+            : item,
+        ),
+      }
+    }
+
+    case "RECORD_REFUNDS": {
+      if (!Array.isArray(action.refunds) || action.refunds.length === 0) {
+        return state
+      }
+      const nextRefunds = [...state.refunds]
+      const seenIds = new Set(state.refunds.map((item) => item.id))
+      const touchedOrderIds = new Set<string>()
+      for (const refund of action.refunds) {
+        const order = state.orders.find((item) => item.id === refund?.orderId)
+        const payment = order?.payments.find(
+          (item) => item.id === refund?.paymentId,
+        )
+        const refundableAmount =
+          order && payment
+            ? remainingRefundableAmount(order, nextRefunds, payment.id)
+            : Number.NaN
+        const maxCancellationRefund =
+          order?.status === "Cancelled"
+            ? pendingCancellationRefund(order, nextRefunds)
+            : Number.POSITIVE_INFINITY
+        if (
+          !refund ||
+          !order ||
+          !payment ||
+          typeof refund.id !== "string" ||
+          !refund.id.trim() ||
+          seenIds.has(refund.id) ||
+          !isValidDate(refund.date) ||
+          !isValidMoneyAmount(refund.amount) ||
+          typeof refund.reason !== "string" ||
+          !refund.reason.trim() ||
+          !Number.isSafeInteger(refundableAmount) ||
+          refund.amount > refundableAmount ||
+          refund.amount > maxCancellationRefund
+        ) {
+          return state
+        }
+        seenIds.add(refund.id)
+        touchedOrderIds.add(order.id)
+        nextRefunds.push(structuredClone(refund))
+      }
+      const now = new Date().toISOString()
+      return {
+        ...state,
+        refunds: nextRefunds,
+        orders: state.orders.map((item) =>
+          touchedOrderIds.has(item.id)
+            ? {
+                ...item,
+                paymentStatus: derivePaymentStatus(item, nextRefunds),
+                updatedAt: now,
               }
             : item,
         ),
@@ -1619,7 +1730,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
           ? { ...structuredClone(rawItem), unbatchedLegacyQuantity: rawItem.physical }
           : structuredClone(rawItem)
       const now = new Date().toISOString()
-      const today = now.slice(0, 10)
+      const today = getColomboTodayIso(new Date(now))
       const openingMovement: InventoryMovement[] =
         item.physical > 0
           ? [
@@ -1718,11 +1829,14 @@ export function reducer(state: AppData, action: AppAction): AppData {
           nextInventory,
           state.settings.defaultLabourRatePerHour,
         )
+        const canUpdateCost =
+          (patch.averageUnitCost !== undefined || patch.archived !== undefined) &&
+          breakdown.hasCompletePricing
         return {
           ...recipe,
           ingredients: updatedIngredients,
           packaging: updatedPackaging,
-          estimatedCost: breakdown.hasLivePricing
+          estimatedCost: canUpdateCost
             ? breakdown.totalCost
             : recipe.estimatedCost,
         }
@@ -1774,12 +1888,12 @@ export function reducer(state: AppData, action: AppAction): AppData {
         ...(existing.history ?? []),
       ].slice(0, 15)
       const nextRecipe: Recipe = {
-        ...action.recipe,
+        ...structuredClone(action.recipe),
         version:
           action.recipe.version > existing.version
             ? action.recipe.version
             : existing.version + 1,
-        history: action.recipe.history ?? nextHistory,
+        history: nextHistory,
       }
       return {
         ...state,
@@ -1854,16 +1968,36 @@ export function reducer(state: AppData, action: AppAction): AppData {
     }
 
     case "UPSERT_EXTRA_STOCK_PLAN": {
+      const plan = action.plan
+      const product = state.products.find((item) => item.id === plan?.productId)
+      const variant = product?.variants.find(
+        (item) => item.id === plan?.variantId,
+      )
+      if (
+        !plan ||
+        typeof plan.id !== "string" ||
+        !plan.id.trim() ||
+        !product ||
+        !variant ||
+        plan.recipeSnapshot.productId !== product.id ||
+        plan.recipeSnapshot.variantId !== variant.id ||
+        !Number.isSafeInteger(plan.quantity) ||
+        plan.quantity <= 0 ||
+        (plan.bestBefore ? !isValidDate(plan.bestBefore) : false)
+      ) {
+        return state
+      }
+      const nextPlan = structuredClone(plan)
       const existing = state.extraStockPlans.some(
-        (plan) => plan.id === action.plan.id,
+        (item) => item.id === nextPlan.id,
       )
       return {
         ...state,
         extraStockPlans: existing
-          ? state.extraStockPlans.map((plan) =>
-              plan.id === action.plan.id ? action.plan : plan,
+          ? state.extraStockPlans.map((item) =>
+              item.id === nextPlan.id ? nextPlan : item,
             )
-          : [action.plan, ...state.extraStockPlans],
+          : [nextPlan, ...state.extraStockPlans],
       }
     }
 
@@ -2019,6 +2153,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
 
       const now = new Date().toISOString()
+      const today = getColomboTodayIso(new Date(now))
       const actualCost = calculateActualUsageCost(
         state,
         validation.canonicalUsage,
@@ -2073,7 +2208,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
             quantityDelta: -quantity,
             unit: original.unit,
             balanceAfter: original.physical - quantity,
-            date: now.slice(0, 10),
+            date: today,
             reason: `Extra stock · ${record.recipeSnapshot.name}`,
             createdAt: now,
           }
@@ -2086,7 +2221,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
         quantityDelta: action.usableOutputQuantity,
         unit: "unit",
         balanceAfter: finishedInventory.physical + action.usableOutputQuantity,
-        date: now.slice(0, 10),
+        date: today,
         reason: `Extra stock · ${record.recipeSnapshot.name}`,
         createdAt: now,
       })
@@ -2239,14 +2374,26 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
     }
 
-    case "SET_PURCHASE_QUANTITY":
+    case "SET_PURCHASE_QUANTITY": {
+      const targetItem = state.inventory.find(
+        (item) => item.inventoryId === action.inventoryId,
+      )
+      if (
+        !targetItem ||
+        inventoryCategory(targetItem) === "finished" ||
+        !Number.isFinite(action.quantity) ||
+        action.quantity < 0
+      ) {
+        return state
+      }
       return {
         ...state,
         shoppingSelections: {
           ...state.shoppingSelections,
-          [action.inventoryId]: Math.max(0, action.quantity),
+          [action.inventoryId]: action.quantity,
         },
       }
+    }
 
     case "RECORD_PURCHASE": {
       const purchase = action.purchase
@@ -2304,6 +2451,9 @@ export function reducer(state: AppData, action: AppAction): AppData {
         purchasedBaseQuantity <= 0 ||
         !Number.isFinite(usableBaseQuantity) ||
         usableBaseQuantity <= 0 ||
+        (inventoryItem.unit === "unit" &&
+          (!Number.isSafeInteger(usableBaseQuantity) ||
+            !Number.isSafeInteger(purchasedBaseQuantity))) ||
         purchase.usableBaseQuantity !== usableBaseQuantity ||
         usableBaseQuantity > purchasedBaseQuantity
       ) {
@@ -2314,9 +2464,11 @@ export function reducer(state: AppData, action: AppAction): AppData {
         inventoryItem.physical * (inventoryItem.averageUnitCost ?? 0)
       const totalValue = priorValue + purchase.totalPrice
       const averageUnitCost =
-        balanceAfter > 0
-          ? totalValue / balanceAfter
-          : inventoryItem.averageUnitCost
+        inventoryItem.averageUnitCost === undefined
+          ? purchase.totalPrice / usableBaseQuantity
+          : balanceAfter > 0
+            ? totalValue / balanceAfter
+            : inventoryItem.averageUnitCost
       if (
         !Number.isFinite(balanceAfter) ||
         !Number.isFinite(priorValue) ||
@@ -2505,9 +2657,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const validation = validatePreparationCompletion(state, record)
       if (!validation.valid) return state
       const order = state.orders.find((item) => item.id === record.orderId)
-      if (!order) return state
+      if (!order || hasUnpurchasedShoppingItems(order, record)) return state
 
       const now = new Date().toISOString()
+      const today = getColomboTodayIso(new Date(now))
       const usageByItem = new Map<string, number>()
       for (const usage of validation.canonicalUsage) {
         usageByItem.set(
@@ -2541,13 +2694,22 @@ export function reducer(state: AppData, action: AppAction): AppData {
               quantityDelta: -usage.actualQuantity,
               unit: original.unit,
               balanceAfter: original.physical - usage.actualQuantity,
-              date: now.slice(0, 10),
+              date: today,
               reason: `${order.reference} · ${record.recipeSnapshot.name}`,
               createdAt: now,
             })
           }
           return result
         }, [])
+      if (
+        movements.some((movement) =>
+          state.inventoryMovements.some(
+            (existing) => existing.id === movement.id,
+          ),
+        )
+      ) {
+        return state
+      }
       const actualCost = calculateActualUsageCost(
         state,
         validation.canonicalUsage,
@@ -2572,15 +2734,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       return {
         ...state,
         inventory,
-        inventoryMovements: [
-          ...movements.filter(
-            (movement) =>
-              !state.inventoryMovements.some(
-                (existing) => existing.id === movement.id,
-              ),
-          ),
-          ...state.inventoryMovements,
-        ],
+        inventoryMovements: [...movements, ...state.inventoryMovements],
         preparationRecords,
         orders: state.orders.map((item) =>
           item.id === order.id
@@ -2768,7 +2922,26 @@ export function reducer(state: AppData, action: AppAction): AppData {
       )
 
       const nextSelections = { ...state.shoppingSelections }
-      delete nextSelections[action.inventoryId]
+      const stillNeededElsewhere = nextPrepRecords.some((prep) => {
+        if (prep.status === "Ready" || prep.status === "Cancelled") return false
+        const prepOrder = state.orders.find((o) => o.id === prep.orderId)
+        if (
+          !prepOrder ||
+          prepOrder.status === "Draft" ||
+          prepOrder.status === "Completed" ||
+          prepOrder.status === "Cancelled"
+        ) {
+          return false
+        }
+        return prep.actualUsage.some(
+          (u) =>
+            u.inventoryId === action.inventoryId &&
+            !isUsageInPantry(prepOrder, prep, u),
+        )
+      })
+      if (!stillNeededElsewhere) {
+        delete nextSelections[action.inventoryId]
+      }
 
       return {
         ...state,
@@ -2916,13 +3089,21 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const now = new Date().toISOString()
       const affectedOrderIds = new Set<string>()
       const clearedInventoryIds = new Set<string>(action.extraInventoryIds ?? [])
+      const allowedInventoryIds = action.checkedInventoryIds
+        ? new Set(action.checkedInventoryIds)
+        : null
 
       const nextPrepRecords = state.preparationRecords.map((record) => {
         if (record.status === "Ready" || record.status === "Cancelled")
           return record
         let changed = false
         const actualUsage = record.actualUsage.map((usage) => {
-          if (!usage.shoppingChecked) return usage
+          if (
+            !usage.shoppingChecked ||
+            (allowedInventoryIds && !allowedInventoryIds.has(usage.inventoryId))
+          ) {
+            return usage
+          }
           changed = true
           affectedOrderIds.add(record.orderId)
           clearedInventoryIds.add(usage.inventoryId)
@@ -2990,9 +3171,24 @@ export function reducer(state: AppData, action: AppAction): AppData {
         typeof trip.reference !== "string" ||
         !trip.reference.trim() ||
         !isValidDate(trip.date) ||
+        !isValidTimestamp(trip.createdAt) ||
+        (trip.totalSpent !== null &&
+          (!Number.isSafeInteger(trip.totalSpent) || trip.totalSpent < 0)) ||
         !Array.isArray(trip.items) ||
         trip.items.length === 0 ||
-        existing.some((item) => item.id === trip.id)
+        trip.items.some(
+          (item) =>
+            typeof item.inventoryId !== "string" ||
+            !item.inventoryId.trim() ||
+            !Number.isFinite(item.quantity) ||
+            item.quantity <= 0 ||
+            (item.estimatedCost !== null &&
+              (!Number.isSafeInteger(item.estimatedCost) ||
+                item.estimatedCost < 0)),
+        ) ||
+        existing.some(
+          (item) => item.id === trip.id || item.reference === trip.reference,
+        )
       ) {
         return state
       }
@@ -3025,11 +3221,60 @@ export function reducer(state: AppData, action: AppAction): AppData {
       if (!allStepsChecked) return state
 
       const now = new Date().toISOString()
-      const rawCost = calculateActualUsageCost(state, record.actualUsage)
+      const today = getColomboTodayIso(new Date(now))
+      const rawCost = calculateActualUsageCost(state, record.actualUsage, {
+        strictPricing: true,
+      })
       const actualCost =
         Number.isFinite(rawCost) && rawCost >= 0
           ? rawCost
           : record.recipeSnapshot.estimatedCost * record.plannedQuantity
+
+      const requestedByItem = new Map<string, number>()
+      for (const usage of record.actualUsage) {
+        if (usage.actualQuantity <= 0) continue
+        const item = state.inventory.find(
+          (candidate) => candidate.inventoryId === usage.inventoryId,
+        )
+        const baseQuantity = item
+          ? toInventoryBaseQuantity(usage.actualQuantity, usage.unit, item)
+          : usage.actualQuantity
+        if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) continue
+        requestedByItem.set(
+          usage.inventoryId,
+          (requestedByItem.get(usage.inventoryId) ?? 0) + baseQuantity,
+        )
+      }
+
+      const movements: InventoryMovement[] = []
+      const inventory = state.inventory.map((item) => {
+        const requested = requestedByItem.get(item.inventoryId)
+        if (requested === undefined || item.physical <= 0) return item
+        const deducted = Math.min(item.physical, requested)
+        if (deducted <= 0) return item
+        const balanceAfter = Math.max(0, item.physical - deducted)
+        movements.push({
+          id: `movement-preparation-${record.id}-${item.inventoryId}`,
+          inventoryId: item.inventoryId,
+          type: "Preparation consumption",
+          quantityDelta: -deducted,
+          unit: item.unit,
+          balanceAfter,
+          date: today,
+          reason: `${order.reference} · ${record.recipeSnapshot.name}`,
+          createdAt: now,
+        })
+        return { ...item, physical: balanceAfter }
+      })
+      if (
+        movements.some((movement) =>
+          state.inventoryMovements.some(
+            (existing) => existing.id === movement.id,
+          ),
+        )
+      ) {
+        return state
+      }
 
       const completedRecord: PreparationRecord = {
         ...record,
@@ -3049,6 +3294,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
       return {
         ...state,
+        inventory,
+        inventoryMovements: [...movements, ...state.inventoryMovements],
         preparationRecords,
         orders: state.orders.map((item) =>
           item.id === order.id
@@ -3400,6 +3647,8 @@ function ReadyAppStateProvider({
   const runIdempotentAction = useCallback(
     async (key: string, operation: string, action: AppAction) => {
       if (idempotencyCacheRef.current.has(key)) return false
+      const preview = reducer(latestStateRef.current, action)
+      if (preview === latestStateRef.current) return false
       idempotencyCacheRef.current.add(key)
       if (repository) {
         try {
@@ -3412,7 +3661,11 @@ function ReadyAppStateProvider({
           // Proceed with in-memory deduplication if repository key check fails
         }
       }
-      return dispatchIfAccepted(action)
+      const accepted = dispatchIfAccepted(action)
+      if (!accepted) {
+        idempotencyCacheRef.current.delete(key)
+      }
+      return accepted
     },
     [dispatchIfAccepted, repository],
   )

@@ -161,7 +161,16 @@ export function selectShoppingRequirements(
     }
   }
 
-  for (const plan of state.extraStockPlans) addPlanSources(state, plan, sources)
+  for (const plan of state.extraStockPlans) {
+    const fulfilledOrActiveBatches = state.extraStockPreparations
+      .filter(
+        (prep) => prep.planId === plan.id && prep.status === "Ready",
+      )
+      .reduce((sum, prep) => sum + prep.plannedBatches, 0)
+    const remainingPlanQty = Math.max(0, plan.quantity - fulfilledOrActiveBatches)
+    if (remainingPlanQty <= 0) continue
+    addPlanSources(state, { ...plan, quantity: remainingPlanQty }, sources)
+  }
 
   const reserved = selectReservedByItem(state)
   return state.inventory

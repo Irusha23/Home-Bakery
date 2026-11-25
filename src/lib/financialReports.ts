@@ -367,6 +367,7 @@ function selectCollectedOrders(
       issues.push(
         `Order ${order.id} has a collection timestamp but is not completed.`,
       )
+      continue
     }
 
     if (timestampInPeriod(order.collectedAt, bounds)) collected.push(order)
@@ -565,14 +566,24 @@ export function selectCustomerCashMovement(
 
   let refundCount = 0
 
+  const seenOrderIds = new Set<string>()
   for (const order of orders) {
-    const validPayments = validPaymentRecords(order)
+    if (
+      typeof order.id !== "string" ||
+      !order.id.trim() ||
+      seenOrderIds.has(order.id)
+    ) {
+      issues.push("Orders contain a missing or duplicate ID.")
+      continue
+    }
+    seenOrderIds.add(order.id)
 
-    paymentsByOrder.set(order.id, validPayments)
+    const validPayments = validPaymentRecords(order)
 
     if (validPayments.length !== order.payments.length)
       issues.push(`Order ${order.id} contains invalid or duplicate payments.`)
 
+    const uniquePaymentsForOrder: typeof validPayments = []
     for (const payment of validPayments) {
       if (seenPaymentIds.has(payment.id)) {
         issues.push(`Payment ID ${payment.id} is duplicated across orders.`)
@@ -581,6 +592,7 @@ export function selectCustomerCashMovement(
       }
 
       seenPaymentIds.add(payment.id)
+      uniquePaymentsForOrder.push(payment)
 
       if (payment.date < period.startDate || payment.date > period.endDate)
         continue
@@ -597,6 +609,8 @@ export function selectCustomerCashMovement(
 
       paymentCount += 1
     }
+
+    paymentsByOrder.set(order.id, uniquePaymentsForOrder)
   }
 
   for (const refund of refunds) {
@@ -763,9 +777,13 @@ export function selectCustomerBalances(
       continue
     }
 
-    const orderOutstanding = Math.max(0, price - netPayments)
+    const orderOutstanding =
+      order.status === "Draft" ? 0 : Math.max(0, price - netPayments)
 
-    const orderCredit = Math.max(0, netPayments - price)
+    const orderCredit =
+      order.status === "Draft"
+        ? Math.max(0, netPayments)
+        : Math.max(0, netPayments - price)
 
     outstanding = addWholeLkrOrZero(
       outstanding,
@@ -1099,13 +1117,13 @@ function selectActualMaterialCost(
 
     if (record.status !== "Ready") continue
 
+    if (!predicate(record)) continue
+
     if (!record.completedAt || !validTimestamp(record.completedAt)) {
       issues.push(`Preparation ${record.id} has no valid completion timestamp.`)
-
+      total = null
       continue
     }
-
-    if (!predicate(record)) continue
 
     preparationCount += 1
 
@@ -1297,7 +1315,8 @@ export function selectFinishedStockCosts(
       issues.push(
         `Finished-stock transaction ${transaction.id} has an invalid cost.`,
       )
-
+      if (transaction.type === "sale") sold = null
+      else if (transaction.type === "write-off") writeOff = null
       continue
     }
 

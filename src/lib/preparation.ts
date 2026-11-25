@@ -232,12 +232,21 @@ export function calculateActualPreparationCost(
 export function calculateActualUsageCost(
   state: AppData,
   actualUsage: PreparationUsage[],
+  options?: { strictPricing?: boolean },
 ) {
+  const strictPricing = options?.strictPricing ?? false
   return actualUsage.reduce((sum, usage) => {
     const item = state.inventory.find(
       (entry) => entry.inventoryId === usage.inventoryId,
     )
     if (!item || inventoryCategory(item) !== usage.category) return Number.NaN
+    if (
+      strictPricing &&
+      (item.averageUnitCost === undefined ||
+        !Number.isFinite(item.averageUnitCost))
+    ) {
+      return Number.NaN
+    }
     const quantity = toInventoryBaseQuantity(
       usage.actualQuantity,
       usage.unit,

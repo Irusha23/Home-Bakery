@@ -1,5 +1,26 @@
 import type { Unit } from "../types"
 
+export const COLOMBO_TIME_ZONE = "Asia/Colombo"
+
+export function getColomboTodayIso(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: COLOMBO_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now)
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970"
+  const month = parts.find((part) => part.type === "month")?.value ?? "01"
+  const day = parts.find((part) => part.type === "day")?.value ?? "01"
+  return `${year}-${month}-${day}`
+}
+
+export function shiftColomboIsoDate(days: number, baseDate = new Date()): string {
+  const [y, m, d] = getColomboTodayIso(baseDate).split("-").map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + days))
+  return dt.toISOString().slice(0, 10)
+}
+
 const lkrFormatter = new Intl.NumberFormat("en-LK", {
   maximumFractionDigits: 0,
 })
@@ -9,35 +30,51 @@ export function formatLkr(value: number) {
 }
 
 export function formatDate(date: string) {
-  if (!date) return "Date not set"
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Date not set"
+  const parsed = new Date(`${date}T00:00:00+05:30`)
+  if (!Number.isFinite(parsed.getTime())) return "Date not set"
   return new Intl.DateTimeFormat("en-LK", {
+    timeZone: COLOMBO_TIME_ZONE,
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(new Date(`${date}T00:00:00`))
+  }).format(parsed)
 }
 
 export function formatTime(time: string) {
-  if (!time) return "Time not set"
-  const [hours, minutes] = time.split(":").map(Number)
+  if (!time || !/^\d{2}:\d{2}/.test(time)) return "Time not set"
+  const [hours, minutes] = time.slice(0, 5).split(":").map(Number)
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return "Time not set"
+  }
+  const parsed = new Date(Date.UTC(2025, 0, 1, hours, minutes))
   return new Intl.DateTimeFormat("en-LK", {
+    timeZone: "UTC",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(2025, 0, 1, hours, minutes))
+  }).format(parsed)
 }
 
 export function formatQuantity(quantity: number, unit: Unit) {
-  if (unit === "g" && quantity >= 1000) {
+  const absQty = Math.abs(quantity)
+  if (unit === "g" && absQty >= 1000) {
     return `${(quantity / 1000).toLocaleString("en-LK", {
       maximumFractionDigits: 2,
     })} kg`
   }
-  if (unit === "ml" && quantity >= 1000) {
+  if (unit === "ml" && absQty >= 1000) {
     return `${(quantity / 1000).toLocaleString("en-LK", {
       maximumFractionDigits: 2,
     })} L`
   }
   return `${quantity.toLocaleString("en-LK")} ${
-    unit === "unit" ? (quantity === 1 ? "unit" : "units") : unit
+    unit === "unit" ? (absQty === 1 ? "unit" : "units") : unit
   }`
 }

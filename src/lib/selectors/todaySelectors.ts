@@ -1,4 +1,10 @@
-import { formatDate, formatLkr, formatQuantity, formatTime } from "../format"
+import {
+  formatDate,
+  formatLkr,
+  formatQuantity,
+  formatTime,
+  getColomboTodayIso,
+} from "../format"
 import { FINANCIAL_REPORT_TIME_ZONE } from "../financialReports"
 import { outstandingOrderBalance } from "../financials"
 import { selectMonthlyBudgetReport } from "../budget"
@@ -10,6 +16,8 @@ import type {
   StarterAction,
   TabId,
 } from "../../types"
+
+export { getColomboTodayIso }
 
 export type TodayGreeting = {
   greeting: string
@@ -59,17 +67,6 @@ export type AttentionItem = {
   targetTab: TabId
   starterAction?: StarterAction
   orderId?: string
-}
-
-export function getColomboTodayIso(now = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: FINANCIAL_REPORT_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now)
-  const values = new Map(parts.map((part) => [part.type, part.value]))
-  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`
 }
 
 function getColomboHour(now = new Date()): number {
@@ -134,14 +131,20 @@ function compareCollectionSchedule(a: Order, b: Order): number {
 }
 
 function formatShortDate(date: string): string {
-  if (!date) return "Date not set"
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Date not set"
+  const parsed = new Date(`${date}T00:00:00+05:30`)
+  if (!Number.isFinite(parsed.getTime())) return "Date not set"
   return new Intl.DateTimeFormat("en-LK", {
+    timeZone: FINANCIAL_REPORT_TIME_ZONE,
     day: "numeric",
     month: "short",
-  }).format(new Date(`${date}T00:00:00`))
+  }).format(parsed)
 }
 
 function formatDueRelative(order: Order, todayIso: string): string {
+  if (!order.collectionDate) {
+    return `Date not set · ${formatTime(order.collectionTime)}`
+  }
   if (order.collectionDate < todayIso) {
     return `Overdue · ${formatShortDate(order.collectionDate)} · ${formatTime(order.collectionTime)}`
   }
@@ -285,8 +288,8 @@ export function selectUpcomingCollections(
       status: order.status,
       preparationStatus: order.preparationStatus,
       agreedPrice: order.agreedPrice,
-      isOverdue: order.collectionDate < todayIso,
-      isToday: order.collectionDate === todayIso,
+      isOverdue: Boolean(order.collectionDate) && order.collectionDate < todayIso,
+      isToday: Boolean(order.collectionDate) && order.collectionDate === todayIso,
     }))
 }
 
@@ -318,6 +321,7 @@ export function selectAttentionItems(
   for (const order of state.orders) {
     if (
       isActiveOrder(order) &&
+      Boolean(order.collectionDate) &&
       order.collectionDate <= todayIso &&
       order.preparationStatus !== "Ready"
     ) {
