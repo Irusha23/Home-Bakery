@@ -1,4 +1,34 @@
+import groovy.json.JsonSlurper
+
 apply plugin: 'com.android.application'
+
+def versionJsonFile = file('../../src/version.json')
+if (!versionJsonFile.exists()) {
+    throw new GradleException("Missing version file at ${versionJsonFile.absolutePath}")
+}
+def appVersionInfo = new JsonSlurper().parse(versionJsonFile)
+def appVersionCode = appVersionInfo.versionCode as Integer
+def appVersionName = appVersionInfo.version as String
+
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(stream)
+    }
+}
+
+def releaseStoreFilePath = (keystoreProperties.getProperty('storeFile') ?: System.getenv('RELEASE_STORE_FILE'))?.trim()
+def releaseStorePassword = (keystoreProperties.getProperty('storePassword') ?: System.getenv('RELEASE_STORE_PASSWORD'))?.trim()
+def releaseKeyAlias = (keystoreProperties.getProperty('keyAlias') ?: System.getenv('RELEASE_KEY_ALIAS'))?.trim()
+def releaseKeyPassword = (keystoreProperties.getProperty('keyPassword') ?: System.getenv('RELEASE_KEY_PASSWORD'))?.trim()
+def releaseStoreFile = releaseStoreFilePath ? file(releaseStoreFilePath) : null
+def hasReleaseSigningConfig = Boolean.valueOf(
+    releaseStoreFile != null &&
+    releaseStorePassword &&
+    releaseKeyAlias &&
+    releaseKeyPassword
+)
 
 android {
     namespace "lk.udenisspecials.bakery"
@@ -7,8 +37,8 @@ android {
         applicationId "lk.udenisspecials.bakery"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +46,51 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseSigningConfig) {
+                storeFile releaseStoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "udenis-specials-v${appVersionName}-b${appVersionCode}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def requiresReleaseSigning = taskGraph.allTasks.any { task ->
+        task.path == ':app:assembleRelease' ||
+        task.path == ':app:bundleRelease' ||
+        task.path == ':app:packageRelease'
+    }
+    if (requiresReleaseSigning) {
+        if (!hasReleaseSigningConfig) {
+            throw new GradleException(
+                "Release signing is not configured. Copy android/keystore.properties.example to android/keystore.properties " +
+                "(or set RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD). " +
+                "See docs/ANDROID_RELEASE_GUIDE.md."
+            )
+        }
+        if (!releaseStoreFile.exists()) {
+            throw new GradleException(
+                "Release keystore file not found at: ${releaseStoreFile.absolutePath}. " +
+                "Check storeFile in android/keystore.properties."
+            )
         }
     }
 }
