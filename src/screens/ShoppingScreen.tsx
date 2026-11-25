@@ -22,6 +22,7 @@ import {
   AnimatedList,
   TabView,
 } from "../components/ui/MotionPrimitives"
+import QuantityUnitInput from "../components/ui/QuantityUnitInput"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import Sheet from "../components/ui/Sheet"
@@ -39,10 +40,16 @@ import { createId } from "../lib/id"
 import { isValidMoneyAmount } from "../lib/financials"
 import {
   compatibleUnits,
+  convertInventoryUnitQuantity,
   inventoryCategory,
   selectManualShoppingList,
+  toBaseQuantity,
   toInventoryBaseQuantity,
 } from "../lib/inventory"
+import {
+  convertDraftOnUnitChange,
+  formatEditableQuantity,
+} from "../lib/quantityInput"
 import { makeShoppingReference, useAppState } from "../state/AppState"
 import type {
   ExpenseAttribution,
@@ -83,6 +90,8 @@ export default function ShoppingScreen({
   const [addQty, setAddQty] = useState("1")
   const [addUnit, setAddUnit] = useState<Unit>("kg")
   const [addError, setAddError] = useState("")
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({})
+  const [itemUnits, setItemUnits] = useState<Record<string, Unit>>({})
 
   useEffect(() => {
     if (starterAction === "plan-shopping") {
@@ -487,6 +496,25 @@ export default function ShoppingScreen({
               const inventoryItem = state.inventory.find(
                 (inv) => inv.inventoryId === item.inventoryId,
               )
+              const selectedUnit = itemUnits[item.inventoryId] ?? item.unit
+              const conversionTarget =
+                inventoryItem ?? { name: item.name, unit: item.unit }
+              const displayQty =
+                selectedUnit === item.unit
+                  ? item.boughtQuantity
+                  : convertInventoryUnitQuantity(
+                      item.boughtQuantity,
+                      item.unit,
+                      selectedUnit,
+                      conversionTarget,
+                    )
+              const defaultDraft = formatEditableQuantity(
+                Number.isFinite(displayQty) ? displayQty : item.boughtQuantity,
+                selectedUnit === "g" || selectedUnit === "ml" ? 2 : 3,
+              )
+              const draftValue = qtyDrafts[item.inventoryId] ?? defaultDraft
+              const unitOptions = compatibleUnits(item.unit)
+
               return (
               <AnimatedItem key={item.inventoryId} index={index}>
                 <SwipeableRow
@@ -580,13 +608,14 @@ export default function ShoppingScreen({
                         {item.checked
                           ? "Bought"
                           : (() => {
-                              const inv = selectableItems.find(
-                                (i) => i.inventoryId === item.inventoryId,
-                              )
+                              const badgeQty =
+                                Number.isFinite(displayQty) && displayQty > 0
+                                  ? displayQty
+                                  : item.boughtQuantity
                               const dual = formatDualQuantity(
-                                item.boughtQuantity,
-                                item.unit,
-                                inv,
+                                badgeQty,
+                                selectedUnit,
+                                inventoryItem,
                               )
                               return dual.secondary
                                 ? `${dual.primary} (${dual.secondary})`
@@ -622,29 +651,62 @@ export default function ShoppingScreen({
                 </div>
 
                 <div className="flex items-center justify-between gap-3 border-t border-warm-border/70 pt-2.5 text-xs">
-                  <span className="text-muted">
-                    Qty to buy ({item.unit}):
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    inputMode="decimal"
-                    aria-label={`Quantity to buy for ${item.name}`}
-                    value={item.boughtQuantity}
-                    onChange={(event) => {
-                      const val = Number(event.target.value)
+                  <span className="text-muted">Buy qty</span>
+                  <QuantityUnitInput
+                    size="compact"
+                    ariaLabel={`Quantity to buy for ${item.name}`}
+                    className="w-40"
+                    allowDecimal={item.unit !== "unit"}
+                    value={draftValue}
+                    onValueChange={(next) => {
+                      setQtyDrafts((prev) => ({
+                        ...prev,
+                        [item.inventoryId]: next,
+                      }))
+                      if (next.trim() === "") return
+                      const parsed = Number(next)
+                      if (!Number.isFinite(parsed) || parsed <= 0) return
+                      const baseQty = inventoryItem
+                        ? toInventoryBaseQuantity(
+                            parsed,
+                            selectedUnit,
+                            inventoryItem,
+                          )
+                        : toBaseQuantity(parsed, selectedUnit, item.unit)
+                      if (!Number.isFinite(baseQty) || baseQty <= 0) return
                       dispatch({
                         type: "UPDATE_SHOPPING_CHECKLIST_ITEM",
                         inventoryId: item.inventoryId,
                         checked: item.checked,
-                        boughtQuantity:
-                          Number.isFinite(val) && val >= 0
-                            ? val
-                            : item.neededQuantity,
+                        boughtQuantity: baseQty,
                       })
                     }}
-                    className="w-28 rounded-control border border-warm-border bg-white px-2.5 py-1 text-right text-xs font-semibold text-cocoa outline-none focus:border-sage"
+                    onBlur={() => {
+                      setQtyDrafts((prev) => {
+                        if (!(item.inventoryId in prev)) return prev
+                        const next = { ...prev }
+                        delete next[item.inventoryId]
+                        return next
+                      })
+                    }}
+                    unit={selectedUnit}
+                    units={unitOptions}
+                    onUnitChange={(nextUnit) => {
+                      const converted = convertDraftOnUnitChange(
+                        draftValue,
+                        selectedUnit,
+                        nextUnit,
+                        conversionTarget,
+                      )
+                      setItemUnits((prev) => ({
+                        ...prev,
+                        [item.inventoryId]: nextUnit,
+                      }))
+                      setQtyDrafts((prev) => {
+                        if (!(item.inventoryId in prev)) return prev
+                        return { ...prev, [item.inventoryId]: converted }
+                      })
+                    }}
                   />
                 </div>
               </Card>
@@ -741,29 +803,32 @@ export default function ShoppingScreen({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Quantity to buy"
-              type="number"
-              min="0"
-              step="any"
-              inputMode="decimal"
-              value={addQty}
-              onChange={(e) => {
-                setAddQty(e.target.value)
-                setAddError("")
-              }}
-            />
-            <SelectField
-              label="Unit"
-              value={addUnit}
-              options={(selectedInventoryItem
+          <QuantityUnitInput
+            label="Quantity to buy"
+            allowDecimal={selectedInventoryItem?.unit !== "unit"}
+            value={addQty}
+            onValueChange={(next) => {
+              setAddQty(next)
+              setAddError("")
+            }}
+            unit={addUnit}
+            units={
+              selectedInventoryItem
                 ? compatibleUnits(selectedInventoryItem.unit)
                 : (["g", "kg", "ml", "L", "tsp", "tbsp", "cup", "unit"] as Unit[])
-              ).map((u) => ({ value: u, label: u }))}
-              onChange={(e) => setAddUnit(e.target.value as Unit)}
-            />
-          </div>
+            }
+            onUnitChange={(nextUnit) => {
+              const converted = convertDraftOnUnitChange(
+                addQty,
+                addUnit,
+                nextUnit,
+                selectedInventoryItem,
+              )
+              setAddQty(converted)
+              setAddUnit(nextUnit)
+              setAddError("")
+            }}
+          />
 
           {selectedInventoryItem &&
           Number.isFinite(Number(addQty)) &&

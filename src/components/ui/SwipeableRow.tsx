@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { Trash2 } from "lucide-react"
 import {
   motion,
+  useDragControls,
   useMotionValue,
   useReducedMotion,
   useTransform,
@@ -29,6 +30,7 @@ export default function SwipeableRow({
   className = "",
 }: SwipeableRowProps) {
   const reducedMotion = useReducedMotion()
+  const dragControls = useDragControls()
   const x = useMotionValue(0)
   const pillOpacity = useTransform(x, [-90, -24, 0], [1, 0.75, 0])
   const pillScale = useTransform(x, [-90, -24, 0], [1, 0.92, 0.85])
@@ -62,12 +64,23 @@ export default function SwipeableRow({
       <motion.div
         style={{ x, touchAction: "pan-y" }}
         drag="x"
+        dragControls={dragControls}
+        dragListener={false}
         dragDirectionLock
         dragConstraints={{ left: -112, right: 0 }}
         dragElastic={{ left: 0.2, right: 0.04 }}
         dragSnapToOrigin
         transition={SHEET_SPRING}
         onDragEnd={handleDragEnd}
+        onPointerDown={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest("input, select, textarea")
+          ) {
+            return
+          }
+          dragControls.start(event)
+        }}
         className="relative z-10"
       >
         {children}

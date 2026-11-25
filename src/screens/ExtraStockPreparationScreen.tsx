@@ -8,6 +8,8 @@ import Card from "../components/ui/Card"
 
 import Field from "../components/ui/Field"
 
+import QuantityUnitInput from "../components/ui/QuantityUnitInput"
+
 import ScreenHeader from "../components/ScreenHeader"
 
 import StatusBadge from "../components/ui/StatusBadge"
@@ -16,13 +18,27 @@ import { parseExpectedOutputQuantity } from "../lib/expectedOutput"
 
 import { formatLkr, formatQuantity } from "../lib/format"
 
-import { selectReservedByItem } from "../lib/inventory"
+import {
+  compatibleUnits,
+  selectReservedByItem,
+  toBaseQuantity,
+  toInventoryBaseQuantity,
+} from "../lib/inventory"
+
+import {
+  convertDraftOnUnitChange,
+  formatEditableQuantity,
+} from "../lib/quantityInput"
 
 import { validateExtraStockPreparationCompletion } from "../lib/preparation"
 
 import { useAppState } from "../state/AppState"
 
-import type { ExtraStockPreparationRecord, PreparationUsage } from "../types"
+import type {
+  ExtraStockPreparationRecord,
+  PreparationUsage,
+  Unit,
+} from "../types"
 
 type ExtraStockPreparationScreenProps = {
   preparationId?: string
@@ -170,6 +186,14 @@ function ExtraStockPreparationDetail({
     () => structuredClone(record?.actualUsage ?? []),
   )
 
+  const [usageDrafts, setUsageDrafts] = useState<{ quantity: string; unit: Unit }[]>(
+    () =>
+      (record?.actualUsage ?? []).map((usage) => ({
+        quantity: formatEditableQuantity(usage.actualQuantity, 3),
+        unit: usage.unit,
+      })),
+  )
+
   const [actualOutput, setActualOutput] = useState("")
 
   const [issues, setIssues] = useState<string[]>([])
@@ -201,14 +225,35 @@ function ExtraStockPreparationDetail({
 
   const plan = state.extraStockPlans.find((item) => item.id === record.planId)
 
-  const updateUsage = (index: number, value: string) => {
-    const quantity = value === "" ? 0 : Number(value)
-
-    setActualUsage((current) =>
-      current.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, actualQuantity: quantity } : item,
+  const updateUsageDraft = (index: number, nextQty: string, unitOverride?: Unit) => {
+    const activeUnit = unitOverride ?? usageDrafts[index]?.unit ?? actualUsage[index]?.unit ?? "unit"
+    setUsageDrafts((current) =>
+      current.map((draft, itemIndex) =>
+        itemIndex === index ? { quantity: nextQty, unit: activeUnit } : draft,
       ),
     )
+
+    const targetUsage = actualUsage[index]
+    if (targetUsage) {
+      const invItem = state.inventory.find(
+        (candidate) => candidate.inventoryId === targetUsage.inventoryId,
+      )
+      const parsed = nextQty.trim() === "" ? 0 : Number(nextQty)
+      const baseQty =
+        Number.isFinite(parsed) && parsed >= 0
+          ? invItem
+            ? toInventoryBaseQuantity(parsed, activeUnit, invItem)
+            : toBaseQuantity(parsed, activeUnit, targetUsage.unit)
+          : 0
+
+      setActualUsage((current) =>
+        current.map((item, itemIndex) =>
+          itemIndex === index
+            ? { ...item, actualQuantity: Number.isFinite(baseQty) ? baseQty : 0 }
+            : item,
+        ),
+      )
+    }
 
     setIssues([])
 
@@ -381,32 +426,45 @@ function ExtraStockPreparationDetail({
           order reservations remain protected.
         </p>
         <Card className="space-y-4">
-          {actualUsage.map((usage, index) => (
-            <Field
-              key={`${usage.category}-${usage.inventoryId}`}
-              label={`${
-                usage.category === "ingredient" ? "Ingredient" : "Packaging"
-              } · ${usage.name} (${usage.unit})`}
-              type="number"
-              min="0"
-              step={usage.unit === "unit" ? "1" : "any"}
-              inputMode={usage.unit === "unit" ? "numeric" : "decimal"}
-              value={usage.actualQuantity}
-              onChange={(event) => updateUsage(index, event.target.value)}
-              helperText={`Planned ${formatQuantity(usage.plannedQuantity, usage.unit)} · Available now ${formatQuantity(
-                Math.max(
-                  0,
-
-                  (state.inventory.find(
-                    (item) => item.inventoryId === usage.inventoryId,
-                  )?.physical ?? 0) -
-                    (reservedByItem.get(usage.inventoryId) ?? 0),
-                ),
-
-                usage.unit,
-              )}`}
-            />
-          ))}
+          {actualUsage.map((usage, index) => {
+            const invItem = state.inventory.find(
+              (item) => item.inventoryId === usage.inventoryId,
+            )
+            const draft = usageDrafts[index] ?? {
+              quantity: formatEditableQuantity(usage.actualQuantity, 3),
+              unit: usage.unit,
+            }
+            return (
+              <QuantityUnitInput
+                key={`${usage.category}-${usage.inventoryId}`}
+                label={`${
+                  usage.category === "ingredient" ? "Ingredient" : "Packaging"
+                } · ${usage.name}`}
+                allowDecimal={usage.unit !== "unit"}
+                value={draft.quantity}
+                onValueChange={(next) => updateUsageDraft(index, next)}
+                unit={draft.unit}
+                units={compatibleUnits(usage.unit)}
+                onUnitChange={(nextUnit) => {
+                  const converted = convertDraftOnUnitChange(
+                    draft.quantity,
+                    draft.unit,
+                    nextUnit,
+                    invItem ?? usage.unit,
+                  )
+                  updateUsageDraft(index, converted, nextUnit)
+                }}
+                helperText={`Planned ${formatQuantity(usage.plannedQuantity, usage.unit)} · Available now ${formatQuantity(
+                  Math.max(
+                    0,
+                    (invItem?.physical ?? 0) -
+                      (reservedByItem.get(usage.inventoryId) ?? 0),
+                  ),
+                  usage.unit,
+                )}`}
+              />
+            )
+          })}
           {!actualUsage.length ? (
             <p className="text-sm text-muted">
               No ingredient or packaging materials are recorded in this recipe.

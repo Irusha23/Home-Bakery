@@ -6,6 +6,7 @@ import CheckboxField from "../ui/CheckboxField"
 import Field from "../ui/Field"
 import { ImagePickerField } from "../ui/ImagePickerSheet"
 import MoneyText from "../ui/MoneyText"
+import QuantityUnitInput from "../ui/QuantityUnitInput"
 import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
 import InventoryItemSheet from "./InventoryItemSheet"
@@ -16,6 +17,7 @@ import {
   compatibleUnits,
   convertInventoryUnitQuantity,
 } from "../../lib/inventory"
+import { convertDraftOnUnitChange } from "../../lib/quantityInput"
 import {
   estimateRecipeMaterialCost,
   fromDisplayUnitPrice,
@@ -638,7 +640,7 @@ export default function RecipeEditorSheet({
                     key={row.key}
                     className="space-y-2 rounded-control border border-warm-border bg-ivory/60 p-2.5"
                   >
-                    <div className="grid grid-cols-[1fr_72px_68px_auto] items-center gap-1.5">
+                    <div className="grid grid-cols-[1fr_132px_auto] items-center gap-1.5">
                       <select
                         aria-label="Ingredient"
                         value={row.inventoryId}
@@ -666,43 +668,41 @@ export default function RecipeEditorSheet({
                           </option>
                         ))}
                       </select>
-                      <input
-                        aria-label="Quantity"
-                        type="number"
-                        min="0"
-                        step="any"
+                      <QuantityUnitInput
+                        size="compact"
+                        ariaLabel="Ingredient quantity"
+                        allowDecimal={selectedItem?.unit !== "unit"}
                         value={row.quantity}
-                        onChange={(e) =>
+                        onValueChange={(next) =>
                           setIngredients((current) =>
                             current.map((item) =>
                               item.key === row.key
-                                ? { ...item, quantity: e.target.value }
+                                ? { ...item, quantity: next }
                                 : item,
                             ),
                           )
                         }
-                        className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2 text-sm tabular-nums text-cocoa outline-none focus:border-sage"
+                        unit={row.unit}
+                        units={unitChoices}
+                        onUnitChange={(nextUnit) =>
+                          setIngredients((current) =>
+                            current.map((item) =>
+                              item.key === row.key
+                                ? {
+                                    ...item,
+                                    unit: nextUnit,
+                                    quantity: convertDraftOnUnitChange(
+                                      item.quantity,
+                                      item.unit,
+                                      nextUnit,
+                                      selectedItem,
+                                    ),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
                       />
-                      <select
-                        aria-label="Unit"
-                        value={row.unit}
-                        onChange={(e) =>
-                          setIngredients((current) =>
-                            current.map((item) =>
-                              item.key === row.key
-                                ? { ...item, unit: e.target.value as Unit }
-                                : item,
-                            ),
-                          )
-                        }
-                        className="min-h-touch w-full rounded-control border border-warm-border bg-white px-2 text-sm text-cocoa outline-none focus:border-sage"
-                      >
-                        {unitChoices.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
                       <IconButton
                         label="Remove ingredient"
                         className="size-9"

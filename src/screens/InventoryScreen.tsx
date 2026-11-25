@@ -22,6 +22,7 @@ import Dialog from "../components/ui/Dialog"
 import EmptyState from "../components/ui/EmptyState"
 import Field from "../components/ui/Field"
 import ItemThumbnail from "../components/ui/ItemThumbnail"
+import QuantityUnitInput from "../components/ui/QuantityUnitInput"
 import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import StatusBadge from "../components/ui/StatusBadge"
@@ -30,11 +31,14 @@ import { useToast } from "../components/ui/Toast"
 import { formatDate, formatLkr, formatQuantity, getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
 import {
+  compatibleUnits,
   inventoryCategory,
   selectAvailableInventory,
   selectPlannedRequirement,
   selectShoppingRequirements,
+  toInventoryBaseQuantity,
 } from "../lib/inventory"
+import { convertDraftOnUnitChange } from "../lib/quantityInput"
 import { useAppState } from "../state/AppState"
 import type {
   FinishedStockBatch,
@@ -42,6 +46,7 @@ import type {
   InventoryItem,
   InventoryMovementType,
   StarterAction,
+  Unit,
 } from "../types"
 import PurchaseForm from "./PurchaseForm"
 
@@ -381,6 +386,7 @@ function InventoryDetail({
   const [type, setType] = useState<AdjustmentType>("Correction")
   const [direction, setDirection] = useState<"add" | "remove">("remove")
   const [quantity, setQuantity] = useState("")
+  const [adjustUnit, setAdjustUnit] = useState<Unit>(item.unit)
   const [date, setDate] = useState(() => getColomboTodayIso())
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
@@ -594,12 +600,16 @@ function InventoryDetail({
   const resetAdjustment = () => {
     setAdjustmentId(createId("movement-adjust"))
     setQuantity("")
+    setAdjustUnit(item.unit)
     setReason("")
     setError("")
   }
 
   const submitAdjustment = () => {
-    const amount = Number(quantity)
+    const rawAmount = Number(quantity)
+    const amount = Number.isFinite(rawAmount)
+      ? toInventoryBaseQuantity(rawAmount, adjustUnit, item)
+      : Number.NaN
     const delta = direction === "add" ? amount : -amount
     const balanceAfter = item.physical + delta
     if (!Number.isFinite(amount) || amount <= 0 || !reason.trim() || !date) {
@@ -1330,14 +1340,23 @@ function InventoryDetail({
             ]}
             onChange={setDirection}
           />
-          <Field
-            label={`Quantity (${item.unit})`}
-            type="number"
-            min="0"
-            step="any"
-            inputMode="decimal"
+          <QuantityUnitInput
+            label="Quantity"
+            allowDecimal={item.unit !== "unit"}
             value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
+            onValueChange={(next) => {
+              setQuantity(next)
+              setError("")
+            }}
+            unit={adjustUnit}
+            units={compatibleUnits(item.unit)}
+            onUnitChange={(nextUnit) => {
+              setQuantity((current) =>
+                convertDraftOnUnitChange(current, adjustUnit, nextUnit, item),
+              )
+              setAdjustUnit(nextUnit)
+              setError("")
+            }}
           />
           <Field
             label="Adjustment date"

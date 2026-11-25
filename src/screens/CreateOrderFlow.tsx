@@ -142,6 +142,7 @@ export default function CreateOrderFlow({
   const [agreedPrice, setAgreedPrice] = useState(
     order?.agreedPrice ? String(order.agreedPrice) : "",
   )
+  const [priceTouched, setPriceTouched] = useState(Boolean(order?.agreedPrice))
 
   const [recordDeposit, setRecordDeposit] = useState(false)
   const [depositAmount, setDepositAmount] = useState("")
@@ -210,9 +211,11 @@ export default function CreateOrderFlow({
     ])
   }
 
-  const effectiveAgreedPrice = Number(
-    agreedPrice || costSnapshot.suggestedPrice,
-  )
+  const effectiveAgreedPrice = priceTouched
+    ? agreedPrice.trim() === ""
+      ? 0
+      : Number(agreedPrice)
+    : costSnapshot.suggestedPrice
 
   const validateAll = () => {
     if (customerMode === "existing" && !customerId) {
@@ -710,9 +713,10 @@ export default function CreateOrderFlow({
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
                 setAgreedPrice(String(costSnapshot.suggestedPrice))
-              }
+                setPriceTouched(true)
+              }}
               className="rounded-full bg-sage-soft px-2.5 py-1 text-xs font-semibold text-cocoa"
             >
               Suggested {formatLkr(costSnapshot.suggestedPrice)}
@@ -728,11 +732,14 @@ export default function CreateOrderFlow({
           </div>
           <Field
             label="Agreed price (Rs.)"
-            type="number"
-            min="1"
+            type="text"
             inputMode="numeric"
-            value={agreedPrice || String(costSnapshot.suggestedPrice)}
-            onChange={(event) => setAgreedPrice(event.target.value)}
+            placeholder={String(costSnapshot.suggestedPrice)}
+            value={priceTouched ? agreedPrice : String(costSnapshot.suggestedPrice)}
+            onChange={(event) => {
+              setPriceTouched(true)
+              setAgreedPrice(event.target.value.replace(/\D+/g, ""))
+            }}
             helperText={`Est. cost ${formatLkr(costSnapshot.estimatedTotal)} · Profit ${formatLkr(effectiveAgreedPrice - costSnapshot.estimatedTotal)}`}
           />
         </div>
@@ -887,7 +894,10 @@ export default function CreateOrderFlow({
         open={pricingSheetOpen}
         recipe={combinedRecipeForCalculator}
         currentSellingPrice={effectiveAgreedPrice}
-        onApplyPrice={(price) => setAgreedPrice(String(price))}
+        onApplyPrice={(price) => {
+          setAgreedPrice(String(price))
+          setPriceTouched(true)
+        }}
         onClose={() => setPricingSheetOpen(false)}
       />
 

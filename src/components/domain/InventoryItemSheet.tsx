@@ -5,6 +5,7 @@ import CheckboxField from "../ui/CheckboxField"
 import Disclosure from "../ui/Disclosure"
 import Field from "../ui/Field"
 import { ImagePickerField } from "../ui/ImagePickerSheet"
+import QuantityUnitInput from "../ui/QuantityUnitInput"
 import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
 import { createId } from "../../lib/id"
@@ -16,6 +17,7 @@ import {
   isStockTracked,
   toBaseQuantity,
 } from "../../lib/inventory"
+import { convertDraftOnUnitChange } from "../../lib/quantityInput"
 import {
   fromDisplayUnitPrice,
   getDisplayPriceUnitLabel,
@@ -56,6 +58,7 @@ export default function InventoryItemSheet({
   const [stockQtyInput, setStockQtyInput] = useState("")
   const [stockUnit, setStockUnit] = useState<Unit>("g")
   const [lowStockInput, setLowStockInput] = useState("")
+  const [lowStockUnit, setLowStockUnit] = useState<Unit>("g")
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -92,11 +95,28 @@ export default function InventoryItemSheet({
         setStockUnit(item.unit)
         setStockQtyInput(item.physical > 0 ? String(item.physical) : "")
       }
-      setLowStockInput(
-        item.lowStockThreshold && item.lowStockThreshold > 0
-          ? String(item.lowStockThreshold)
-          : "",
-      )
+      if (
+        item.lowStockThreshold &&
+        item.lowStockThreshold > 0
+      ) {
+        if (item.unit === "g" && item.lowStockThreshold >= 1000) {
+          setLowStockUnit("kg")
+          setLowStockInput(
+            String(fromBaseQuantity(item.lowStockThreshold, "kg", "g")),
+          )
+        } else if (item.unit === "ml" && item.lowStockThreshold >= 1000) {
+          setLowStockUnit("L")
+          setLowStockInput(
+            String(fromBaseQuantity(item.lowStockThreshold, "L", "ml")),
+          )
+        } else {
+          setLowStockUnit(item.unit)
+          setLowStockInput(String(item.lowStockThreshold))
+        }
+      } else {
+        setLowStockUnit(item.unit)
+        setLowStockInput("")
+      }
     } else {
       const defaultUnit: BaseUnit =
         defaultCategory === "ingredient" ? "g" : "unit"
@@ -110,6 +130,7 @@ export default function InventoryItemSheet({
       setStockQtyInput("")
       setStockUnit(defaultCategory === "ingredient" ? "kg" : "unit")
       setLowStockInput("")
+      setLowStockUnit(defaultUnit)
     }
   }, [defaultCategory, item?.inventoryId, open])
 
@@ -214,12 +235,16 @@ export default function InventoryItemSheet({
       }
 
       if (lowStockInput.trim()) {
-        const parsedLow = Number(lowStockInput)
-        if (!Number.isFinite(parsedLow) || parsedLow < 0) {
+        const rawLow = Number(lowStockInput)
+        const baseLow = toBaseQuantity(rawLow, lowStockUnit, unit, {
+          gramsPerTsp: unit === "g" ? (parsedTspValue ?? smartDryDefault) : undefined,
+          mlPerTsp: unit === "ml" ? (parsedTspValue ?? 5) : undefined,
+        })
+        if (!Number.isFinite(baseLow) || baseLow < 0) {
           setError("Low-stock alert quantity must be 0 or greater.")
           return
         }
-        lowThreshold = parsedLow
+        lowThreshold = baseLow
       } else {
         lowThreshold = 0
       }
@@ -355,9 +380,11 @@ export default function InventoryItemSheet({
                 if (nextCat === "packaging") {
                   setUnit("unit")
                   setStockUnit("unit")
+                  setLowStockUnit("unit")
                 } else if (unit === "unit") {
                   setUnit("g")
                   setStockUnit("kg")
+                  setLowStockUnit("g")
                 }
               }}
             />
@@ -377,6 +404,7 @@ export default function InventoryItemSheet({
                 setStockUnit(
                   nextUnit === "g" ? "kg" : nextUnit === "ml" ? "L" : "unit",
                 )
+                setLowStockUnit(nextUnit)
               }}
             />
           </div>
@@ -441,40 +469,51 @@ export default function InventoryItemSheet({
 
             {trackStock ? (
               <div className="space-y-3 rounded-control border border-warm-border bg-ivory p-3">
-                <div className="grid grid-cols-[1fr_92px] gap-2.5">
-                  <Field
-                    label="Available quantity"
-                    type="number"
-                    min="0"
-                    step="any"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={stockQtyInput}
-                    onChange={(e) => {
-                      setStockQtyInput(e.target.value)
-                      setError("")
-                    }}
-                  />
-                  <SelectField
-                    label="Unit"
-                    value={stockUnit}
-                    options={compatibleUnits(unit).map((u) => ({
-                      value: u,
-                      label: u,
-                    }))}
-                    onChange={(e) => setStockUnit(e.target.value as Unit)}
-                  />
-                </div>
-                <Field
-                  label={`Low-stock reminder (${unit})`}
-                  type="number"
-                  min="0"
-                  step="any"
-                  inputMode="decimal"
+                <QuantityUnitInput
+                  label="Available quantity"
+                  allowDecimal={unit !== "unit"}
+                  placeholder="0"
+                  value={stockQtyInput}
+                  onValueChange={(next) => {
+                    setStockQtyInput(next)
+                    setError("")
+                  }}
+                  unit={stockUnit}
+                  units={compatibleUnits(unit)}
+                  onUnitChange={(nextUnit) => {
+                    setStockQtyInput((current) =>
+                      convertDraftOnUnitChange(current, stockUnit, nextUnit, {
+                        name: name || "",
+                        unit,
+                        ...(unit === "g" ? { gramsPerTsp: previewTspValue } : {}),
+                        ...(unit === "ml" ? { mlPerTsp: previewTspValue } : {}),
+                      }),
+                    )
+                    setStockUnit(nextUnit)
+                    setError("")
+                  }}
+                />
+                <QuantityUnitInput
+                  label="Low-stock reminder"
+                  allowDecimal={unit !== "unit"}
                   placeholder="Optional (0 = off)"
                   value={lowStockInput}
-                  onChange={(e) => {
-                    setLowStockInput(e.target.value)
+                  onValueChange={(next) => {
+                    setLowStockInput(next)
+                    setError("")
+                  }}
+                  unit={lowStockUnit}
+                  units={compatibleUnits(unit)}
+                  onUnitChange={(nextUnit) => {
+                    setLowStockInput((current) =>
+                      convertDraftOnUnitChange(current, lowStockUnit, nextUnit, {
+                        name: name || "",
+                        unit,
+                        ...(unit === "g" ? { gramsPerTsp: previewTspValue } : {}),
+                        ...(unit === "ml" ? { mlPerTsp: previewTspValue } : {}),
+                      }),
+                    )
+                    setLowStockUnit(nextUnit)
                     setError("")
                   }}
                 />

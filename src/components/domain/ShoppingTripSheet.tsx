@@ -4,21 +4,28 @@ import Button, { IconButton } from "../ui/Button"
 import Card from "../ui/Card"
 import CheckboxField from "../ui/CheckboxField"
 import Field from "../ui/Field"
+import QuantityUnitInput from "../ui/QuantityUnitInput"
 import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
 import { useToast } from "../ui/Toast"
 import { validateExpense } from "../../lib/expenses"
 import { formatLkr, formatQuantity } from "../../lib/format"
 import { createId } from "../../lib/id"
-import { toBaseQuantity } from "../../lib/inventory"
+import {
+  compatibleUnits,
+  toBaseQuantity,
+  toInventoryBaseQuantity,
+} from "../../lib/inventory"
+import { convertDraftOnUnitChange } from "../../lib/quantityInput"
 import { getColomboTodayIso } from "../../lib/selectors/todaySelectors"
 import { useAppState } from "../../state/AppState"
-import type { BaseUnit, Expense, ShoppingRequirement } from "../../types"
+import type { BaseUnit, Expense, ShoppingRequirement, Unit } from "../../types"
 
 type TripDraftRow = {
   inventoryId: string
   name: string
   baseUnit: BaseUnit
+  unit: Unit
   quantity: string
   price: string
   included: boolean
@@ -92,6 +99,7 @@ export default function ShoppingTripSheet({
           inventoryId: item.inventoryId,
           name: item.name,
           baseUnit: item.unit,
+          unit: item.unit,
           quantity: defaultQty > 0 ? String(defaultQty) : "",
           price: "",
           included: true,
@@ -175,16 +183,25 @@ export default function ShoppingTripSheet({
     for (const row of toRecord) {
       const qty = Number(row.quantity)
       const price = Number(row.price.trim())
-      const usableBaseQuantity = toBaseQuantity(qty, row.baseUnit, row.baseUnit)
+      const invItem = state.inventory.find(
+        (candidate) => candidate.inventoryId === row.inventoryId,
+      )
+      const usableBaseQuantity = invItem
+        ? toInventoryBaseQuantity(qty, row.unit, invItem)
+        : toBaseQuantity(qty, row.unit, row.baseUnit)
+      if (!Number.isFinite(usableBaseQuantity) || usableBaseQuantity <= 0) {
+        setError(`Enter a valid quantity and unit for ${row.name}.`)
+        return
+      }
       const accepted = dispatchIfAccepted({
         type: "RECORD_PURCHASE",
         purchase: {
           id: createId("purchase"),
           inventoryId: row.inventoryId,
           purchasedQuantity: qty,
-          purchasedUnit: row.baseUnit,
+          purchasedUnit: row.unit,
           usableQuantity: qty,
-          usableUnit: row.baseUnit,
+          usableUnit: row.unit,
           usableBaseQuantity,
           totalPrice: price,
           date,
@@ -308,19 +325,39 @@ export default function ShoppingTripSheet({
                   </div>
                   {row.included ? (
                     <div className="mt-3 grid grid-cols-2 gap-3">
-                      <Field
-                        label={`Quantity (${row.baseUnit})`}
-                        type="number"
-                        min="0"
-                        step="any"
-                        inputMode="decimal"
+                      <QuantityUnitInput
+                        label="Quantity"
+                        allowDecimal={row.baseUnit !== "unit"}
                         value={row.quantity}
-                        onChange={(event) => {
-                          const value = event.target.value
+                        onValueChange={(value) => {
                           setRows((current) =>
                             current.map((candidate) =>
                               candidate.inventoryId === row.inventoryId
                                 ? { ...candidate, quantity: value }
+                                : candidate,
+                            ),
+                          )
+                          setError("")
+                        }}
+                        unit={row.unit}
+                        units={compatibleUnits(row.baseUnit)}
+                        onUnitChange={(nextUnit) => {
+                          const invItem = state.inventory.find(
+                            (candidate) => candidate.inventoryId === row.inventoryId,
+                          )
+                          setRows((current) =>
+                            current.map((candidate) =>
+                              candidate.inventoryId === row.inventoryId
+                                ? {
+                                    ...candidate,
+                                    unit: nextUnit,
+                                    quantity: convertDraftOnUnitChange(
+                                      candidate.quantity,
+                                      candidate.unit,
+                                      nextUnit,
+                                      invItem ?? candidate.baseUnit,
+                                    ),
+                                  }
                                 : candidate,
                             ),
                           )
