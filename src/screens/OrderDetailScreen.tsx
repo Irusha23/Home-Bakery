@@ -38,6 +38,7 @@ import {
   formatLkr,
   formatQuantity,
   formatTime,
+  getColomboTodayIso,
 } from "../lib/format"
 import { createId } from "../lib/id"
 import { useResolvedImageSrc } from "../lib/mediaStore"
@@ -72,7 +73,7 @@ import { useAppState } from "../state/AppState"
 import type { Order } from "../types"
 
 function today() {
-  return new Date().toISOString().slice(0, 10)
+  return getColomboTodayIso()
 }
 
 type OrderDetailScreenProps = {
@@ -337,23 +338,17 @@ export default function OrderDetailScreen({
         setFinancialError("Refund could not be allocated across payments.")
         return
       }
-      let allAccepted = true
-      for (const slice of slices) {
-        const accepted = dispatchIfAccepted({
-          type: "RECORD_REFUND",
-          refund: slice,
-        })
-        if (!accepted) {
-          allAccepted = false
-          break
-        }
-      }
+      const allAccepted = dispatchIfAccepted({
+        type: "RECORD_REFUNDS",
+        refunds: slices,
+      })
       if (!allAccepted) {
         setFinancialError("Refund was not accepted. Order balances remain unchanged.")
         return
       }
+      let feeApplied = true
       if (keepRemainderAsFee && remainderAfterRefund > 0) {
-        dispatchIfAccepted({
+        feeApplied = dispatchIfAccepted({
           type: "SET_CANCELLATION_FEE",
           orderId: order.id,
           fee: cancellationFee + remainderAfterRefund,
@@ -362,7 +357,7 @@ export default function OrderDetailScreen({
       setFeedback({
         kind: "success",
         message:
-          keepRemainderAsFee && remainderAfterRefund > 0
+          keepRemainderAsFee && remainderAfterRefund > 0 && feeApplied
             ? `Recorded ${formatLkr(refundAmount)} refund and kept ${formatLkr(remainderAfterRefund)} cancellation fee.`
             : `Recorded ${formatLkr(refundAmount)} refund.`,
       })

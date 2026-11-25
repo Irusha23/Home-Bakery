@@ -26,7 +26,7 @@ import {
   validateAllocationVersion,
   validateExpense,
 } from "../lib/expenses"
-import { formatDate, formatLkr } from "../lib/format"
+import { formatDate, formatLkr, getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
 import { useAppState } from "../state/AppState"
 import type {
@@ -48,7 +48,7 @@ type AllocationDraftRow = {
 }
 
 function today() {
-  return new Date().toISOString().slice(0, 10)
+  return getColomboTodayIso()
 }
 
 function newId(prefix: string) {

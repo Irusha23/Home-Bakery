@@ -12,14 +12,14 @@ import {
   selectShoppingRequirements,
   toBaseQuantity,
 } from "../lib/inventory"
-import { formatQuantity } from "../lib/format"
+import { formatQuantity, getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
 import { submitPurchaseIfAccepted } from "../lib/purchaseSubmission"
 import { useAppState } from "../state/AppState"
 import type { Unit } from "../types"
 
 function today() {
-  return new Date().toISOString().slice(0, 10)
+  return getColomboTodayIso()
 }
 
 type PurchaseFormProps = {

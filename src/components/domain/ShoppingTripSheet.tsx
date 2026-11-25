@@ -42,6 +42,7 @@ export default function ShoppingTripSheet({
   const { state, dispatchIfAccepted } = useAppState()
   const { showToast } = useToast()
   const [rows, setRows] = useState<TripDraftRow[]>([])
+  const [submitting, setSubmitting] = useState(false)
   const [date, setDate] = useState(() => getColomboTodayIso())
   const [includeTripExpense, setIncludeTripExpense] = useState(false)
   const [expenseAmount, setExpenseAmount] = useState("")
@@ -110,6 +111,7 @@ export default function ShoppingTripSheet({
       : 0
 
   const handleSaveTrip = () => {
+    if (submitting) return
     const toRecord = rows.filter((row) => row.included)
     if (toRecord.length === 0 && !includeTripExpense) {
       setError("Include at least one item or trip expense to record.")
@@ -166,7 +168,9 @@ export default function ShoppingTripSheet({
       }
     }
 
-    const recordedIds: string[] = []
+    setSubmitting(true)
+    try {
+      const recordedIds: string[] = []
     const nowIso = new Date().toISOString()
     for (const row of toRecord) {
       const qty = Number(row.quantity)
@@ -215,6 +219,9 @@ export default function ShoppingTripSheet({
     })
     onCompleted(recordedIds)
     onClose()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (

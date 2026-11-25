@@ -198,15 +198,13 @@ export default function RecipeEditorSheet({
       setSaveToLibrary(!isOrderCustomMode)
     }
   }, [
-    activeProducts,
-    baseRecipe,
-    ingredientItems,
+    baseRecipe?.id,
     initialProductId,
     initialVariantId,
     isOrderCustomMode,
     open,
-    recipe,
-    state.inventory,
+    recipe?.id,
+    recipe?.updatedAt,
   ])
 
   const selectedProduct = activeProducts.find((p) => p.id === productId)
@@ -418,7 +416,6 @@ export default function RecipeEditorSheet({
         : ["Follow standard bakery preparation method."],
       estimatedCost,
       updatedAt: new Date().toISOString(),
-      ...(recipe?.history ? { history: recipe.history } : {}),
     }
 
     onSave(nextRecipe, saveToLibrary)

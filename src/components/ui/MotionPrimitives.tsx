@@ -142,7 +142,7 @@ export function AnimatedItem({
       layout={!reducedMotion}
       variants={reducedMotion ? undefined : listItemVariants}
       initial={reducedMotion ? { opacity: 0 } : "initial"}
-      animate="animate"
+      animate={reducedMotion ? { opacity: 1 } : "animate"}
       exit={reducedMotion ? { opacity: 0 } : "exit"}
       transition={
         reducedMotion

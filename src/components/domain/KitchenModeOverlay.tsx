@@ -107,15 +107,18 @@ export default function KitchenModeOverlay({
   }, [open])
 
   useEffect(() => {
-    if (!timerRunning || timerSeconds <= 0) {
-      if (timerSeconds <= 0 && timerRunning) setTimerRunning(false)
-      return
-    }
+    if (!timerRunning) return
     const id = window.setInterval(() => {
-      setTimerSeconds((prev) => (prev <= 1 ? 0 : prev - 1))
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          setTimerRunning(false)
+          return 0
+        }
+        return prev - 1
+      })
     }, 1000)
     return () => window.clearInterval(id)
-  }, [timerRunning, timerSeconds])
+  }, [timerRunning])
 
   if (!open) return null
 
@@ -174,7 +177,7 @@ export default function KitchenModeOverlay({
                 setTimerRunning((r) => !r)
               }}
               aria-label={timerRunning ? "Pause timer" : "Start timer"}
-              className="inline-flex size-10 items-center justify-center rounded-full bg-sage text-white"
+              className="inline-flex size-10 items-center justify-center rounded-full bg-white text-cocoa transition hover:bg-white/90 active:scale-button"
             >
               {timerRunning ? (
                 <Pause aria-hidden="true" size={16} />
@@ -233,7 +236,7 @@ export default function KitchenModeOverlay({
                   idx === stepIndex
                     ? "bg-white"
                     : completedSteps.includes(idx)
-                      ? "bg-sage"
+                      ? "bg-success"
                       : "bg-white/25"
                 }`}
               />

@@ -66,7 +66,7 @@ export default function ProductEditorSheet({
         },
       ])
     }
-  }, [open, product])
+  }, [open, product?.id])
 
   const handleAddVariant = () => {
     setVariants((current) => [
@@ -137,7 +137,7 @@ export default function ProductEditorSheet({
           variantId: primaryVariant.id,
           version: 1,
           yieldLabel: `${sourceRecipe.yield} × ${primaryVariant.name} ${primaryVariant.unitLabel}`.trim(),
-          updatedAt: new Date().toISOString().slice(0, 10),
+          updatedAt: new Date().toISOString(),
           history: [],
         }
         if (dispatchIfAccepted({ type: "ADD_RECIPE", recipe: candidate })) {
