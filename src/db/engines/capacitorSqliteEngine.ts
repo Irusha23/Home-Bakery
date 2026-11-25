@@ -50,11 +50,17 @@ export class CapacitorSqliteEngine implements SqliteEngine {
         statements: "PRAGMA foreign_keys = ON;",
         transaction: false,
       })
-      await CapacitorSQLite.execute({
-        database: this.database,
-        statements: "PRAGMA journal_mode = WAL;",
-        transaction: false,
-      })
+      try {
+        // Android SQLite/SQLCipher forbids row-returning PRAGMAs in execSQL();
+        // PRAGMA journal_mode = WAL returns the active mode row and must use query().
+        await CapacitorSQLite.query({
+          database: this.database,
+          statement: "PRAGMA journal_mode = WAL;",
+          values: [],
+        })
+      } catch {
+        // Best-effort: continue with default journal mode if WAL cannot be enabled
+      }
       this.opened = true
     })().finally(() => {
       this.openPromise = null

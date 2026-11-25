@@ -3700,7 +3700,7 @@ function ReadyAppStateProvider({
       {persistenceError ? (
         <div
           role="alert"
-          className="border-b border-warning/30 bg-warning-soft px-4 py-3 text-sm text-cocoa"
+          className="screen-safe-top border-b border-warning/30 bg-warning-soft px-4 pb-3 text-sm text-cocoa"
         >
           <div className="mx-auto flex max-w-screen-xl flex-wrap items-center justify-between gap-3">
             <span>{persistenceError}</span>
