@@ -28,7 +28,7 @@ export default function CheckboxField({
       onPointerDown={triggerRipple}
       whileTap={reducedMotion ? undefined : { scale: 0.985 }}
       transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_MICRO}
-      className={`relative flex min-h-touch cursor-pointer items-start gap-3 rounded-control border p-3 transition-colors duration-200 ease-out ${
+      className={`relative flex min-h-touch cursor-pointer items-start gap-3 rounded-control border p-3 transition-colors duration-200 ease-out has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-sage/30 ${
         checked
           ? "border-sage-border bg-sage-soft/50"
           : "border-warm-border bg-white hover:bg-ivory/60"

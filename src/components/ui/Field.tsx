@@ -1,5 +1,5 @@
+import { useId, type InputHTMLAttributes } from "react"
 import { Search } from "lucide-react"
-import type { InputHTMLAttributes } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { REDUCED_MOTION_TRANSITION, SPRING_MICRO } from "../../lib/motion"
 
@@ -22,7 +22,8 @@ export default function Field({
   ...props
 }: FieldProps) {
   const reducedMotion = useReducedMotion()
-  const fieldId = id ?? label.toLowerCase().replace(/ /g, "-")
+  const generatedId = useId()
+  const fieldId = id ?? generatedId
   const message = error ?? helperText
 
   return (

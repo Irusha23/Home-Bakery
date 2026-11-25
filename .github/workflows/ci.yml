@@ -6,10 +6,14 @@ on:
       - main
       - "feature/**"
       - "feat/**"
+      - "fix/**"
+      - "chore/**"
   pull_request:
     branches:
       - main
-      - feature/remaining-workflows
+      - "feature/**"
+      - "feat/**"
+      - "fix/**"
   workflow_dispatch:
 
 concurrency:

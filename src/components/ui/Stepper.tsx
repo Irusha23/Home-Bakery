@@ -74,21 +74,24 @@ export default function Stepper({
         }}
         whileTap={reducedMotion ? undefined : { scale: 0.92 }}
         animate={
-          boundHit?.dir === -1
+          !canDecrease && boundHit?.dir === -1
             ? reducedMotion
               ? { opacity: [0.35, 0.65, 0.35] }
-              : { x: [0, -4, 2, 0] }
+              : { x: [0, -4, 2, 0], opacity: 0.35 }
             : { x: 0, opacity: canDecrease ? 1 : 0.35 }
         }
+        onAnimationComplete={() => {
+          if (boundHit?.dir === -1) setBoundHit(null)
+        }}
         transition={
-          boundHit?.dir === -1
+          !canDecrease && boundHit?.dir === -1
             ? SPRING_NUDGE
             : reducedMotion
               ? REDUCED_MOTION_TRANSITION
               : SPRING_MICRO
         }
         className={`relative inline-flex ${buttonSize} items-center justify-center rounded-control text-cocoa transition-colors duration-200 hover:bg-sage-soft hover:text-sage-dark ${
-          !canDecrease ? "cursor-not-allowed opacity-35" : ""
+          !canDecrease ? "cursor-not-allowed" : ""
         }`}
       >
         <TouchRippleLayer
@@ -126,21 +129,24 @@ export default function Stepper({
         }}
         whileTap={reducedMotion ? undefined : { scale: 0.92 }}
         animate={
-          boundHit?.dir === 1
+          !canIncrease && boundHit?.dir === 1
             ? reducedMotion
               ? { opacity: [0.35, 0.65, 0.35] }
-              : { x: [0, 4, -2, 0] }
+              : { x: [0, 4, -2, 0], opacity: 0.35 }
             : { x: 0, opacity: canIncrease ? 1 : 0.35 }
         }
+        onAnimationComplete={() => {
+          if (boundHit?.dir === 1) setBoundHit(null)
+        }}
         transition={
-          boundHit?.dir === 1
+          !canIncrease && boundHit?.dir === 1
             ? SPRING_NUDGE
             : reducedMotion
               ? REDUCED_MOTION_TRANSITION
               : SPRING_MICRO
         }
         className={`relative inline-flex ${buttonSize} items-center justify-center rounded-control text-cocoa transition-colors duration-200 hover:bg-sage-soft hover:text-sage-dark ${
-          !canIncrease ? "cursor-not-allowed opacity-35" : ""
+          !canIncrease ? "cursor-not-allowed" : ""
         }`}
       >
         <TouchRippleLayer

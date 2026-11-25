@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import { APP_VERSION, checkForAppUpdate, compareSemver } from "./appVersion"
+import {
+  APP_BUILD_CODE,
+  APP_VERSION,
+  checkForAppUpdate,
+  compareSemver,
+} from "./appVersion"
 
 describe("appVersion & update checker", () => {
   it("compares semantic versions accurately", () => {
@@ -18,9 +23,9 @@ describe("appVersion & update checker", () => {
     const fetcher = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        version: "1.1.0",
-        versionCode: 2,
-        downloadUrl: "https://example.com/app-v1.1.0.apk",
+        version: "9.9.0",
+        versionCode: APP_BUILD_CODE + 1,
+        downloadUrl: "https://example.com/app-v9.9.0.apk",
         notes: "Fixes bakery timer and adds dark mode.",
       }),
     })) as unknown as typeof fetch
@@ -32,8 +37,8 @@ describe("appVersion & update checker", () => {
     expect(result).toEqual({
       status: "update-available",
       currentVersion: APP_VERSION,
-      latestVersion: "1.1.0",
-      downloadUrl: "https://example.com/app-v1.1.0.apk",
+      latestVersion: "9.9.0",
+      downloadUrl: "https://example.com/app-v9.9.0.apk",
       notes: "Fixes bakery timer and adds dark mode.",
     })
   })
@@ -43,7 +48,7 @@ describe("appVersion & update checker", () => {
       ok: true,
       json: async () => ({
         version: APP_VERSION,
-        versionCode: 1,
+        versionCode: APP_BUILD_CODE,
         downloadUrl: "https://example.com/app.apk",
       }),
     })) as unknown as typeof fetch
