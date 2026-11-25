@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
 import { Capacitor } from "@capacitor/core"
+import { Share } from "@capacitor/share"
 import {
   BellOff,
   Download,
   RefreshCw,
   RotateCcw,
   Save,
+  Share2,
   ShieldAlert,
 } from "lucide-react"
 import BackupRestorePanel from "../components/BackupRestorePanel"
@@ -19,6 +21,7 @@ import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import { useToast } from "../components/ui/Toast"
 import {
+  APP_BUILD_CODE,
   APP_VERSION,
   checkForAppUpdate,
   type UpdateCheckResult,
@@ -34,8 +37,13 @@ type SettingsScreenProps = {
 }
 
 export default function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const { state, dispatch, dispatchIfAccepted, restoreBackupFromRaw } =
-    useAppState()
+  const {
+    state,
+    dispatch,
+    dispatchIfAccepted,
+    restoreBackupFromRaw,
+    storageInfo,
+  } = useAppState()
   const { showToast } = useToast()
 
   const [businessName, setBusinessName] = useState(state.settings.businessName)
@@ -410,18 +418,25 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       </Card>
 
       <GroupedList title="About">
-        <ListRow title="App version" value={`v${APP_VERSION}`} />
+        <ListRow
+          title="App version"
+          value={`v${APP_VERSION} (Build ${APP_BUILD_CODE})`}
+        />
         <ListRow
           title="Storage engine"
           value={
-            Capacitor.isNativePlatform()
+            storageInfo.backendName === "capacitor-sqlite"
               ? "SQLite (Android)"
-              : "IndexedDB (Browser)"
+              : storageInfo.backendName === "indexeddb"
+                ? "IndexedDB (Browser)"
+                : storageInfo.backendName === "node-sqlite"
+                  ? "SQLite (Node)"
+                  : "LocalStorage (Fallback)"
           }
         />
         <ListRow
           title="Database schema"
-          value={`v${LATEST_DB_SCHEMA_VERSION}`}
+          value={`v${storageInfo.schemaVersion ?? LATEST_DB_SCHEMA_VERSION}`}
         />
         <ListRow title="Currency & precision" value="Whole LKR" />
         <ListRow title="Business timezone" value="Asia/Colombo" />
@@ -462,15 +477,54 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                   {updateResult.notes}
                 </p>
               ) : null}
-              <a
-                href={updateResult.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-touch items-center justify-center gap-2 rounded-control bg-sage px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
-              >
-                <Download aria-hidden="true" size={16} />
-                Download updated APK
-              </a>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={updateResult.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => {
+                    if (Capacitor.isNativePlatform()) {
+                      event.preventDefault()
+                      window.open(
+                        updateResult.downloadUrl,
+                        "_system",
+                        "noopener,noreferrer",
+                      )
+                    }
+                  }}
+                  className="inline-flex min-h-touch items-center justify-center gap-2 rounded-control bg-sage px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+                >
+                  <Download aria-hidden="true" size={16} />
+                  Download updated APK
+                </a>
+                <Button
+                  variant="secondary"
+                  leadingIcon={<Share2 aria-hidden="true" size={16} />}
+                  onClick={() => {
+                    const shareUrl = updateResult.downloadUrl
+                    if (Capacitor.isNativePlatform()) {
+                      void Share.share({
+                        title: `Udeni's Specials v${updateResult.latestVersion}`,
+                        text: `Download Udeni's Specials v${updateResult.latestVersion} APK`,
+                        url: shareUrl,
+                        dialogTitle: "Open or share update link",
+                      }).catch(() => undefined)
+                    } else if (navigator.clipboard?.writeText) {
+                      void navigator.clipboard
+                        .writeText(shareUrl)
+                        .then(() =>
+                          showToast({
+                            message: "Update link copied",
+                            tone: "info",
+                          }),
+                        )
+                        .catch(() => undefined)
+                    }
+                  }}
+                >
+                  Share / copy link
+                </Button>
+              </div>
             </>
           ) : (
             <p className="text-xs leading-relaxed text-muted">

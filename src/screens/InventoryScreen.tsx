@@ -27,7 +27,7 @@ import SelectField from "../components/ui/SelectField"
 import StatusBadge from "../components/ui/StatusBadge"
 import TextAreaField from "../components/ui/TextAreaField"
 import { useToast } from "../components/ui/Toast"
-import { formatDate, formatLkr, formatQuantity } from "../lib/format"
+import { formatDate, formatLkr, formatQuantity, getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
 import {
   inventoryCategory,
@@ -353,7 +353,7 @@ function InventoryRow({
       <span className="mt-3 block h-1.5 w-full overflow-hidden rounded-full bg-cream-dark">
         <span
           className={`block h-full rounded-full transition-all duration-300 ${
-            shortage > 0 ? "bg-warning" : low ? "bg-terracotta" : "bg-sage"
+            shortage > 0 ? "bg-warning" : low ? "bg-rose" : "bg-sage"
           }`}
           style={{ width: `${availablePct}%` }}
         />
@@ -381,7 +381,7 @@ function InventoryDetail({
   const [type, setType] = useState<AdjustmentType>("Correction")
   const [direction, setDirection] = useState<"add" | "remove">("remove")
   const [quantity, setQuantity] = useState("")
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => getColomboTodayIso())
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
   const [finishedAction, setFinishedAction] =
@@ -602,7 +602,7 @@ function InventoryDetail({
     const amount = Number(quantity)
     const delta = direction === "add" ? amount : -amount
     const balanceAfter = item.physical + delta
-    if (amount <= 0 || !reason.trim() || !date) {
+    if (!Number.isFinite(amount) || amount <= 0 || !reason.trim() || !date) {
       setError("Enter a positive quantity, date and clear reason.")
       return
     }
@@ -619,7 +619,7 @@ function InventoryDetail({
       )
       return
     }
-    dispatch({
+    const accepted = dispatchIfAccepted({
       type: "ADJUST_INVENTORY",
       adjustment: {
         id: adjustmentId,
@@ -630,6 +630,10 @@ function InventoryDetail({
         reason: reason.trim(),
       },
     })
+    if (!accepted) {
+      setError("Could not record adjustment. Check the values and try again.")
+      return
+    }
     setAdjustOpen(false)
     resetAdjustment()
   }
@@ -1029,7 +1033,7 @@ function InventoryDetail({
           </div>
         }
       >
-        <div className="max-h-dialog-content space-y-4 overflow-y-auto pr-1">
+        <div className="space-y-4">
           {reconcileError ? (
             <div
               className="flex items-start gap-2 rounded-control bg-warning-soft p-3 text-sm text-cocoa"
@@ -1116,7 +1120,7 @@ function InventoryDetail({
           </div>
         }
       >
-        <div className="max-h-dialog-content space-y-4 overflow-y-auto pr-1">
+        <div className="space-y-4">
           {finishedActionError ? (
             <div
               className="flex items-start gap-2 rounded-control bg-warning-soft p-3 text-sm text-cocoa"
@@ -1295,7 +1299,7 @@ function InventoryDetail({
           </div>
         }
       >
-        <div className="max-h-dialog-content space-y-4 overflow-y-auto pr-1">
+        <div className="space-y-4">
           {error ? (
             <div className="flex items-start gap-2 rounded-control bg-warning-soft p-3 text-sm text-cocoa">
               <AlertTriangle

@@ -32,6 +32,7 @@ export interface MediaStore {
   saveMedia(dataUrl: string): Promise<string>
   loadMedia(ref: string): Promise<string | null>
   deleteMedia(ref: string): Promise<void>
+  listMediaRefs?(): Promise<string[]>
 }
 
 function openMediaDb(): Promise<IDBDatabase> {
@@ -136,6 +137,20 @@ export class IndexedDbMediaStore implements MediaStore {
       // Ignore deletion errors for missing or unavailable stores
     }
   }
+
+  async listMediaRefs(): Promise<string[]> {
+    try {
+      const db = await this.getDb()
+      const keys = await runMediaTx<IDBValidKey[]>(
+        db,
+        "readonly",
+        (store) => store.getAllKeys(),
+      )
+      return keys.filter((key): key is string => typeof key === "string" && isMediaRef(key))
+    } catch {
+      return []
+    }
+  }
 }
 
 /**
@@ -203,6 +218,20 @@ export class CapacitorFilesystemMediaStore implements MediaStore {
       // Ignore deletion errors for missing files
     }
   }
+
+  async listMediaRefs(): Promise<string[]> {
+    try {
+      const result = await Filesystem.readdir({
+        path: "media",
+        directory: Directory.Data,
+      })
+      return result.files
+        .filter((entry) => entry.type === "file" && entry.name.endsWith(".txt"))
+        .map((entry) => `${MEDIA_REF_PREFIX}${entry.name.slice(0, -4)}`)
+    } catch {
+      return []
+    }
+  }
 }
 
 /**
@@ -225,6 +254,10 @@ export class MemoryMediaStore implements MediaStore {
 
   async deleteMedia(ref: string): Promise<void> {
     this.items.delete(ref)
+  }
+
+  async listMediaRefs(): Promise<string[]> {
+    return Array.from(this.items.keys())
   }
 }
 
@@ -273,6 +306,63 @@ export function useResolvedImageSrc(image?: string): string | undefined {
   return resolved
 }
 
+async function mapAppDataMediaFields(
+  data: AppData,
+  transform: (value?: string) => Promise<string | undefined>,
+): Promise<AppData> {
+  const clone = structuredClone(data)
+
+  for (const product of clone.products) {
+    if (product.image) {
+      product.image = await transform(product.image)
+    }
+  }
+  for (const recipe of clone.recipes) {
+    if (recipe.image) {
+      recipe.image = await transform(recipe.image)
+    }
+    if (recipe.history) {
+      for (const snap of recipe.history) {
+        if (snap.image) {
+          snap.image = await transform(snap.image)
+        }
+      }
+    }
+  }
+  for (const item of clone.inventory) {
+    if (item.image) {
+      item.image = await transform(item.image)
+    }
+  }
+  for (const order of clone.orders) {
+    if (order.referencePhoto) {
+      order.referencePhoto = await transform(order.referencePhoto)
+    }
+    for (const line of order.lines) {
+      if (line.recipeSnapshot.image) {
+        line.recipeSnapshot.image = await transform(line.recipeSnapshot.image)
+      }
+    }
+  }
+  for (const record of clone.preparationRecords) {
+    if (record.recipeSnapshot.image) {
+      record.recipeSnapshot.image = await transform(record.recipeSnapshot.image)
+    }
+  }
+  for (const plan of clone.extraStockPlans) {
+    if (plan.recipeSnapshot.image) {
+      plan.recipeSnapshot.image = await transform(plan.recipeSnapshot.image)
+    }
+  }
+  for (const record of clone.extraStockPreparations) {
+    if (record.recipeSnapshot.image) {
+      record.recipeSnapshot.image = await transform(record.recipeSnapshot.image)
+    }
+  }
+
+  return clone
+}
+
 /**
  * Hydrates every `media:<id>` image reference inside an `AppData` snapshot into
  * its portable `data:image/...` payload so exported JSON backups work on any device.
@@ -281,69 +371,74 @@ export async function resolveAppDataMediaForExport(
   data: AppData,
   store: MediaStore = defaultMediaStore,
 ): Promise<AppData> {
-  const clone = structuredClone(data)
-
-  const resolveOptional = async (value?: string): Promise<string | undefined> => {
+  return mapAppDataMediaFields(data, async (value) => {
     if (!value || !isMediaRef(value)) return value
     const loaded = await store.loadMedia(value)
     return loaded ?? value
+  })
+}
+
+/**
+ * Moves inline `data:image/...` payloads inside a restored `AppData` snapshot into
+ * `MediaStore` (`media:<id>` refs) so SQLite stays lightweight and fast.
+ */
+export async function ingestAppDataMediaForRestore(
+  data: AppData,
+  store: MediaStore = defaultMediaStore,
+): Promise<AppData> {
+  const deduped = new Map<string, string>()
+  return mapAppDataMediaFields(data, async (value) => {
+    if (!value || !isDataImageUrl(value)) return value
+    const existing = deduped.get(value)
+    if (existing) return existing
+    const ref = await store.saveMedia(value)
+    deduped.set(value, ref)
+    return ref
+  })
+}
+
+/**
+ * Collects all active `media:<id>` references currently used in `AppData`.
+ */
+export function collectReferencedMediaRefs(data: AppData): Set<string> {
+  const refs = new Set<string>()
+  const addIfMedia = (value?: string) => {
+    if (isMediaRef(value)) refs.add(value)
   }
 
-  for (const product of clone.products) {
-    if (product.image) {
-      product.image = await resolveOptional(product.image)
-    }
+  for (const product of data.products) addIfMedia(product.image)
+  for (const recipe of data.recipes) {
+    addIfMedia(recipe.image)
+    for (const snap of recipe.history ?? []) addIfMedia(snap.image)
   }
-  for (const recipe of clone.recipes) {
-    if (recipe.image) {
-      recipe.image = await resolveOptional(recipe.image)
-    }
-    if (recipe.history) {
-      for (const snap of recipe.history) {
-        if (snap.image) {
-          snap.image = await resolveOptional(snap.image)
-        }
-      }
-    }
+  for (const item of data.inventory) addIfMedia(item.image)
+  for (const order of data.orders) {
+    addIfMedia(order.referencePhoto)
+    for (const line of order.lines) addIfMedia(line.recipeSnapshot.image)
   }
-  for (const item of clone.inventory) {
-    if (item.image) {
-      item.image = await resolveOptional(item.image)
-    }
-  }
-  for (const order of clone.orders) {
-    if (order.referencePhoto) {
-      order.referencePhoto = await resolveOptional(order.referencePhoto)
-    }
-    for (const line of order.lines) {
-      if (line.recipeSnapshot.image) {
-        line.recipeSnapshot.image = await resolveOptional(
-          line.recipeSnapshot.image,
-        )
-      }
-    }
-  }
-  for (const record of clone.preparationRecords) {
-    if (record.recipeSnapshot.image) {
-      record.recipeSnapshot.image = await resolveOptional(
-        record.recipeSnapshot.image,
-      )
-    }
-  }
-  for (const plan of clone.extraStockPlans) {
-    if (plan.recipeSnapshot.image) {
-      plan.recipeSnapshot.image = await resolveOptional(
-        plan.recipeSnapshot.image,
-      )
-    }
-  }
-  for (const record of clone.extraStockPreparations) {
-    if (record.recipeSnapshot.image) {
-      record.recipeSnapshot.image = await resolveOptional(
-        record.recipeSnapshot.image,
-      )
-    }
-  }
+  for (const record of data.preparationRecords) addIfMedia(record.recipeSnapshot.image)
+  for (const plan of data.extraStockPlans) addIfMedia(plan.recipeSnapshot.image)
+  for (const record of data.extraStockPreparations) addIfMedia(record.recipeSnapshot.image)
 
-  return clone
+  return refs
+}
+
+/**
+ * Deletes orphaned `media:<id>` files no longer referenced anywhere in `data`.
+ */
+export async function pruneUnusedMedia(
+  data: AppData,
+  store: MediaStore = defaultMediaStore,
+): Promise<number> {
+  if (!store.listMediaRefs) return 0
+  const referenced = collectReferencedMediaRefs(data)
+  const storedRefs = await store.listMediaRefs()
+  let deleted = 0
+  for (const ref of storedRefs) {
+    if (!referenced.has(ref)) {
+      await store.deleteMedia(ref)
+      deleted += 1
+    }
+  }
+  return deleted
 }

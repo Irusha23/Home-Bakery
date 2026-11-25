@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { createStarterData } from "../data/starterData"
 import {
+  ingestAppDataMediaForRestore,
   isMediaRef,
   isPhotoRef,
   MemoryMediaStore,
+  pruneUnusedMedia,
   resolveAppDataMediaForExport,
 } from "./mediaStore"
 
@@ -49,5 +51,28 @@ describe("MediaStore and backup photo hydration", () => {
     // Original in-memory state keeps lightweight media:<id> refs
     expect(data.products[0].image).toBe(productRef)
     expect(data.orders[0].referencePhoto).toBe(orderPhotoRef)
+  })
+
+  it("re-ingests inline data URLs on restore with deduplication and prunes orphaned media", async () => {
+    const store = new MemoryMediaStore()
+    const staleRef = await store.saveMedia(SAMPLE_DATA_URL)
+
+    const imported = createStarterData()
+    imported.products[0].image = SAMPLE_DATA_URL
+    imported.recipes[0].image = SAMPLE_DATA_URL
+    imported.orders[0].referencePhoto = SAMPLE_DATA_URL
+
+    const ingested = await ingestAppDataMediaForRestore(imported, store)
+    expect(isMediaRef(ingested.products[0].image)).toBe(true)
+    expect(ingested.recipes[0].image).toBe(ingested.products[0].image)
+    expect(ingested.orders[0].referencePhoto).toBe(ingested.products[0].image)
+
+    // Stale unreferenced media is pruned while active media stays intact
+    const prunedCount = await pruneUnusedMedia(ingested, store)
+    expect(prunedCount).toBe(1)
+    expect(await store.loadMedia(staleRef)).toBeNull()
+    expect(await store.loadMedia(ingested.products[0].image!)).toBe(
+      SAMPLE_DATA_URL,
+    )
   })
 })

@@ -20,7 +20,12 @@ import PersistenceRecoveryScreen from "../components/PersistenceRecoveryScreen"
 import { createDefaultAppRepository } from "../db/createAppRepository"
 import { bootstrapAppRepository } from "../db/legacyImport"
 import type { AppRepository } from "../db/repository"
+import { getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
+import {
+  ingestAppDataMediaForRestore,
+  pruneUnusedMedia,
+} from "../lib/mediaStore"
 import {
   getUsageToBuyQuantity,
   hasUnpurchasedShoppingItems,
@@ -37,6 +42,7 @@ import {
   isValidMoneyAmount,
   netRetainedPayments,
   outstandingOrderBalance,
+  pendingCancellationRefund,
   remainingRefundableAmount,
 } from "../lib/financials"
 import {
@@ -81,6 +87,7 @@ import type {
 } from "../types"
 import {
   errorMessage,
+  parseBackup,
   persistAppData,
   readPersistedState,
   restoreBackup,
@@ -109,6 +116,7 @@ type AppAction =
       payment: Order["payments"][number]
     }
   | { type: "RECORD_REFUND"; refund: Refund }
+  | { type: "RECORD_REFUNDS"; refunds: Refund[] }
   | { type: "SET_CANCELLATION_FEE"; orderId: string; fee: number }
   | { type: "RECORD_EXPENSE"; expense: Expense }
   | { type: "ADD_EXPENSE_CATEGORY"; category: ExpenseCategory }
@@ -217,8 +225,14 @@ type AppAction =
       patch: {
         name?: string
         image?: string | null
+        category?: "ingredient" | "packaging"
+        unit?: InventoryItem["unit"]
+        physical?: number
         lowStockThreshold?: number
         averageUnitCost?: number
+        gramsPerTsp?: number | null
+        mlPerTsp?: number | null
+        trackStock?: boolean
         archived?: boolean
       }
     }
@@ -245,6 +259,7 @@ type AppAction =
   | {
       type: "COMPLETE_SHOPPING_CHECKLIST"
       extraInventoryIds?: string[]
+      checkedInventoryIds?: string[]
     }
   | {
       type: "ADD_SHOPPING_TRIP"
@@ -259,13 +274,29 @@ type AppAction =
       preparationId: string
     }
 
+export type StorageDiagnostics = {
+  backendName: string
+  schemaVersion: number | null
+  fallbackActive: boolean
+}
+
 type AppStateValue = {
   state: AppData
   dispatch: React.Dispatch<AppAction>
   dispatchIfAccepted: (action: AppAction) => boolean
-  restoreBackupFromRaw: (raw: string, source?: RecoverySource) => RestoreResult
+  restoreBackupFromRaw: (
+    raw: string,
+    source?: RecoverySource,
+  ) => Promise<RestoreResult>
   persistenceError: string | null
   retryPersistence: () => void
+  storageInfo: StorageDiagnostics
+  repository: AppRepository | null
+  runIdempotentAction: (
+    key: string,
+    operation: string,
+    action: AppAction,
+  ) => Promise<boolean>
 }
 
 const ADJUSTMENT_MOVEMENT_TYPES = new Set<InventoryMovementType>([
@@ -306,24 +337,34 @@ function cloneEmptyData(): AppData {
 function scopeRequirementsToLines(
   order: Order,
   requirements: Order["reservations"],
+  inventory: InventoryItem[],
 ) {
+  const inventoryById = new Map(
+    inventory.map((item) => [item.inventoryId, item]),
+  )
   return requirements.flatMap((requirement) => {
     if (requirement.lineId) return [requirement]
     let remainingReserved = requirement.reserved
     let remainingShortage = requirement.shortage
+    const targetItem = inventoryById.get(requirement.inventoryId)
     const candidates = order.lines.flatMap((line) => {
       const recipeRequirement = [
         ...line.recipeSnapshot.ingredients,
         ...line.recipeSnapshot.packaging,
       ].find((item) => item.inventoryId === requirement.inventoryId)
-      return recipeRequirement
-        ? [
-            {
-              lineId: line.id,
-              required: recipeRequirement.quantity * line.quantity,
-            },
-          ]
-        : []
+      if (!recipeRequirement) return []
+      const basePerUnit = targetItem
+        ? toInventoryBaseQuantity(
+            recipeRequirement.quantity,
+            recipeRequirement.unit,
+            targetItem,
+          )
+        : recipeRequirement.quantity
+      const required =
+        Number.isFinite(basePerUnit) && basePerUnit > 0
+          ? basePerUnit * line.quantity
+          : recipeRequirement.quantity * line.quantity
+      return [{ lineId: line.id, required }]
     })
     if (!candidates.length)
       return [{ ...requirement, lineId: order.lines[0]?.id }]
@@ -354,8 +395,7 @@ function normalizeRecipeSnapshot(snapshot: RecipeSnapshot): RecipeSnapshot {
 }
 
 function normalizeBudgetPlan(raw?: Partial<BudgetPlan> | null): BudgetPlan {
-  const base = structuredClone(defaultBudgetPlan)
-  if (!raw || typeof raw !== "object") return base
+  if (!raw || typeof raw !== "object") return structuredClone(defaultBudgetPlan)
   const categoryLimits: Record<string, number> = {}
   if (raw.categoryLimits && typeof raw.categoryLimits === "object") {
     for (const [key, value] of Object.entries(raw.categoryLimits)) {
@@ -369,32 +409,26 @@ function normalizeBudgetPlan(raw?: Partial<BudgetPlan> | null): BudgetPlan {
     }
   }
   return {
-    monthlySalesTarget:
-      raw.monthlySalesTarget === undefined
-        ? base.monthlySalesTarget
-        : Number.isSafeInteger(raw.monthlySalesTarget) &&
-            raw.monthlySalesTarget >= 0
-          ? raw.monthlySalesTarget
-          : undefined,
-    monthlyProfitTarget:
-      raw.monthlyProfitTarget === undefined
-        ? base.monthlyProfitTarget
-        : Number.isSafeInteger(raw.monthlyProfitTarget) &&
-            raw.monthlyProfitTarget >= 0
-          ? raw.monthlyProfitTarget
-          : undefined,
-    ingredientSpendLimit:
-      raw.ingredientSpendLimit === undefined
-        ? base.ingredientSpendLimit
-        : Number.isSafeInteger(raw.ingredientSpendLimit) &&
-            raw.ingredientSpendLimit >= 0
-          ? raw.ingredientSpendLimit
-          : undefined,
+    ...(typeof raw.monthlySalesTarget === "number" &&
+    Number.isSafeInteger(raw.monthlySalesTarget) &&
+    raw.monthlySalesTarget >= 0
+      ? { monthlySalesTarget: raw.monthlySalesTarget }
+      : {}),
+    ...(typeof raw.monthlyProfitTarget === "number" &&
+    Number.isSafeInteger(raw.monthlyProfitTarget) &&
+    raw.monthlyProfitTarget >= 0
+      ? { monthlyProfitTarget: raw.monthlyProfitTarget }
+      : {}),
+    ...(typeof raw.ingredientSpendLimit === "number" &&
+    Number.isSafeInteger(raw.ingredientSpendLimit) &&
+    raw.ingredientSpendLimit >= 0
+      ? { ingredientSpendLimit: raw.ingredientSpendLimit }
+      : {}),
     categoryLimits,
     updatedAt:
       typeof raw.updatedAt === "string" && raw.updatedAt.trim()
         ? raw.updatedAt
-        : base.updatedAt,
+        : defaultBudgetPlan.updatedAt,
   }
 }
 
@@ -465,11 +499,34 @@ export function migrateState(source: AppData): AppData {
   const sourceInventory = Array.isArray(source.inventory)
     ? source.inventory
     : []
-  const inventory = sourceInventory.map((item) =>
-    item.category === "finished" && item.unbatchedLegacyQuantity === undefined
-      ? { ...item, unbatchedLegacyQuantity: item.physical }
-      : item,
-  )
+  const sourceBatches = Array.isArray(source.finishedStockBatches)
+    ? source.finishedStockBatches
+    : []
+  const batchedByInventory = new Map<string, number>()
+  for (const batch of sourceBatches) {
+    if (
+      batch &&
+      typeof batch.inventoryId === "string" &&
+      typeof batch.remainingQuantity === "number" &&
+      Number.isFinite(batch.remainingQuantity)
+    ) {
+      batchedByInventory.set(
+        batch.inventoryId,
+        (batchedByInventory.get(batch.inventoryId) ?? 0) +
+          batch.remainingQuantity,
+      )
+    }
+  }
+  const inventory = sourceInventory.map((item) => {
+    if (item.category !== "finished" || item.unbatchedLegacyQuantity !== undefined) {
+      return item
+    }
+    const batched = batchedByInventory.get(item.inventoryId) ?? 0
+    return {
+      ...item,
+      unbatchedLegacyQuantity: Math.max(0, item.physical - batched),
+    }
+  })
 
   const recipes = (source.recipes ?? defaults.recipes).map((recipe) => ({
     ...recipe,
@@ -507,8 +564,16 @@ export function migrateState(source: AppData): AppData {
         ...line,
         recipeSnapshot: normalizeRecipeSnapshot(line.recipeSnapshot),
       })),
-      reservations: scopeRequirementsToLines(order, order.reservations),
-      shortages: scopeRequirementsToLines(order, order.shortages),
+      reservations: scopeRequirementsToLines(
+        order,
+        order.reservations,
+        inventory,
+      ),
+      shortages: scopeRequirementsToLines(
+        order,
+        order.shortages,
+        inventory,
+      ),
     }
     return {
       ...normalizedOrder,
@@ -598,19 +663,31 @@ export function migrateState(source: AppData): AppData {
 }
 
 export function makeReference(orders: Order[]) {
-  const highest = orders.reduce((max, order) => {
-    const number = Number(order.reference.replace(/\D/g, ""))
-    return Number.isFinite(number) ? Math.max(max, number) : max
-  }, 1000)
-  return `US-${highest + 1}`
+  const existing = new Set(orders.map((order) => order.reference))
+  let next =
+    orders.reduce((max, order) => {
+      const digits = order.reference.replace(/\D/g, "")
+      const number = digits ? Number(digits) : Number.NaN
+      return Number.isSafeInteger(number) ? Math.max(max, number) : max
+    }, 1000) + 1
+  while (existing.has(`US-${next}`)) {
+    next += 1
+  }
+  return `US-${next}`
 }
 
 export function makeShoppingReference(trips: ShoppingTripRecord[]) {
-  const highest = trips.reduce((max, trip) => {
-    const number = Number(trip.reference.replace(/\D/g, ""))
-    return Number.isFinite(number) ? Math.max(max, number) : max
-  }, 1000)
-  return `SHP-${highest + 1}`
+  const existing = new Set(trips.map((trip) => trip.reference))
+  let next =
+    trips.reduce((max, trip) => {
+      const digits = trip.reference.replace(/\D/g, "")
+      const number = digits ? Number(digits) : Number.NaN
+      return Number.isSafeInteger(number) ? Math.max(max, number) : max
+    }, 1000) + 1
+  while (existing.has(`SHP-${next}`)) {
+    next += 1
+  }
+  return `SHP-${next}`
 }
 
 function makeUniqueId(prefix: string, existingIds: Set<string>) {
@@ -688,17 +765,11 @@ function applyFinishedStockTransaction(
   )
   let productionLinksValid = true
   if (batch.source === "production") {
-    const product = state.products.find((item) => item.id === batch.productId)
-    const variant = product?.variants.find(
-      (item) => item.id === batch.variantId,
-    )
     const preparation = state.extraStockPreparations.find(
       (item) => item.id === batch.preparationId,
     )
     productionLinksValid = Boolean(
-      variant &&
-        variant.finishedInventoryId === batch.inventoryId &&
-        preparation?.status === "Ready" &&
+      preparation?.status === "Ready" &&
         preparation.planId === batch.planId &&
         preparation.productId === batch.productId &&
         preparation.variantId === batch.variantId &&
@@ -844,7 +915,7 @@ function applyFinishedStockTransaction(
         quantityDelta: -transaction.quantity,
         unit: "unit",
         balanceAfter,
-        date: occurredAt.slice(0, 10),
+        date: getColomboTodayIso(new Date(occurredAt)),
         reason,
         createdAt: occurredAt,
       },
@@ -857,14 +928,27 @@ export function reducer(state: AppData, action: AppAction): AppData {
   switch (action.type) {
     case "UPSERT_DRAFT": {
       const now = new Date().toISOString()
-      const existing = action.payload.id
-        ? state.orders.find((order) => order.id === action.payload.id)
+      const payload = action.payload
+      if (
+        !payload ||
+        typeof payload.customerName !== "string" ||
+        !payload.customerName.trim() ||
+        !Array.isArray(payload.lines) ||
+        payload.lines.length === 0 ||
+        !Number.isSafeInteger(payload.agreedPrice) ||
+        payload.agreedPrice < 0
+      ) {
+        return state
+      }
+      const existing = payload.id
+        ? state.orders.find((order) => order.id === payload.id)
         : undefined
       if (existing && existing.status !== "Draft") return state
 
+      const clonedPayload = structuredClone(payload)
       const order: Order = {
-        ...action.payload,
-        id: existing?.id ?? action.payload.id ?? createId("order"),
+        ...clonedPayload,
+        id: existing?.id ?? clonedPayload.id ?? createId("order"),
         reference: existing?.reference ?? makeReference(state.orders),
         status: "Draft",
         preparationStatus: "Not started",
@@ -892,7 +976,16 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
     case "CONFIRM_ORDER": {
       const order = state.orders.find((item) => item.id === action.orderId)
-      if (!order || order.status !== "Draft") return state
+      if (
+        !order ||
+        order.status !== "Draft" ||
+        order.lines.length === 0 ||
+        !isValidDate(order.collectionDate) ||
+        !Number.isSafeInteger(order.agreedPrice) ||
+        order.agreedPrice < 0
+      ) {
+        return state
+      }
 
       const requirements = calculateLineRequirements(
         state,
@@ -953,20 +1046,62 @@ export function reducer(state: AppData, action: AppAction): AppData {
       if (!order || !canCancelOrder(state, order)) return state
 
       const now = new Date().toISOString()
+      const existingVersionIds = new Set(
+        state.expenseAllocationHistories.flatMap((h) =>
+          h.versions.map((v) => v.id),
+        ),
+      )
+      const existingEntryIds = new Set(
+        state.expenseAllocationHistories.flatMap((h) =>
+          h.versions.flatMap((v) => v.allocations.map((a) => a.id)),
+        ),
+      )
+      const updatedOrders = state.orders.map((item) =>
+        item.id === order.id
+          ? {
+              ...item,
+              status: "Cancelled" as const,
+              preparationStatus: "Cancelled" as const,
+              reservations: [],
+              shortages: [],
+              updatedAt: now,
+            }
+          : item,
+      )
+      const updatedHistories = state.expenseAllocationHistories.map((history) => {
+        const latest = history.versions[history.versions.length - 1]
+        if (!latest || !latest.allocations.some((a) => a.orderId === order.id)) {
+          return history
+        }
+        const versionId = makeUniqueId("alloc-ver", existingVersionIds)
+        existingVersionIds.add(versionId)
+        const filteredAllocations = latest.allocations
+          .filter((a) => a.orderId !== order.id)
+          .map((a) => {
+            const allocId = makeUniqueId("alloc", existingEntryIds)
+            existingEntryIds.add(allocId)
+            return { ...a, id: allocId }
+          })
+        return {
+          ...history,
+          versions: [
+            ...history.versions,
+            {
+              id: versionId,
+              expenseId: history.expenseId,
+              version: latest.version + 1,
+              createdAt: now,
+              reason: `Order ${order.reference} cancelled`,
+              allocations: filteredAllocations,
+            },
+          ],
+        }
+      })
+
       return {
         ...state,
-        orders: state.orders.map((item) =>
-          item.id === order.id
-            ? {
-                ...item,
-                status: "Cancelled",
-                preparationStatus: "Cancelled",
-                reservations: [],
-                shortages: [],
-                updatedAt: now,
-              }
-            : item,
-        ),
+        orders: updatedOrders,
+        expenseAllocationHistories: updatedHistories,
         preparationRecords: state.preparationRecords.map((record) =>
           record.orderId === order.id
             ? {
@@ -1020,11 +1155,18 @@ export function reducer(state: AppData, action: AppAction): AppData {
         state.orders.flatMap((item) => item.lines.map((line) => line.id)),
       )
       const lines = source.lines.map((line) => {
-        const currentRecipe = state.recipes.find(
-          (recipe) =>
-            recipe.productId === line.productId &&
-            recipe.variantId === line.variantId,
-        )
+        const currentRecipe =
+          (line.recipeId
+            ? state.recipes.find(
+                (recipe) => recipe.id === line.recipeId && !recipe.archived,
+              )
+            : undefined) ??
+          state.recipes.find(
+            (recipe) =>
+              recipe.productId === line.productId &&
+              recipe.variantId === line.variantId &&
+              !recipe.archived,
+          )
         return {
           ...line,
           id: makeUniqueId("line", existingLineIds),
@@ -1034,8 +1176,12 @@ export function reducer(state: AppData, action: AppAction): AppData {
             : structuredClone(line.recipeSnapshot),
         }
       })
-      const costSnapshot = calculateCostSnapshot(lines)
-      const { referencePhoto: _ignoredRefPhoto, ...repeatSource } = source
+      const costSnapshot = calculateCostSnapshot(lines, state)
+      const {
+        referencePhoto: _ignoredRefPhoto,
+        cancellationFee: _ignoredCancellationFee,
+        ...repeatSource
+      } = source
       const order: Order = {
         ...repeatSource,
         id: action.newOrderId,
@@ -1150,6 +1296,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         order && payment
           ? remainingRefundableAmount(order, state.refunds, payment.id)
           : Number.NaN
+      const maxCancellationRefund =
+        order?.status === "Cancelled"
+          ? pendingCancellationRefund(order, state.refunds)
+          : Number.POSITIVE_INFINITY
       if (
         !refund ||
         !order ||
@@ -1162,7 +1312,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
         typeof refund.reason !== "string" ||
         !refund.reason.trim() ||
         !Number.isSafeInteger(refundableAmount) ||
-        refund.amount > refundableAmount
+        refund.amount > refundableAmount ||
+        refund.amount > maxCancellationRefund
       ) {
         return state
       }
@@ -1177,6 +1328,63 @@ export function reducer(state: AppData, action: AppAction): AppData {
                 ...item,
                 paymentStatus: derivePaymentStatus(item, refunds),
                 updatedAt: new Date().toISOString(),
+              }
+            : item,
+        ),
+      }
+    }
+
+    case "RECORD_REFUNDS": {
+      if (!Array.isArray(action.refunds) || action.refunds.length === 0) {
+        return state
+      }
+      const nextRefunds = [...state.refunds]
+      const seenIds = new Set(state.refunds.map((item) => item.id))
+      const touchedOrderIds = new Set<string>()
+      for (const refund of action.refunds) {
+        const order = state.orders.find((item) => item.id === refund?.orderId)
+        const payment = order?.payments.find(
+          (item) => item.id === refund?.paymentId,
+        )
+        const refundableAmount =
+          order && payment
+            ? remainingRefundableAmount(order, nextRefunds, payment.id)
+            : Number.NaN
+        const maxCancellationRefund =
+          order?.status === "Cancelled"
+            ? pendingCancellationRefund(order, nextRefunds)
+            : Number.POSITIVE_INFINITY
+        if (
+          !refund ||
+          !order ||
+          !payment ||
+          typeof refund.id !== "string" ||
+          !refund.id.trim() ||
+          seenIds.has(refund.id) ||
+          !isValidDate(refund.date) ||
+          !isValidMoneyAmount(refund.amount) ||
+          typeof refund.reason !== "string" ||
+          !refund.reason.trim() ||
+          !Number.isSafeInteger(refundableAmount) ||
+          refund.amount > refundableAmount ||
+          refund.amount > maxCancellationRefund
+        ) {
+          return state
+        }
+        seenIds.add(refund.id)
+        touchedOrderIds.add(order.id)
+        nextRefunds.push(structuredClone(refund))
+      }
+      const now = new Date().toISOString()
+      return {
+        ...state,
+        refunds: nextRefunds,
+        orders: state.orders.map((item) =>
+          touchedOrderIds.has(item.id)
+            ? {
+                ...item,
+                paymentStatus: derivePaymentStatus(item, nextRefunds),
+                updatedAt: now,
               }
             : item,
         ),
@@ -1374,14 +1582,34 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
     case "ADD_PRODUCT": {
       const p = action.product
+      const seenVariantIds = new Set<string>()
+      const existingVariantIds = new Set(
+        state.products.flatMap((prod) => prod.variants.map((v) => v.id)),
+      )
+      const validFinished = (invId?: string) => {
+        if (invId === undefined) return true
+        const inv = state.inventory.find((i) => i.inventoryId === invId)
+        return Boolean(inv && inv.category === "finished" && inv.unit === "unit")
+      }
       if (
         !p.id.trim() ||
         !p.name.trim() ||
         !p.variants.length ||
         state.products.some((item) => item.id === p.id) ||
-        p.variants.some(
-          (v) => !v.id.trim() || !v.name.trim() || !v.unitLabel.trim(),
-        )
+        p.variants.some((v) => {
+          if (
+            !v.id.trim() ||
+            !v.name.trim() ||
+            !v.unitLabel.trim() ||
+            seenVariantIds.has(v.id) ||
+            existingVariantIds.has(v.id) ||
+            !validFinished(v.finishedInventoryId)
+          ) {
+            return true
+          }
+          seenVariantIds.add(v.id)
+          return false
+        })
       ) {
         return state
       }
@@ -1390,15 +1618,73 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
     case "UPDATE_PRODUCT": {
       const p = action.product
+      const existingProduct = state.products.find((item) => item.id === p.id)
+      if (!existingProduct || !p.name.trim() || !p.variants.length) {
+        return state
+      }
+      const otherVariantIds = new Set(
+        state.products
+          .filter((prod) => prod.id !== p.id)
+          .flatMap((prod) => prod.variants.map((v) => v.id)),
+      )
+      const seenVariantIds = new Set<string>()
+      const validFinished = (invId?: string) => {
+        if (invId === undefined) return true
+        const inv = state.inventory.find((i) => i.inventoryId === invId)
+        return Boolean(inv && inv.category === "finished" && inv.unit === "unit")
+      }
       if (
-        !p.name.trim() ||
-        !p.variants.length ||
-        !state.products.some((item) => item.id === p.id) ||
-        p.variants.some(
-          (v) => !v.id.trim() || !v.name.trim() || !v.unitLabel.trim(),
-        )
+        p.variants.some((v) => {
+          if (
+            !v.id.trim() ||
+            !v.name.trim() ||
+            !v.unitLabel.trim() ||
+            seenVariantIds.has(v.id) ||
+            otherVariantIds.has(v.id) ||
+            !validFinished(v.finishedInventoryId)
+          ) {
+            return true
+          }
+          seenVariantIds.add(v.id)
+          return false
+        })
       ) {
         return state
+      }
+      const removedVariantIds = existingProduct.variants
+        .map((v) => v.id)
+        .filter((id) => !seenVariantIds.has(id))
+      if (removedVariantIds.length > 0) {
+        const referencedVariantIds = new Set<string>([
+          ...state.recipes.map((r) => r.variantId),
+          ...state.orders.flatMap((o) => o.lines.map((l) => l.variantId)),
+          ...state.extraStockPlans.map((ep) => ep.variantId),
+          ...state.extraStockPreparations.map((prep) => prep.variantId),
+          ...state.finishedStockBatches.flatMap((b) =>
+            b.source === "production" ? [b.variantId] : [],
+          ),
+        ])
+        if (removedVariantIds.some((id) => referencedVariantIds.has(id))) {
+          return state
+        }
+      }
+      for (const nextVariant of p.variants) {
+        const prevVariant = existingProduct.variants.find(
+          (v) => v.id === nextVariant.id,
+        )
+        if (
+          prevVariant &&
+          prevVariant.finishedInventoryId !== nextVariant.finishedInventoryId &&
+          state.extraStockPreparations.some(
+            (prep) =>
+              prep.productId === p.id &&
+              prep.variantId === nextVariant.id &&
+              prep.status !== "Ready" &&
+              prep.status !== "Cancelled",
+          )
+        ) {
+          return state
+        }
       }
       return {
         ...state,
@@ -1422,27 +1708,41 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
 
     case "ADD_INVENTORY_ITEM": {
-      const item = action.item
+      const rawItem = action.item
       if (
-        !item.inventoryId.trim() ||
-        !item.name.trim() ||
-        !["g", "ml", "unit"].includes(item.unit) ||
-        !Number.isFinite(item.physical) ||
-        item.physical < 0 ||
-        (item.lowStockThreshold !== undefined &&
-          (!Number.isFinite(item.lowStockThreshold) ||
-            item.lowStockThreshold < 0)) ||
-        (item.averageUnitCost !== undefined &&
-          (!Number.isFinite(item.averageUnitCost) ||
-            item.averageUnitCost < 0)) ||
+        !rawItem.inventoryId.trim() ||
+        !rawItem.name.trim() ||
+        !["g", "ml", "unit"].includes(rawItem.unit) ||
+        !Number.isFinite(rawItem.physical) ||
+        rawItem.physical < 0 ||
+        (rawItem.category === "finished" &&
+          (rawItem.unit !== "unit" ||
+            !Number.isSafeInteger(rawItem.physical))) ||
+        (rawItem.lowStockThreshold !== undefined &&
+          (!Number.isFinite(rawItem.lowStockThreshold) ||
+            rawItem.lowStockThreshold < 0)) ||
+        (rawItem.averageUnitCost !== undefined &&
+          (!Number.isFinite(rawItem.averageUnitCost) ||
+            rawItem.averageUnitCost < 0)) ||
+        (rawItem.gramsPerTsp !== undefined &&
+          (!Number.isFinite(rawItem.gramsPerTsp) ||
+            rawItem.gramsPerTsp <= 0)) ||
+        (rawItem.mlPerTsp !== undefined &&
+          (!Number.isFinite(rawItem.mlPerTsp) ||
+            rawItem.mlPerTsp <= 0)) ||
         state.inventory.some(
-          (existing) => existing.inventoryId === item.inventoryId,
+          (existing) => existing.inventoryId === rawItem.inventoryId,
         )
       ) {
         return state
       }
+      const item: InventoryItem =
+        rawItem.category === "finished" &&
+        rawItem.unbatchedLegacyQuantity === undefined
+          ? { ...structuredClone(rawItem), unbatchedLegacyQuantity: rawItem.physical }
+          : structuredClone(rawItem)
       const now = new Date().toISOString()
-      const today = now.slice(0, 10)
+      const today = getColomboTodayIso(new Date(now))
       const openingMovement: InventoryMovement[] =
         item.physical > 0
           ? [
@@ -1475,39 +1775,140 @@ export function reducer(state: AppData, action: AppAction): AppData {
       )
       if (!target) return state
       const { patch } = action
+      const isChangingStructure =
+        (patch.category !== undefined &&
+          patch.category !== inventoryCategory(target)) ||
+        (patch.unit !== undefined && patch.unit !== target.unit)
+      const hasInventoryReferences =
+        target.physical > 0 ||
+        state.recipes.some(
+          (recipe) =>
+            recipe.ingredients.some(
+              (ing) => ing.inventoryId === action.inventoryId,
+            ) ||
+            recipe.packaging.some(
+              (pkg) => pkg.inventoryId === action.inventoryId,
+            ),
+        ) ||
+        state.purchases.some((p) => p.inventoryId === action.inventoryId) ||
+        state.inventoryMovements.some(
+          (m) => m.inventoryId === action.inventoryId,
+        ) ||
+        state.orders.some(
+          (o) =>
+            o.reservations.some((r) => r.inventoryId === action.inventoryId) ||
+            o.shortages.some((s) => s.inventoryId === action.inventoryId) ||
+            o.lines.some(
+              (l) =>
+                l.recipeSnapshot.ingredients.some(
+                  (i) => i.inventoryId === action.inventoryId,
+                ) ||
+                l.recipeSnapshot.packaging.some(
+                  (p) => p.inventoryId === action.inventoryId,
+                ),
+            ),
+        ) ||
+        state.extraStockPlans.some(
+          (ep) =>
+            ep.recipeSnapshot.ingredients.some(
+              (i) => i.inventoryId === action.inventoryId,
+            ) ||
+            ep.recipeSnapshot.packaging.some(
+              (p) => p.inventoryId === action.inventoryId,
+            ),
+        ) ||
+        (state.shoppingSelections[action.inventoryId] ?? 0) > 0
+      const resolvedNextCategory =
+        patch.category ??
+        (inventoryCategory(target) === "packaging" ? "packaging" : "ingredient")
+      const resolvedNextUnit = patch.unit ?? target.unit
       if (
+        (isChangingStructure &&
+          (inventoryCategory(target) === "finished" || hasInventoryReferences)) ||
+        (patch.category !== undefined &&
+          patch.category !== "ingredient" &&
+          patch.category !== "packaging") ||
+        (patch.unit !== undefined &&
+          !["g", "ml", "unit"].includes(patch.unit)) ||
+        (resolvedNextCategory === "packaging" && resolvedNextUnit !== "unit") ||
         (patch.name !== undefined && !patch.name.trim()) ||
+        (patch.physical !== undefined &&
+          (inventoryCategory(target) === "finished" ||
+            !Number.isFinite(patch.physical) ||
+            patch.physical < 0)) ||
         (patch.lowStockThreshold !== undefined &&
           (!Number.isFinite(patch.lowStockThreshold) ||
             patch.lowStockThreshold < 0)) ||
         (patch.averageUnitCost !== undefined &&
           (!Number.isFinite(patch.averageUnitCost) ||
-            patch.averageUnitCost < 0))
+            patch.averageUnitCost < 0)) ||
+        (patch.gramsPerTsp !== undefined &&
+          patch.gramsPerTsp !== null &&
+          (!Number.isFinite(patch.gramsPerTsp) || patch.gramsPerTsp <= 0)) ||
+        (patch.mlPerTsp !== undefined &&
+          patch.mlPerTsp !== null &&
+          (!Number.isFinite(patch.mlPerTsp) || patch.mlPerTsp <= 0))
       ) {
         return state
       }
-      const nextInventory = state.inventory.map((item) =>
-        item.inventoryId === action.inventoryId
-          ? {
-              ...item,
-              ...(patch.name !== undefined
-                ? { name: patch.name.trim() }
-                : {}),
-              ...(patch.image !== undefined
-                ? { image: patch.image ?? undefined }
-                : {}),
-              ...(patch.lowStockThreshold !== undefined
-                ? { lowStockThreshold: patch.lowStockThreshold }
-                : {}),
-              ...(patch.averageUnitCost !== undefined
-                ? { averageUnitCost: patch.averageUnitCost }
-                : {}),
-              ...(patch.archived !== undefined
-                ? { archived: patch.archived }
-                : {}),
-            }
-          : item,
-      )
+      const nextInventory = state.inventory.map((item) => {
+        if (item.inventoryId !== action.inventoryId) return item
+        const updated: InventoryItem = {
+          ...item,
+          ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+          ...(patch.image !== undefined
+            ? { image: patch.image ?? undefined }
+            : {}),
+          ...(patch.category !== undefined ? { category: patch.category } : {}),
+          ...(patch.unit !== undefined ? { unit: patch.unit } : {}),
+          ...(patch.physical !== undefined ? { physical: patch.physical } : {}),
+          ...(patch.lowStockThreshold !== undefined
+            ? { lowStockThreshold: patch.lowStockThreshold }
+            : {}),
+          ...(patch.averageUnitCost !== undefined
+            ? { averageUnitCost: patch.averageUnitCost }
+            : {}),
+          ...(patch.trackStock !== undefined
+            ? { trackStock: patch.trackStock }
+            : {}),
+          ...(patch.archived !== undefined
+            ? { archived: patch.archived }
+            : {}),
+        }
+        if (patch.gramsPerTsp === null) {
+          delete updated.gramsPerTsp
+        } else if (patch.gramsPerTsp !== undefined) {
+          updated.gramsPerTsp = patch.gramsPerTsp
+        }
+        if (patch.mlPerTsp === null) {
+          delete updated.mlPerTsp
+        } else if (patch.mlPerTsp !== undefined) {
+          updated.mlPerTsp = patch.mlPerTsp
+        }
+        return updated
+      })
+      const stockDelta =
+        patch.physical !== undefined ? patch.physical - target.physical : 0
+      const now = new Date().toISOString()
+      const stockMovement: InventoryMovement[] =
+        patch.physical !== undefined && Math.abs(stockDelta) > 1e-9
+          ? [
+              {
+                id: makeUniqueId(
+                  "movement-adjust",
+                  new Set(state.inventoryMovements.map((m) => m.id)),
+                ),
+                inventoryId: target.inventoryId,
+                type: "Correction",
+                quantityDelta: stockDelta,
+                unit: target.unit,
+                balanceAfter: patch.physical,
+                date: getColomboTodayIso(new Date(now)),
+                reason: "Updated available stock",
+                createdAt: now,
+              },
+            ]
+          : []
       const nextRecipes = state.recipes.map((recipe) => {
         const usesItem =
           recipe.ingredients.some(
@@ -1541,11 +1942,17 @@ export function reducer(state: AppData, action: AppAction): AppData {
           nextInventory,
           state.settings.defaultLabourRatePerHour,
         )
+        const canUpdateCost =
+          (patch.averageUnitCost !== undefined ||
+            patch.gramsPerTsp !== undefined ||
+            patch.mlPerTsp !== undefined ||
+            patch.archived !== undefined) &&
+          breakdown.hasCompletePricing
         return {
           ...recipe,
           ingredients: updatedIngredients,
           packaging: updatedPackaging,
-          estimatedCost: breakdown.hasLivePricing
+          estimatedCost: canUpdateCost
             ? breakdown.totalCost
             : recipe.estimatedCost,
         }
@@ -1553,14 +1960,34 @@ export function reducer(state: AppData, action: AppAction): AppData {
       return {
         ...state,
         inventory: nextInventory,
+        inventoryMovements: [...stockMovement, ...state.inventoryMovements],
         recipes: nextRecipes,
       }
     }
 
-    case "ADD_RECIPE":
-      if (state.recipes.some((item) => item.id === action.recipe.id))
+    case "ADD_RECIPE": {
+      const r = action.recipe
+      const product = state.products.find((prod) => prod.id === r.productId)
+      const variantValid = Boolean(
+        product?.variants.some((variant) => variant.id === r.variantId),
+      )
+      const invIds = new Set(state.inventory.map((i) => i.inventoryId))
+      const materialsValid = [
+        ...r.ingredients,
+        ...r.packaging,
+      ].every((entry) => invIds.has(entry.inventoryId))
+      if (
+        !r.id.trim() ||
+        !r.name.trim() ||
+        !variantValid ||
+        !materialsValid ||
+        (r.expectedOutput !== null && !isValidExpectedOutput(r.expectedOutput)) ||
+        state.recipes.some((item) => item.id === r.id)
+      ) {
         return state
-      return { ...state, recipes: [action.recipe, ...state.recipes] }
+      }
+      return { ...state, recipes: [structuredClone(r), ...state.recipes] }
+    }
 
     case "UPDATE_RECIPE": {
       if (
@@ -1578,12 +2005,12 @@ export function reducer(state: AppData, action: AppAction): AppData {
         ...(existing.history ?? []),
       ].slice(0, 15)
       const nextRecipe: Recipe = {
-        ...action.recipe,
+        ...structuredClone(action.recipe),
         version:
           action.recipe.version > existing.version
             ? action.recipe.version
             : existing.version + 1,
-        history: action.recipe.history ?? nextHistory,
+        history: nextHistory,
       }
       return {
         ...state,
@@ -1612,6 +2039,15 @@ export function reducer(state: AppData, action: AppAction): AppData {
       )
       if (!product?.variants.some((item) => item.id === action.variantId))
         return state
+
+      const hasActiveExtraPrep = state.extraStockPreparations.some(
+        (prep) =>
+          prep.productId === action.productId &&
+          prep.variantId === action.variantId &&
+          prep.status !== "Ready" &&
+          prep.status !== "Cancelled",
+      )
+      if (hasActiveExtraPrep) return state
 
       if (action.inventoryId !== null) {
         const inventory = state.inventory.find(
@@ -1649,16 +2085,36 @@ export function reducer(state: AppData, action: AppAction): AppData {
     }
 
     case "UPSERT_EXTRA_STOCK_PLAN": {
+      const plan = action.plan
+      const product = state.products.find((item) => item.id === plan?.productId)
+      const variant = product?.variants.find(
+        (item) => item.id === plan?.variantId,
+      )
+      if (
+        !plan ||
+        typeof plan.id !== "string" ||
+        !plan.id.trim() ||
+        !product ||
+        !variant ||
+        plan.recipeSnapshot.productId !== product.id ||
+        plan.recipeSnapshot.variantId !== variant.id ||
+        !Number.isSafeInteger(plan.quantity) ||
+        plan.quantity <= 0 ||
+        (plan.bestBefore ? !isValidDate(plan.bestBefore) : false)
+      ) {
+        return state
+      }
+      const nextPlan = structuredClone(plan)
       const existing = state.extraStockPlans.some(
-        (plan) => plan.id === action.plan.id,
+        (item) => item.id === nextPlan.id,
       )
       return {
         ...state,
         extraStockPlans: existing
-          ? state.extraStockPlans.map((plan) =>
-              plan.id === action.plan.id ? action.plan : plan,
+          ? state.extraStockPlans.map((item) =>
+              item.id === nextPlan.id ? nextPlan : item,
             )
-          : [action.plan, ...state.extraStockPlans],
+          : [nextPlan, ...state.extraStockPlans],
       }
     }
 
@@ -1814,6 +2270,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
 
       const now = new Date().toISOString()
+      const today = getColomboTodayIso(new Date(now))
       const actualCost = calculateActualUsageCost(
         state,
         validation.canonicalUsage,
@@ -1868,7 +2325,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
             quantityDelta: -quantity,
             unit: original.unit,
             balanceAfter: original.physical - quantity,
-            date: now.slice(0, 10),
+            date: today,
             reason: `Extra stock · ${record.recipeSnapshot.name}`,
             createdAt: now,
           }
@@ -1881,7 +2338,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
         quantityDelta: action.usableOutputQuantity,
         unit: "unit",
         balanceAfter: finishedInventory.physical + action.usableOutputQuantity,
-        date: now.slice(0, 10),
+        date: today,
         reason: `Extra stock · ${record.recipeSnapshot.name}`,
         createdAt: now,
       })
@@ -2017,22 +2474,43 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
     }
 
-    case "REMOVE_EXTRA_STOCK_PLAN":
+    case "REMOVE_EXTRA_STOCK_PLAN": {
+      const inUse =
+        state.extraStockPreparations.some(
+          (prep) => prep.planId === action.planId,
+        ) ||
+        state.finishedStockBatches.some(
+          (batch) => batch.source === "production" && batch.planId === action.planId,
+        )
+      if (inUse) return state
       return {
         ...state,
         extraStockPlans: state.extraStockPlans.filter(
           (plan) => plan.id !== action.planId,
         ),
       }
+    }
 
-    case "SET_PURCHASE_QUANTITY":
+    case "SET_PURCHASE_QUANTITY": {
+      const targetItem = state.inventory.find(
+        (item) => item.inventoryId === action.inventoryId,
+      )
+      if (
+        !targetItem ||
+        inventoryCategory(targetItem) === "finished" ||
+        !Number.isFinite(action.quantity) ||
+        action.quantity < 0
+      ) {
+        return state
+      }
       return {
         ...state,
         shoppingSelections: {
           ...state.shoppingSelections,
-          [action.inventoryId]: Math.max(0, action.quantity),
+          [action.inventoryId]: action.quantity,
         },
       }
+    }
 
     case "RECORD_PURCHASE": {
       const purchase = action.purchase
@@ -2090,6 +2568,9 @@ export function reducer(state: AppData, action: AppAction): AppData {
         purchasedBaseQuantity <= 0 ||
         !Number.isFinite(usableBaseQuantity) ||
         usableBaseQuantity <= 0 ||
+        (inventoryItem.unit === "unit" &&
+          (!Number.isSafeInteger(usableBaseQuantity) ||
+            !Number.isSafeInteger(purchasedBaseQuantity))) ||
         purchase.usableBaseQuantity !== usableBaseQuantity ||
         usableBaseQuantity > purchasedBaseQuantity
       ) {
@@ -2100,9 +2581,11 @@ export function reducer(state: AppData, action: AppAction): AppData {
         inventoryItem.physical * (inventoryItem.averageUnitCost ?? 0)
       const totalValue = priorValue + purchase.totalPrice
       const averageUnitCost =
-        balanceAfter > 0
-          ? totalValue / balanceAfter
-          : inventoryItem.averageUnitCost
+        inventoryItem.averageUnitCost === undefined
+          ? purchase.totalPrice / usableBaseQuantity
+          : balanceAfter > 0
+            ? totalValue / balanceAfter
+            : inventoryItem.averageUnitCost
       if (
         !Number.isFinite(balanceAfter) ||
         !Number.isFinite(priorValue) ||
@@ -2291,9 +2774,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const validation = validatePreparationCompletion(state, record)
       if (!validation.valid) return state
       const order = state.orders.find((item) => item.id === record.orderId)
-      if (!order) return state
+      if (!order || hasUnpurchasedShoppingItems(order, record)) return state
 
       const now = new Date().toISOString()
+      const today = getColomboTodayIso(new Date(now))
       const usageByItem = new Map<string, number>()
       for (const usage of validation.canonicalUsage) {
         usageByItem.set(
@@ -2327,13 +2811,22 @@ export function reducer(state: AppData, action: AppAction): AppData {
               quantityDelta: -usage.actualQuantity,
               unit: original.unit,
               balanceAfter: original.physical - usage.actualQuantity,
-              date: now.slice(0, 10),
+              date: today,
               reason: `${order.reference} · ${record.recipeSnapshot.name}`,
               createdAt: now,
             })
           }
           return result
         }, [])
+      if (
+        movements.some((movement) =>
+          state.inventoryMovements.some(
+            (existing) => existing.id === movement.id,
+          ),
+        )
+      ) {
+        return state
+      }
       const actualCost = calculateActualUsageCost(
         state,
         validation.canonicalUsage,
@@ -2358,15 +2851,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       return {
         ...state,
         inventory,
-        inventoryMovements: [
-          ...movements.filter(
-            (movement) =>
-              !state.inventoryMovements.some(
-                (existing) => existing.id === movement.id,
-              ),
-          ),
-          ...state.inventoryMovements,
-        ],
+        inventoryMovements: [...movements, ...state.inventoryMovements],
         preparationRecords,
         orders: state.orders.map((item) =>
           item.id === order.id
@@ -2554,7 +3039,26 @@ export function reducer(state: AppData, action: AppAction): AppData {
       )
 
       const nextSelections = { ...state.shoppingSelections }
-      delete nextSelections[action.inventoryId]
+      const stillNeededElsewhere = nextPrepRecords.some((prep) => {
+        if (prep.status === "Ready" || prep.status === "Cancelled") return false
+        const prepOrder = state.orders.find((o) => o.id === prep.orderId)
+        if (
+          !prepOrder ||
+          prepOrder.status === "Draft" ||
+          prepOrder.status === "Completed" ||
+          prepOrder.status === "Cancelled"
+        ) {
+          return false
+        }
+        return prep.actualUsage.some(
+          (u) =>
+            u.inventoryId === action.inventoryId &&
+            !isUsageInPantry(prepOrder, prep, u),
+        )
+      })
+      if (!stillNeededElsewhere) {
+        delete nextSelections[action.inventoryId]
+      }
 
       return {
         ...state,
@@ -2702,13 +3206,21 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const now = new Date().toISOString()
       const affectedOrderIds = new Set<string>()
       const clearedInventoryIds = new Set<string>(action.extraInventoryIds ?? [])
+      const allowedInventoryIds = action.checkedInventoryIds
+        ? new Set(action.checkedInventoryIds)
+        : null
 
       const nextPrepRecords = state.preparationRecords.map((record) => {
         if (record.status === "Ready" || record.status === "Cancelled")
           return record
         let changed = false
         const actualUsage = record.actualUsage.map((usage) => {
-          if (!usage.shoppingChecked) return usage
+          if (
+            !usage.shoppingChecked ||
+            (allowedInventoryIds && !allowedInventoryIds.has(usage.inventoryId))
+          ) {
+            return usage
+          }
           changed = true
           affectedOrderIds.add(record.orderId)
           clearedInventoryIds.add(usage.inventoryId)
@@ -2776,9 +3288,24 @@ export function reducer(state: AppData, action: AppAction): AppData {
         typeof trip.reference !== "string" ||
         !trip.reference.trim() ||
         !isValidDate(trip.date) ||
+        !isValidTimestamp(trip.createdAt) ||
+        (trip.totalSpent !== null &&
+          (!Number.isSafeInteger(trip.totalSpent) || trip.totalSpent < 0)) ||
         !Array.isArray(trip.items) ||
         trip.items.length === 0 ||
-        existing.some((item) => item.id === trip.id)
+        trip.items.some(
+          (item) =>
+            typeof item.inventoryId !== "string" ||
+            !item.inventoryId.trim() ||
+            !Number.isFinite(item.quantity) ||
+            item.quantity <= 0 ||
+            (item.estimatedCost !== null &&
+              (!Number.isSafeInteger(item.estimatedCost) ||
+                item.estimatedCost < 0)),
+        ) ||
+        existing.some(
+          (item) => item.id === trip.id || item.reference === trip.reference,
+        )
       ) {
         return state
       }
@@ -2811,11 +3338,60 @@ export function reducer(state: AppData, action: AppAction): AppData {
       if (!allStepsChecked) return state
 
       const now = new Date().toISOString()
-      const rawCost = calculateActualUsageCost(state, record.actualUsage)
+      const today = getColomboTodayIso(new Date(now))
+      const rawCost = calculateActualUsageCost(state, record.actualUsage, {
+        strictPricing: true,
+      })
       const actualCost =
         Number.isFinite(rawCost) && rawCost >= 0
           ? rawCost
           : record.recipeSnapshot.estimatedCost * record.plannedQuantity
+
+      const requestedByItem = new Map<string, number>()
+      for (const usage of record.actualUsage) {
+        if (usage.actualQuantity <= 0) continue
+        const item = state.inventory.find(
+          (candidate) => candidate.inventoryId === usage.inventoryId,
+        )
+        const baseQuantity = item
+          ? toInventoryBaseQuantity(usage.actualQuantity, usage.unit, item)
+          : usage.actualQuantity
+        if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) continue
+        requestedByItem.set(
+          usage.inventoryId,
+          (requestedByItem.get(usage.inventoryId) ?? 0) + baseQuantity,
+        )
+      }
+
+      const movements: InventoryMovement[] = []
+      const inventory = state.inventory.map((item) => {
+        const requested = requestedByItem.get(item.inventoryId)
+        if (requested === undefined || item.physical <= 0) return item
+        const deducted = Math.min(item.physical, requested)
+        if (deducted <= 0) return item
+        const balanceAfter = Math.max(0, item.physical - deducted)
+        movements.push({
+          id: `movement-preparation-${record.id}-${item.inventoryId}`,
+          inventoryId: item.inventoryId,
+          type: "Preparation consumption",
+          quantityDelta: -deducted,
+          unit: item.unit,
+          balanceAfter,
+          date: today,
+          reason: `${order.reference} · ${record.recipeSnapshot.name}`,
+          createdAt: now,
+        })
+        return { ...item, physical: balanceAfter }
+      })
+      if (
+        movements.some((movement) =>
+          state.inventoryMovements.some(
+            (existing) => existing.id === movement.id,
+          ),
+        )
+      ) {
+        return state
+      }
 
       const completedRecord: PreparationRecord = {
         ...record,
@@ -2835,6 +3411,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
       return {
         ...state,
+        inventory,
+        inventoryMovements: [...movements, ...state.inventoryMovements],
         preparationRecords,
         orders: state.orders.map((item) =>
           item.id === order.id
@@ -2869,6 +3447,11 @@ export default function AppStateProvider({
   const [bootstrap, setBootstrap] = useState<PersistenceBootstrap | null>(null)
   const [activeRepository, setActiveRepository] =
     useState<AppRepository | null>(null)
+  const [storageInfo, setStorageInfo] = useState<StorageDiagnostics>({
+    backendName: repositoryRef.current.backendName,
+    schemaVersion: null,
+    fallbackActive: false,
+  })
 
   const runBootstrap = useCallback(async () => {
     const repository = repositoryRef.current!
@@ -2879,17 +3462,36 @@ export default function AppStateProvider({
         getFallbackData: getInitialAppData,
         normalize: migrateState,
       })
+      const schemaVersion = await repository
+        .getSchemaVersion()
+        .catch(() => null)
       setActiveRepository(repository)
+      setStorageInfo({
+        backendName: repository.backendName,
+        schemaVersion,
+        fallbackActive: false,
+      })
       setBootstrap(next)
-    } catch {
-      setActiveRepository(null)
-      setBootstrap(
-        readPersistedState(
-          () => window.localStorage,
-          getInitialAppData(),
-          migrateState,
-        ),
+    } catch (error) {
+      const fallback = readPersistedState(
+        () => window.localStorage,
+        getInitialAppData(),
+        migrateState,
       )
+      setActiveRepository(null)
+      setStorageInfo({
+        backendName: "localstorage-fallback",
+        schemaVersion: null,
+        fallbackActive: true,
+      })
+      if (fallback.kind === "ready") {
+        setBootstrap({
+          ...fallback,
+          persistenceError: `Primary database could not be opened (${errorMessage(error)}). Using temporary browser storage.`,
+        })
+      } else {
+        setBootstrap(fallback)
+      }
     }
   }, [])
 
@@ -2931,31 +3533,70 @@ export default function AppStateProvider({
           }
           setBootstrap(next)
         }}
-        onRestore={(raw, source) => {
-          const result = restoreBackup(() => window.localStorage, raw, source)
-          if (result.ok) {
-            if (repositoryRef.current) {
-              void repositoryRef.current
-                .init()
-                .then(() => repositoryRef.current!.saveAppData(result.data))
-                .then(() => setActiveRepository(repositoryRef.current))
-                .catch(() => undefined)
+        onRestore={async (raw, source) => {
+          let parsed: AppData
+          try {
+            parsed = parseBackup(raw)
+          } catch (error) {
+            return {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "The selected backup could not be validated.",
             }
-            setBootstrap({
-              kind: "ready",
-              data: result.data,
-              source: "current",
-              persistenceEnabled: true,
-            })
           }
-          return result
+
+          const migrated = migrateState(parsed)
+          const ingested = await ingestAppDataMediaForRestore(migrated)
+          if (repositoryRef.current) {
+            try {
+              await repositoryRef.current.init()
+              await repositoryRef.current.saveAppData(ingested)
+              const schemaVersion = await repositoryRef.current
+                .getSchemaVersion()
+                .catch(() => null)
+              setActiveRepository(repositoryRef.current)
+              setStorageInfo({
+                backendName: repositoryRef.current.backendName,
+                schemaVersion,
+                fallbackActive: false,
+              })
+            } catch (error) {
+              return {
+                ok: false,
+                error: `Could not save restored backup to database: ${errorMessage(error)}`,
+              }
+            }
+          }
+
+          try {
+            persistAppData(() => window.localStorage, ingested)
+          } catch {
+            if (!repositoryRef.current) {
+              return restoreBackup(() => window.localStorage, raw, source)
+            }
+          }
+
+          void pruneUnusedMedia(ingested).catch(() => undefined)
+          setBootstrap({
+            kind: "ready",
+            data: ingested,
+            source: "current",
+            persistenceEnabled: true,
+          })
+          return { ok: true, data: ingested }
         }}
       />
     )
   }
 
   return (
-    <ReadyAppStateProvider bootstrap={bootstrap} repository={activeRepository}>
+    <ReadyAppStateProvider
+      bootstrap={bootstrap}
+      repository={activeRepository}
+      storageInfo={storageInfo}
+    >
       {children}
     </ReadyAppStateProvider>
   )
@@ -2964,24 +3605,32 @@ export default function AppStateProvider({
 function ReadyAppStateProvider({
   bootstrap,
   repository,
+  storageInfo,
   children,
 }: {
   bootstrap: PersistenceReady
   repository: AppRepository | null
+  storageInfo: StorageDiagnostics
   children: ReactNode
 }) {
   const [state, dispatch] = useReducer(reducer, bootstrap.data)
   const latestStateRef = useRef(state)
   latestStateRef.current = state
-  const writeChainRef = useRef<Promise<void>>(Promise.resolve())
+  const isPersistingRef = useRef(false)
+  const pendingSnapshotRef = useRef<AppData | null>(null)
   const lastPersistedStateRef = useRef<AppData>(bootstrap.data)
+  const idempotencyCacheRef = useRef(new Set<string>())
   const [persistenceError, setPersistenceError] = useState(
     bootstrap.persistenceError ?? null,
   )
 
-  const enqueuePersist = useCallback(
-    (snapshot: AppData) => {
-      writeChainRef.current = writeChainRef.current.then(async () => {
+  const flushPendingPersist = useCallback(async () => {
+    if (isPersistingRef.current) return
+    isPersistingRef.current = true
+    try {
+      while (pendingSnapshotRef.current) {
+        const snapshot = pendingSnapshotRef.current
+        pendingSnapshotRef.current = null
         if (repository) {
           try {
             await repository.saveAppData(snapshot)
@@ -2991,52 +3640,111 @@ function ReadyAppStateProvider({
               // Secondary localStorage mirror is best-effort once repository succeeds
             }
             setPersistenceError(null)
-            return
           } catch (error) {
             setPersistenceError(
               `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
             )
-            return
+          }
+        } else {
+          try {
+            persistAppData(() => window.localStorage, snapshot)
+            setPersistenceError(null)
+          } catch (error) {
+            setPersistenceError(
+              `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
+            )
           }
         }
+      }
+    } finally {
+      isPersistingRef.current = false
+      if (pendingSnapshotRef.current) {
+        void flushPendingPersist()
+      }
+    }
+  }, [repository])
 
-        try {
-          persistAppData(() => window.localStorage, snapshot)
-          setPersistenceError(null)
-        } catch (error) {
-          setPersistenceError(
-            `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
-          )
-        }
-      })
+  const enqueuePersist = useCallback(
+    (snapshot: AppData) => {
+      pendingSnapshotRef.current = snapshot
+      void flushPendingPersist()
     },
-    [repository],
+    [flushPendingPersist],
   )
 
   useEffect(() => {
-    if (!bootstrap.persistenceEnabled || persistenceError) return
+    if (!bootstrap.persistenceEnabled) return
     if (state === lastPersistedStateRef.current) return
     lastPersistedStateRef.current = state
     enqueuePersist(state)
-  }, [bootstrap.persistenceEnabled, enqueuePersist, persistenceError, state])
+  }, [bootstrap.persistenceEnabled, enqueuePersist, state])
 
   const retryPersistence = useCallback(() => {
     if (!bootstrap.persistenceEnabled) return
     enqueuePersist(latestStateRef.current)
   }, [bootstrap.persistenceEnabled, enqueuePersist])
 
-  const handleRestore = useCallback((raw: string, source?: RecoverySource) => {
-    const result = restoreBackup(() => window.localStorage, raw, source)
-    if (result.ok) {
-      dispatch({ type: "RESTORE_DATA", data: result.data })
+  const handleRestore = useCallback(
+    async (raw: string, source?: RecoverySource): Promise<RestoreResult> => {
+      let parsed: AppData
+      try {
+        parsed = parseBackup(raw)
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "The selected backup could not be validated.",
+        }
+      }
+
+      const migrated = migrateState(parsed)
+      const ingested = await ingestAppDataMediaForRestore(migrated)
+
+      if (repository) {
+        try {
+          await repository.saveAppData(ingested)
+        } catch (error) {
+          return {
+            ok: false,
+            error: `Could not save restored backup to database: ${errorMessage(error)}`,
+          }
+        }
+        try {
+          persistAppData(() => window.localStorage, ingested)
+        } catch {
+          // Best-effort mirror; never fail restore on 5 MB WebView localStorage quota
+        }
+      } else {
+        try {
+          persistAppData(() => window.localStorage, ingested)
+        } catch {
+          const legacyResult = restoreBackup(() => window.localStorage, raw, source)
+          if (!legacyResult.ok) return legacyResult
+        }
+      }
+
+      lastPersistedStateRef.current = ingested
+      latestStateRef.current = ingested
+      dispatch({ type: "RESTORE_DATA", data: ingested })
       setPersistenceError(null)
-    }
-    return result
-  }, [])
+      void pruneUnusedMedia(ingested).catch(() => undefined)
+      return { ok: true, data: ingested }
+    },
+    [repository],
+  )
 
   const trackedDispatch = useCallback((action: AppAction) => {
-    latestStateRef.current = reducer(latestStateRef.current, action)
+    const next = reducer(latestStateRef.current, action)
+    latestStateRef.current = next
     dispatch(action)
+    if (
+      action.type === "CLEAR_WORKSPACE" ||
+      action.type === "LOAD_STARTER_SAMPLE"
+    ) {
+      void pruneUnusedMedia(next).catch(() => undefined)
+    }
   }, [])
 
   const dispatchIfAccepted = useCallback((action: AppAction) => {
@@ -3044,8 +3752,40 @@ function ReadyAppStateProvider({
     if (next === latestStateRef.current) return false
     latestStateRef.current = next
     dispatch(action)
+    if (
+      action.type === "CLEAR_WORKSPACE" ||
+      action.type === "LOAD_STARTER_SAMPLE"
+    ) {
+      void pruneUnusedMedia(next).catch(() => undefined)
+    }
     return true
   }, [])
+
+  const runIdempotentAction = useCallback(
+    async (key: string, operation: string, action: AppAction) => {
+      if (idempotencyCacheRef.current.has(key)) return false
+      const preview = reducer(latestStateRef.current, action)
+      if (preview === latestStateRef.current) return false
+      idempotencyCacheRef.current.add(key)
+      if (repository) {
+        try {
+          const acceptedByRepo = await repository.recordIdempotencyKey(
+            key,
+            operation,
+          )
+          if (!acceptedByRepo) return false
+        } catch {
+          // Proceed with in-memory deduplication if repository key check fails
+        }
+      }
+      const accepted = dispatchIfAccepted(action)
+      if (!accepted) {
+        idempotencyCacheRef.current.delete(key)
+      }
+      return accepted
+    },
+    [dispatchIfAccepted, repository],
+  )
 
   const value = useMemo(
     () => ({
@@ -3055,6 +3795,9 @@ function ReadyAppStateProvider({
       restoreBackupFromRaw: handleRestore,
       persistenceError,
       retryPersistence,
+      storageInfo,
+      repository,
+      runIdempotentAction,
     }),
     [
       state,
@@ -3063,6 +3806,9 @@ function ReadyAppStateProvider({
       handleRestore,
       persistenceError,
       retryPersistence,
+      storageInfo,
+      repository,
+      runIdempotentAction,
     ],
   )
 
@@ -3071,7 +3817,7 @@ function ReadyAppStateProvider({
       {persistenceError ? (
         <div
           role="alert"
-          className="border-b border-warning/30 bg-warning-soft px-4 py-3 text-sm text-cocoa"
+          className="screen-safe-top border-b border-warning/30 bg-warning-soft px-4 pb-3 text-sm text-cocoa"
         >
           <div className="mx-auto flex max-w-screen-xl flex-wrap items-center justify-between gap-3">
             <span>{persistenceError}</span>

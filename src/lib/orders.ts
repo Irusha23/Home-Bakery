@@ -194,13 +194,10 @@ export function calculateCostSnapshot(
     )
     labourMinutes += Math.max(0, line.recipeSnapshot.preparationMinutes) * qty
 
-    if (breakdown.hasLivePricing) {
+    if (breakdown.hasCompletePricing) {
       ingredients += breakdown.ingredientsCost * qty
       packaging += breakdown.packagingCost * qty
       labour += breakdown.labourCost * qty
-      for (const name of breakdown.unpricedItems) {
-        unpriced.add(name)
-      }
     } else {
       const fallbackTotal = line.recipeSnapshot.estimatedCost * qty
       const lineIngredients = Math.round(fallbackTotal * 0.82)

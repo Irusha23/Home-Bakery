@@ -57,7 +57,7 @@ export default function Disclosure({
         onClick={() => setOpen((prev) => !prev)}
         whileTap={reducedMotion ? undefined : { scale: 0.99 }}
         transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_MICRO}
-        className={`relative flex w-full items-center justify-between gap-3 text-left text-cocoa transition-colors duration-200 hover:bg-ivory/60 active:bg-sage-soft/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/30 ${
+        className={`relative flex w-full touch-manipulation items-center justify-between gap-3 text-left text-cocoa transition-colors duration-200 hover:bg-ivory/60 active:bg-sage-soft/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage/30 ${
           compact
             ? "px-3 py-2 text-xs font-medium"
             : "min-h-touch px-4 text-sm font-semibold"

@@ -1386,4 +1386,10 @@ describe("local persistence recovery", () => {
 
     expect(() => parseBackup(JSON.stringify(envelope))).toThrow()
   })
+
+  it("rejects backups with unsafe or malformed image references", () => {
+    const envelope = createBackupEnvelope(demoData)
+    envelope.data.orders[0].referencePhoto = "javascript:alert(1)"
+    expect(() => parseBackup(JSON.stringify(envelope))).toThrow()
+  })
 })

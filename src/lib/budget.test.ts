@@ -89,4 +89,61 @@ describe("budget selectors", () => {
     expect(report.overLimitAlerts).toHaveLength(2)
     expect(report.overLimitAlerts.map((a) => a.overBy)).toEqual([2000, 2000])
   })
+
+  it("counts shopping-trip expenses in ingredient spend without double-deducting them from profit overhead", () => {
+    const order = createTestOrder("order-trip", [createTestOrderLine("line-1")], {
+      status: "Completed",
+      agreedPrice: 20000,
+      collectedAt: "2026-10-12T10:00:00.000Z",
+      costSnapshot: {
+        ingredients: 6000,
+        packaging: 1000,
+        labour: 0,
+        estimatedTotal: 7000,
+        suggestedPrice: 15000,
+      },
+    })
+    const state = createTestAppData({
+      orders: [order],
+      expenses: [
+        {
+          id: "exp-trip-1",
+          amount: 4500,
+          paidDate: "2026-10-11",
+          categoryId: "expense-category-packaging-other",
+          description: "Market run",
+          attribution: { type: "shared" },
+          createdAt: "2026-10-11T08:00:00.000Z",
+        },
+        {
+          id: "exp-overhead-1",
+          amount: 2000,
+          paidDate: "2026-10-14",
+          categoryId: "expense-category-utilities",
+          description: "Gas",
+          attribution: { type: "shared" },
+          createdAt: "2026-10-14T08:00:00.000Z",
+        },
+      ],
+      shoppingTrips: [
+        {
+          id: "trip-1",
+          reference: "SHP-1001",
+          date: "2026-10-11",
+          createdAt: "2026-10-11T08:00:00.000Z",
+          totalSpent: 4500,
+          expenseId: "exp-trip-1",
+          items: [],
+        },
+      ],
+    })
+
+    const report = selectMonthlyBudgetReport(
+      state,
+      new Date("2026-10-20T09:00:00.000Z"),
+    )
+    expect(report.ingredientSpend.spent).toBe(4500)
+    // Profit: 20000 sales - 7000 COGS - 2000 non-ingredient overhead = 11000 (4500 shopping expense not double-subtracted)
+    expect(report.profit.actual).toBe(11000)
+  })
 })

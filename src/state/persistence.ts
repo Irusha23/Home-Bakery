@@ -1,4 +1,5 @@
 import { defaultBudgetPlan, defaultSettings } from "../data/defaults"
+import { createId } from "../lib/id"
 
 import { derivePaymentStatus } from "../lib/financials"
 
@@ -173,12 +174,27 @@ function requireUniqueId(ids: Set<string>, id: string, label: string) {
   ids.add(id)
 }
 
+function validateOptionalImageRef(value: unknown, label: string) {
+  if (value === undefined) return
+  requireValue(
+    typeof value === "string" &&
+      (value.startsWith("preset:") ||
+        value.startsWith("media:") ||
+        /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(
+          value,
+        )),
+    `${label} is invalid.`,
+  )
+}
+
 function validateRecipeSnapshot(value: unknown, label: string) {
   const recipe = requireRecord(value, label)
 
   requireString(recipe.id, `${label} ID`)
 
   requireString(recipe.name, `${label} name`)
+
+  validateOptionalImageRef(recipe.image, `${label} image`)
 
   requireString(recipe.productId, `${label} product`)
 
@@ -822,6 +838,8 @@ function validateBackupData(
 
     requireString(item.name, "Inventory name")
 
+    validateOptionalImageRef(item.image, "Inventory image")
+
     requireFiniteNumber(item.physical, "Inventory physical quantity")
 
     requireValue(
@@ -834,6 +852,29 @@ function validateBackupData(
         ["ingredient", "packaging", "finished"].includes(String(item.category)),
 
         "Inventory category is invalid.",
+      )
+    }
+
+    if (item.gramsPerTsp !== undefined) {
+      requireFiniteNumber(
+        item.gramsPerTsp,
+        "Teaspoon grams conversion",
+        Number.MIN_VALUE,
+      )
+    }
+
+    if (item.mlPerTsp !== undefined) {
+      requireFiniteNumber(
+        item.mlPerTsp,
+        "Teaspoon ml conversion",
+        Number.MIN_VALUE,
+      )
+    }
+
+    if (item.trackStock !== undefined) {
+      requireValue(
+        typeof item.trackStock === "boolean",
+        "Inventory track-stock flag is invalid.",
       )
     }
 
@@ -850,6 +891,8 @@ function validateBackupData(
     const product = requireRecordId(value, `Product ${index + 1}`)
 
     requireString(product.name, "Product name")
+
+    validateOptionalImageRef(product.image, "Product image")
 
     const variants = requireArray(product.variants, "Product variants")
 
@@ -916,6 +959,8 @@ function validateBackupData(
 
   const orderLineIds = new Set<string>()
 
+  const orderLineIdsByOrder = new Map<string, Set<string>>()
+
   const paymentIds = new Set<string>()
 
   const paymentOrderIds = new Map<string, string>()
@@ -927,11 +972,55 @@ function validateBackupData(
 
     requireString(order.reference, "Order reference")
 
+    validateOptionalImageRef(order.referencePhoto, "Order reference photo")
+
     requireUniqueId(
       orderReferences,
       order.reference as string,
       "Order reference",
     )
+
+    requireValue(
+      ["Draft", "Confirmed", "In Progress", "Completed", "Cancelled"].includes(
+        String(order.status),
+      ),
+      "Order status is invalid.",
+    )
+
+    requireValue(
+      [
+        "Not started",
+        "Awaiting preparation",
+        "In progress",
+        "Ready",
+        "Completed",
+        "Cancelled",
+      ].includes(String(order.preparationStatus)),
+      "Order preparation status is invalid.",
+    )
+
+    if (order.collectionDate !== undefined && order.collectionDate !== "") {
+      requireValue(
+        typeof order.collectionDate === "string" &&
+          isValidDate(order.collectionDate),
+        "Order collection date is invalid.",
+      )
+    }
+
+    if (order.collectionTime !== undefined && order.collectionTime !== "") {
+      requireValue(
+        typeof order.collectionTime === "string" &&
+          /^([01]\d|2[0-3]):[0-5]\d$/.test(order.collectionTime),
+        "Order collection time is invalid.",
+      )
+    }
+
+    const costSnapshot = requireRecord(order.costSnapshot, "Order cost snapshot")
+    requireFiniteNumber(costSnapshot.ingredients, "Order ingredient cost")
+    requireFiniteNumber(costSnapshot.packaging, "Order packaging cost")
+    requireFiniteNumber(costSnapshot.labour, "Order labour cost")
+    requireFiniteNumber(costSnapshot.estimatedTotal, "Order estimated total")
+    requireFiniteNumber(costSnapshot.suggestedPrice, "Order suggested price")
 
     if (order.collectedAt !== undefined && order.collectedAt !== null) {
       requireValue(
@@ -959,7 +1048,12 @@ function validateBackupData(
       "An order refers to a missing customer.",
     )
 
-    requireFiniteNumber(order.agreedPrice, "Order agreed price")
+    requireValue(
+      typeof order.agreedPrice === "number" &&
+        Number.isSafeInteger(order.agreedPrice) &&
+        order.agreedPrice >= 0,
+      "Order agreed price must be a non-negative whole LKR integer.",
+    )
 
     const lineIds = new Set<string>()
 
@@ -1062,6 +1156,7 @@ function validateBackupData(
       paymentAmounts.set(payment.id as string, payment.amount as number)
     })
 
+    orderLineIdsByOrder.set(order.id as string, lineIds)
     requireUniqueId(orderIds, order.id as string, "Order")
   })
 
@@ -1151,6 +1246,7 @@ function validateBackupData(
   })
 
   const preparationIds = new Set<string>()
+  const extraPreparationIds = new Set<string>()
 
   const preparationList = [
     ...preparationRecords.map((value) => ({ value, kind: "order" as const })),
@@ -1164,7 +1260,11 @@ function validateBackupData(
     if (kind === "order") {
       requireValue(
         orderIds.has(preparation.orderId as string) &&
-          orderLineIds.has(preparation.orderLineId as string),
+          Boolean(
+            orderLineIdsByOrder
+              .get(preparation.orderId as string)
+              ?.has(preparation.orderLineId as string),
+          ),
 
         "A preparation record refers to a missing order or order line.",
       )
@@ -1172,11 +1272,13 @@ function validateBackupData(
       requireValue(
         planIds.has(preparation.planId as string) &&
           productIds.has(preparation.productId as string) &&
-          variantIds.has(preparation.variantId as string) &&
+          variantProductIds.get(preparation.variantId as string) ===
+            preparation.productId &&
           inventoryIds.has(preparation.finishedInventoryId as string),
 
         "An extra-stock preparation refers to a missing related record.",
       )
+      extraPreparationIds.add(preparation.id as string)
     }
 
     validateRecipeSnapshot(
@@ -1237,10 +1339,10 @@ function validateBackupData(
 
     if (batch.source === "production") {
       requireValue(
-        preparationIds.has(batch.preparationId as string) &&
+        extraPreparationIds.has(batch.preparationId as string) &&
           planIds.has(batch.planId as string) &&
           productIds.has(batch.productId as string) &&
-          variantIds.has(batch.variantId as string),
+          variantProductIds.get(batch.variantId as string) === batch.productId,
 
         "A production batch refers to missing preparation, plan, product, or variant data.",
       )
@@ -1249,6 +1351,11 @@ function validateBackupData(
         batch.producedQuantity,
         "Batch produced quantity",
         Number.MIN_VALUE,
+      )
+
+      requireValue(
+        (batch.remainingQuantity as number) <= (batch.producedQuantity as number),
+        "Batch remaining quantity cannot exceed produced quantity.",
       )
 
       requireFiniteNumber(batch.actualTotalCost, "Batch total cost")
@@ -1394,11 +1501,31 @@ function validateBackupData(
 
     requireFiniteNumber(movement.balanceAfter, "Movement balance")
 
-    requireString(movement.type, "Movement type")
+    requireValue(
+      [
+        "Opening balance",
+        "Purchase",
+        "Correction",
+        "Spoilage",
+        "Damage",
+        "Other",
+        "Preparation consumption",
+        "Production",
+        "Finished stock sale",
+        "Finished stock write-off",
+      ].includes(String(movement.type)),
+      "Movement type is invalid.",
+    )
 
-    requireString(movement.unit, "Movement unit")
+    requireValue(
+      ["g", "ml", "unit"].includes(String(movement.unit)),
+      "Movement unit is invalid.",
+    )
 
-    requireString(movement.date, "Movement date")
+    requireValue(
+      typeof movement.date === "string" && isValidDate(movement.date),
+      "Movement date is invalid.",
+    )
 
     requireString(movement.reason, "Movement reason", true)
 
@@ -1423,6 +1550,33 @@ function validateBackupData(
     )
 
     requireFiniteNumber(quantity, "Shopping selection")
+  }
+
+  const shoppingTripIds = new Set<string>()
+  const shoppingTripRefs = new Set<string>()
+  const shoppingTrips = Array.isArray(data.shoppingTrips) ? data.shoppingTrips : []
+  for (const tripValue of shoppingTrips) {
+    const trip = requireRecordId(tripValue, "Shopping trip")
+    requireString(trip.reference, "Shopping trip reference")
+    requireUniqueId(shoppingTripRefs, trip.reference as string, "Shopping trip reference")
+    requireValue(
+      typeof trip.date === "string" && isValidDate(trip.date),
+      "Shopping trip date is invalid.",
+    )
+    requireValue(
+      typeof trip.createdAt === "string" && isValidTimestamp(trip.createdAt),
+      "Shopping trip timestamp is invalid.",
+    )
+    if (trip.totalSpent !== null) {
+      requireValue(
+        typeof trip.totalSpent === "number" &&
+          Number.isSafeInteger(trip.totalSpent) &&
+          trip.totalSpent >= 0,
+        "Shopping trip total spent is invalid.",
+      )
+    }
+    requireArray(trip.items, "Shopping trip items")
+    requireUniqueId(shoppingTripIds, trip.id as string, "Shopping trip")
   }
 
   const settings = validateBackupSettings(data.settings)
@@ -1538,8 +1692,19 @@ function isSupportedDataShape(value: unknown): value is PersistedAppData {
         typeof item.name !== "string" ||
         typeof item.physical !== "number" ||
         !Number.isFinite(item.physical) ||
-        !["g", "ml", "unit"].includes(String(item.unit)),
-    )
+        item.physical < 0 ||
+        !["g", "ml", "unit"].includes(String(item.unit)) ||
+        (item.gramsPerTsp !== undefined &&
+          (typeof item.gramsPerTsp !== "number" ||
+            !Number.isFinite(item.gramsPerTsp) ||
+            item.gramsPerTsp <= 0)) ||
+        (item.mlPerTsp !== undefined &&
+          (typeof item.mlPerTsp !== "number" ||
+            !Number.isFinite(item.mlPerTsp) ||
+            item.mlPerTsp <= 0)) ||
+        (item.trackStock !== undefined && typeof item.trackStock !== "boolean"),
+    ) ||
+    (value.shoppingTrips !== undefined && !Array.isArray(value.shoppingTrips))
   ) {
     return false
   }
@@ -1887,10 +2052,7 @@ export function parseBackup(raw: string): AppData {
 }
 
 function makeRecoveryId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(36).slice(2)}`
-  )
+  return createId("recovery")
 }
 
 export function restoreBackup(

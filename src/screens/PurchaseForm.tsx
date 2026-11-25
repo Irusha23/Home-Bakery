@@ -10,16 +10,16 @@ import {
   compatibleUnits,
   inventoryCategory,
   selectShoppingRequirements,
-  toBaseQuantity,
+  toInventoryBaseQuantity,
 } from "../lib/inventory"
-import { formatQuantity } from "../lib/format"
+import { formatQuantity, getColomboTodayIso } from "../lib/format"
 import { createId } from "../lib/id"
 import { submitPurchaseIfAccepted } from "../lib/purchaseSubmission"
 import { useAppState } from "../state/AppState"
 import type { Unit } from "../types"
 
 function today() {
-  return new Date().toISOString().slice(0, 10)
+  return getColomboTodayIso()
 }
 
 type PurchaseFormProps = {
@@ -94,15 +94,15 @@ export default function PurchaseForm({
     const purchased = Number(purchasedQuantity)
     const usable = Number(usableQuantity)
     const price = Number(totalPrice)
-    const usableBaseQuantity = toBaseQuantity(
+    const usableBaseQuantity = toInventoryBaseQuantity(
       usable,
       usableUnit,
-      selectedItem.unit,
+      selectedItem,
     )
-    const purchasedBaseQuantity = toBaseQuantity(
+    const purchasedBaseQuantity = toInventoryBaseQuantity(
       purchased,
       purchasedUnit,
-      selectedItem.unit,
+      selectedItem,
     )
     if (
       !Number.isFinite(purchased) ||
@@ -233,10 +233,10 @@ export default function PurchaseForm({
             <p className="text-xs font-semibold text-sage-dark">
               Adds{" "}
               {formatQuantity(
-                toBaseQuantity(
+                toInventoryBaseQuantity(
                   Number(usableQuantity),
                   usableUnit,
-                  selectedItem.unit,
+                  selectedItem,
                 ),
                 selectedItem.unit,
               )}{" "}

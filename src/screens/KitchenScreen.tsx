@@ -4,10 +4,11 @@ import SegmentedControl from "../components/ui/SegmentedControl"
 import { selectManualShoppingList } from "../lib/inventory"
 import { useAppState } from "../state/AppState"
 import type { StarterAction } from "../types"
+import IngredientsScreen from "./IngredientsScreen"
 import RecipesScreen from "./RecipesScreen"
 import ShoppingScreen from "./ShoppingScreen"
 
-type KitchenSection = "shopping" | "recipes"
+type KitchenSection = "shopping" | "recipes" | "ingredients"
 
 type KitchenScreenProps = {
   starterAction: StarterAction | null
@@ -64,6 +65,7 @@ export default function KitchenScreen({
                 label: toBuyCount > 0 ? `To buy (${toBuyCount})` : "To buy",
               },
               { value: "recipes", label: "Recipes" },
+              { value: "ingredients", label: "Ingredients" },
             ]}
           />
         </div>
@@ -75,8 +77,10 @@ export default function KitchenScreen({
             starterAction={starterAction}
             onConsumeStarterAction={onConsumeStarterAction}
           />
-        ) : (
+        ) : section === "recipes" ? (
           <RecipesScreen onFocusedChange={handleFocusedChange} />
+        ) : (
+          <IngredientsScreen />
         )}
       </TabView>
     </div>

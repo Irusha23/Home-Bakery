@@ -183,6 +183,26 @@ Tasks:
 - [x] Merge verified milestone cleanly to `main` and tag `v1.0.0`.
 - [x] **Exit gate:** Signed `v1.0.0` `.apk` verified offline on Android with tested Share backups and verified in-place upgrade path.
 
+### Phase 18 — Full-Codebase Audit Remediation & `v1.1.0` Hardening (Completed)
+
+**Goal:** Resolve all 22 architectural, accounting, native Android, UI state, and accessibility findings identified in the post-v1.0 codebase audit across 5 verified milestones (`feat/v1-1-0-audit-remediation`).
+
+Tasks:
+- [x] **Workstream 1 — Schema, Referential Integrity & Backup Safety:** Enforce strict backup payload validation, shared-allocation adjustment on cancellation, safe variant unlinking/finished-inventory validation, and unit-converted scoping on preparation line completion.
+- [x] **Workstream 2 — Financial Math, Timezone Determinism & Reducer Purity:** Enforce `Asia/Colombo` calendar dates & countdown targets across OS timezones, IEEE 754 currency rounding stability, `Cancelled` order zero-COGS profit rule, atomic `RECORD_REFUNDS`, `FINISH_PREPARATION_SIMPLE` clamped physical stock deduction + movements, and non-poisoning idempotency keys.
+- [x] **Workstream 3 — Native Android & Shell UX:** Route CSV and recovery raw exports through the native Android Share Sheet, relax Android backup picker MIME filtering with retry safety, isolate `ScreenHeader` hardware back handlers during transitions (`useIsPresent()`), bind `KitchenModeOverlay` back/Escape/scroll-lock, hide bottom navigation while soft keyboard is open, and elevate toasts above modals (`z-[60]`).
+- [x] **Workstream 4 — Screen Bugs, State Sync & Motion:** Fix `AnimatedItem` reduced-motion visibility, prevent `RecipeEditorSheet` background state resets, stabilize `KitchenModeOverlay` timer & dark-mode contrast, wire Home `Up next` preparation deep links accurately, clean up nested dialog scroll traps & missing low-stock color tokens, and keep reminders dismissible without swipe gestures.
+- [x] **Workstream 5 — Accessibility, Polish, `v1.1.0 (Build 3)` Release & Emulator QA:** Clean up disabled button opacity/nudge states, `useId()` uniqueness across form inputs/dialogs, keyboard focus rings on custom checkboxes, CI branch triggers, Android SQLite `PRAGMA journal_mode = WAL` query fix (`cb81af5`), and verify signed `v1.1.0 (Build 3)` in-place upgrade on the Android Emulator.
+
+### Phase 19 — Universal Kitchen Measurements & Minimalistic Ingredients Tab (Completed)
+
+**Goal:** Support natural baking measurements (`tsp`, `tbsp`, `cup` with dry `tsp ↔ g` defaults + overrides and customizable `1 tsp = __ ml` liquid conversions) across all workflows plus a dedicated minimalistic Ingredients tab (`v1.1.0`, Build 3).
+
+Tasks:
+- [x] Expand `Unit` (`g`, `kg`, `ml`, `L`, `tsp`, `tbsp`, `cup`, `unit`), culinary `1 tsp → g` smart defaults + custom `gramsPerTsp`/`mlPerTsp` overrides, and dual equivalents (`formatDualQuantity`) across recipes, preparation, orders, shopping, and purchases.
+- [x] Upgrade SQLite schema cleanly (`0003_ingredient_measurements.ts`, schema `v3`) with lossless `grams_per_tsp`, `ml_per_tsp`, and optional `track_stock` support.
+- [x] Build minimalistic `IngredientsScreen` inside **Kitchen → Ingredients**, surface spoon size in `InventoryItemSheet`, hide chevrons on locked selects, and verify on `emulator-5554`.
+
 ---
 
 ## Development rules

@@ -37,12 +37,15 @@ export type AllocationVersionAppendResult = ValidationResult & {
 }
 
 function isValidTimestamp(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) {
+    return false
+  }
 
   const timestamp = new Date(value)
 
   return (
-    Number.isFinite(timestamp.getTime()) && timestamp.toISOString() === value
+    Number.isFinite(timestamp.getTime()) &&
+    timestamp.toISOString().slice(0, 19) === value.slice(0, 19)
   )
 }
 
@@ -186,8 +189,10 @@ export function validateAllocationVersion(
   if (version.reason !== undefined && typeof version.reason !== "string")
     issues.push("Allocation version reason must be text.")
 
-  if (!Array.isArray(version.allocations))
+  if (!Array.isArray(version.allocations)) {
     issues.push("Allocation entries are required.")
+    return validationResult(issues)
+  }
 
   const entryIds = new Set<string>()
 
@@ -294,13 +299,25 @@ export function validateNewAllocationVersion(
 
   orders: Order[],
 ): ValidationResult {
-  return validateAllocationHistory(
+  const result = validateAllocationHistory(
     expense,
 
     [...previousVersions, nextVersion],
 
     orders,
   )
+  const issues = [...result.issues]
+  if (Array.isArray(nextVersion.allocations)) {
+    for (const allocation of nextVersion.allocations) {
+      const target = orders.find((order) => order.id === allocation.orderId)
+      if (target?.status === "Cancelled") {
+        issues.push(
+          `Cannot allocate a shared expense to cancelled order ${target.reference}.`,
+        )
+      }
+    }
+  }
+  return validationResult(issues)
 }
 
 export function appendAllocationVersion(

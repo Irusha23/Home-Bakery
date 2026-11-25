@@ -10,9 +10,12 @@ import SelectField from "../ui/SelectField"
 import Sheet from "../ui/Sheet"
 import InventoryItemSheet from "./InventoryItemSheet"
 import PricingCalculatorSheet from "./PricingCalculatorSheet"
-import { formatLkr } from "../../lib/format"
+import { formatDualQuantity, formatLkr } from "../../lib/format"
 import { createId } from "../../lib/id"
-import { compatibleUnits } from "../../lib/inventory"
+import {
+  compatibleUnits,
+  convertInventoryUnitQuantity,
+} from "../../lib/inventory"
 import {
   estimateRecipeMaterialCost,
   fromDisplayUnitPrice,
@@ -198,15 +201,13 @@ export default function RecipeEditorSheet({
       setSaveToLibrary(!isOrderCustomMode)
     }
   }, [
-    activeProducts,
-    baseRecipe,
-    ingredientItems,
+    baseRecipe?.id,
     initialProductId,
     initialVariantId,
     isOrderCustomMode,
     open,
-    recipe,
-    state.inventory,
+    recipe?.id,
+    recipe?.updatedAt,
   ])
 
   const selectedProduct = activeProducts.find((p) => p.id === productId)
@@ -418,7 +419,6 @@ export default function RecipeEditorSheet({
         : ["Follow standard bakery preparation method."],
       estimatedCost,
       updatedAt: new Date().toISOString(),
-      ...(recipe?.history ? { history: recipe.history } : {}),
     }
 
     onSave(nextRecipe, saveToLibrary)
@@ -590,10 +590,46 @@ export default function RecipeEditorSheet({
               )
               const unitChoices = selectedItem
                 ? compatibleUnits(selectedItem.unit)
-                : (["g", "kg", "ml", "L", "unit"] as Unit[])
+                : (["g", "kg", "ml", "L", "tsp", "tbsp", "cup", "unit"] as Unit[])
               const priceUnitLabel = selectedItem
                 ? getDisplayPriceUnitLabel(selectedItem.unit)
                 : "kg"
+              const parsedRowQty = Number(row.quantity)
+              const dualHint =
+                selectedItem && Number.isFinite(parsedRowQty) && parsedRowQty > 0
+                  ? formatDualQuantity(parsedRowQty, row.unit, selectedItem)
+                  : null
+              const canQuickConvert =
+                selectedItem &&
+                (selectedItem.unit === "g" || selectedItem.unit === "ml") &&
+                Number.isFinite(parsedRowQty) &&
+                parsedRowQty > 0
+              const quickTargetUnit: Unit | null = canQuickConvert
+                ? row.unit === "tsp" || row.unit === "tbsp" || row.unit === "cup"
+                  ? selectedItem.unit
+                  : "tsp"
+                : null
+              const quickConvertedQty =
+                quickTargetUnit && selectedItem
+                  ? convertInventoryUnitQuantity(
+                      parsedRowQty,
+                      row.unit,
+                      quickTargetUnit,
+                      selectedItem,
+                    )
+                  : Number.NaN
+
+              const handleQuickConvert = () => {
+                if (!quickTargetUnit || !Number.isFinite(quickConvertedQty)) return
+                const rounded = Math.round(quickConvertedQty * 100) / 100
+                setIngredients((current) =>
+                  current.map((item) =>
+                    item.key === row.key
+                      ? { ...item, quantity: String(rounded), unit: quickTargetUnit }
+                      : item,
+                  ),
+                )
+              }
 
               if (isOrderCustomMode) {
                 const missingPrice = !(priceDrafts[row.inventoryId] ?? "").trim()
@@ -679,6 +715,20 @@ export default function RecipeEditorSheet({
                         <Trash2 aria-hidden="true" size={14} />
                       </IconButton>
                     </div>
+                    {dualHint?.secondary || quickTargetUnit ? (
+                      <div className="flex items-center justify-between gap-2 px-0.5 text-xs text-muted">
+                        <span>{dualHint?.secondary ?? ""}</span>
+                        {quickTargetUnit && Number.isFinite(quickConvertedQty) ? (
+                          <button
+                            type="button"
+                            onClick={handleQuickConvert}
+                            className="font-semibold text-sage-dark underline underline-offset-2"
+                          >
+                            Use {Math.round(quickConvertedQty * 100) / 100} {quickTargetUnit}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {showCustomPrices || missingPrice ? (
                       <Field
                         label={`Price per ${priceUnitLabel} (Rs.)`}
@@ -788,6 +838,20 @@ export default function RecipeEditorSheet({
                       }
                     />
                   </div>
+                  {dualHint?.secondary || quickTargetUnit ? (
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted">
+                      <span>{dualHint?.secondary ?? ""}</span>
+                      {quickTargetUnit && Number.isFinite(quickConvertedQty) ? (
+                        <button
+                          type="button"
+                          onClick={handleQuickConvert}
+                          className="font-semibold text-sage-dark underline underline-offset-2"
+                        >
+                          Convert to {quickTargetUnit}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               )
             })}

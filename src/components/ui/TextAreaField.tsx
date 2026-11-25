@@ -1,4 +1,4 @@
-import type { TextareaHTMLAttributes } from "react"
+import { useId, type TextareaHTMLAttributes } from "react"
 
 type TextAreaFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string
@@ -14,7 +14,8 @@ export default function TextAreaField({
   className = "",
   ...props
 }: TextAreaFieldProps) {
-  const fieldId = id ?? label.toLowerCase().replace(/ /g, "-")
+  const generatedId = useId()
+  const fieldId = id ?? generatedId
 
   return (
     <label className="block" htmlFor={fieldId}>

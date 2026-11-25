@@ -39,6 +39,7 @@ type HomeScreenProps = {
   onOpenUpdates: () => void
   onOpenSettings?: () => void
   onOpenOrder?: (orderId: string) => void
+  onStartPreparation?: (orderId: string, preparationId: string) => void
   unreadAlertCount?: number
 }
 
@@ -47,6 +48,7 @@ export default function HomeScreen({
   onOpenUpdates,
   onOpenSettings,
   onOpenOrder,
+  onStartPreparation,
   unreadAlertCount,
 }: HomeScreenProps) {
   const { state } = useAppState()
@@ -185,6 +187,13 @@ export default function HomeScreen({
                           orderHasUnpurchasedItems(state, nextUp.order)) &&
                         onOpenOrder
                       ) {
+                        onOpenOrder(nextUp.order.id)
+                      } else if (nextUp.preparationRecord && onStartPreparation) {
+                        onStartPreparation(
+                          nextUp.order.id,
+                          nextUp.preparationRecord.id,
+                        )
+                      } else if (onOpenOrder) {
                         onOpenOrder(nextUp.order.id)
                       } else {
                         onNavigate("orders", "continue-preparation")

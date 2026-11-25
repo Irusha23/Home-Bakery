@@ -307,7 +307,7 @@ export function allocateOrderRefunds(
   }
   let remainingToAllocate = totalAmount
   const planned: Refund[] = []
-  for (const payment of order.payments) {
+  for (const payment of validPaymentRecords(order)) {
     if (remainingToAllocate <= 0) break
     const refundable = remainingRefundableAmount(
       order,

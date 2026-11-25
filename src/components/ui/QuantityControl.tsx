@@ -46,21 +46,24 @@ export default function QuantityControl({
         }}
         whileTap={reducedMotion ? undefined : { scale: 0.92 }}
         animate={
-          minNudge > 0
+          !canDecrease && minNudge > 0
             ? reducedMotion
               ? { opacity: [0.35, 0.65, 0.35] }
-              : { x: [0, -4, 2, 0] }
+              : { x: [0, -4, 2, 0], opacity: 0.35 }
             : { x: 0, opacity: canDecrease ? 1 : 0.35 }
         }
+        onAnimationComplete={() => {
+          if (minNudge > 0) setMinNudge(0)
+        }}
         transition={
-          minNudge > 0
+          !canDecrease && minNudge > 0
             ? SPRING_NUDGE
             : reducedMotion
               ? REDUCED_MOTION_TRANSITION
               : SPRING_MICRO
         }
         className={`relative inline-flex size-9 items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-sage-soft hover:text-sage-dark ${
-          !canDecrease ? "cursor-not-allowed opacity-35" : ""
+          !canDecrease ? "cursor-not-allowed" : ""
         }`}
       >
         <TouchRippleLayer

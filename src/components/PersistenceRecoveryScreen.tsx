@@ -3,6 +3,7 @@ import { useState } from "react"
 import Button from "./ui/Button"
 
 import BackupRestorePanel from "./BackupRestorePanel"
+import { shareOrDownloadBackupFile } from "../lib/backupShare"
 
 import type {
   PersistenceRecovery,
@@ -17,23 +18,20 @@ type PersistenceRecoveryScreenProps = {
 
   onStartFresh: () => void
 
-  onRestore: (raw: string, source?: RecoverySource) => RestoreResult
+  onRestore: (
+    raw: string,
+    source?: RecoverySource,
+  ) => RestoreResult | Promise<RestoreResult>
 }
 
-function exportRawData(raw: string) {
-  const url = URL.createObjectURL(
-    new Blob([raw], { type: "application/json;charset=utf-8" }),
-  )
-
-  const link = document.createElement("a")
-
-  link.href = url
-
-  link.download = "udenis-specials-preserved-data.json"
-
-  link.click()
-
-  URL.revokeObjectURL(url)
+async function exportRawData(raw: string) {
+  await shareOrDownloadBackupFile({
+    filename: "udenis-specials-preserved-data.json",
+    content: raw,
+    title: "Udeni's Specials Preserved Data",
+    text: "Raw preserved bakery storage dump for recovery.",
+    dialogTitle: "Save or share preserved data",
+  })
 }
 
 export default function PersistenceRecoveryScreen({
@@ -49,11 +47,11 @@ export default function PersistenceRecoveryScreen({
 
   const [exportError, setExportError] = useState<string | null>(null)
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (recovery.raw === null) return
 
     try {
-      exportRawData(recovery.raw)
+      await exportRawData(recovery.raw)
 
       setExportError(null)
     } catch (error) {
@@ -100,7 +98,7 @@ export default function PersistenceRecoveryScreen({
           </Button>
           <Button
             variant="secondary"
-            onClick={handleExport}
+            onClick={() => void handleExport()}
             disabled={recovery.raw === null}
             fullWidth
           >

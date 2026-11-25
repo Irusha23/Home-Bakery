@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  compatibleUnits,
+  convertInventoryUnitQuantity,
+  fromBaseQuantity,
+  getDefaultGramsPerTsp,
+  isStockTracked,
   selectAvailableInventory,
   selectReservedByItem,
   selectShoppingRequirements,
@@ -306,5 +311,60 @@ describe("inventory calculations", () => {
     expect(requirement.unitErrors).toHaveLength(2)
     expect(requirement.required).toBeNaN()
     expect(requirement.shortage).toBeNaN()
+  })
+
+  it("supports tsp/tbsp/cup and tsp<->g/ml conversions with culinary defaults and per-ingredient overrides", () => {
+    expect(compatibleUnits("g")).toEqual(["g", "kg", "tsp", "tbsp"])
+    expect(compatibleUnits("ml")).toEqual(["ml", "L", "tsp", "tbsp", "cup"])
+    expect(compatibleUnits("unit")).toEqual(["unit"])
+
+    expect(getDefaultGramsPerTsp("All-purpose flour")).toBe(3)
+    expect(getDefaultGramsPerTsp("Cocoa powder")).toBe(2.5)
+    expect(getDefaultGramsPerTsp("Fine salt")).toBe(6)
+    expect(getDefaultGramsPerTsp("Baking powder")).toBe(4)
+
+    const flour = createTestInventoryItem({ name: "All-purpose flour", unit: "g" })
+    expect(toInventoryBaseQuantity(2, "tsp", flour)).toBe(6)
+    expect(toInventoryBaseQuantity(1, "tbsp", flour)).toBe(9)
+    expect(convertInventoryUnitQuantity(12, "g", "tsp", flour)).toBe(4)
+
+    const denseButter = createTestInventoryItem({
+      inventoryId: "butter",
+      name: "Butter",
+      unit: "g",
+      gramsPerTsp: 4.5,
+    })
+    expect(toInventoryBaseQuantity(2, "tsp", denseButter)).toBe(9)
+    expect(fromBaseQuantity(13.5, "tsp", "g", { gramsPerTsp: 4.5 })).toBe(3)
+
+    const vanilla = createTestInventoryItem({
+      inventoryId: "vanilla",
+      name: "Vanilla essence",
+      unit: "ml",
+    })
+    expect(toInventoryBaseQuantity(2, "tsp", vanilla)).toBe(10)
+    expect(toInventoryBaseQuantity(1, "tbsp", vanilla)).toBe(15)
+    expect(toInventoryBaseQuantity(0.5, "cup", vanilla)).toBe(125)
+    expect(convertInventoryUnitQuantity(250, "ml", "cup", vanilla)).toBe(1)
+
+    const customEssence = createTestInventoryItem({
+      inventoryId: "custom-oil",
+      name: "Oil",
+      unit: "ml",
+      mlPerTsp: 4,
+    })
+    expect(toInventoryBaseQuantity(3, "tsp", customEssence)).toBe(12)
+    expect(toInventoryBaseQuantity(1, "tbsp", customEssence)).toBe(12)
+
+    expect(
+      isStockTracked(
+        createTestInventoryItem({ physical: 0, trackStock: false }),
+      ),
+    ).toBe(false)
+    expect(
+      isStockTracked(
+        createTestInventoryItem({ physical: 0, trackStock: true }),
+      ),
+    ).toBe(true)
   })
 })

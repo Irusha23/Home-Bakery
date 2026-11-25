@@ -386,4 +386,51 @@ describe("pricing calculations", () => {
       estimatedCost: 630,
     })
   })
+
+  it("avoids IEEE 754 float overshoot when rounding prices to currency steps", () => {
+    const result = calculateSuggestedPrice(605, {
+      mode: "margin",
+      marginPercent: 45,
+      markupPercent: 100,
+      roundingStep: 50,
+    })
+    // 605 / 0.55 = 1100 exactly mathematically, even though float division yields 1100.0000000000002
+    expect(result.valid).toBe(true)
+    if (result.valid) {
+      expect(result.suggestedPrice).toBe(1100)
+    }
+  })
+
+  it("prices recipes accurately using tsp/tbsp dry and liquid ml/cup conversions", () => {
+    const inventory = [
+      createTestInventoryItem({
+        inventoryId: "cocoa",
+        name: "Cocoa powder",
+        unit: "g",
+        averageUnitCost: 4, // Rs. 4000 / kg
+      }),
+      createTestInventoryItem({
+        inventoryId: "milk",
+        name: "Fresh milk",
+        unit: "ml",
+        averageUnitCost: 0.6, // Rs. 600 / L
+      }),
+    ]
+    const breakdown = estimateRecipeMaterialCost(
+      {
+        ingredients: [
+          // 4 tsp cocoa * 2.5g = 10g @ Rs.4/g = Rs.40
+          { inventoryId: "cocoa", name: "Cocoa powder", quantity: 4, unit: "tsp" },
+          // 1 cup milk = 250ml @ Rs.0.6/ml = Rs.150
+          { inventoryId: "milk", name: "Fresh milk", quantity: 1, unit: "cup" },
+        ],
+        packaging: [],
+        preparationMinutes: 0,
+      },
+      inventory,
+      0,
+    )
+    expect(breakdown.ingredientsCost).toBe(190)
+    expect(breakdown.hasCompletePricing).toBe(true)
+  })
 })

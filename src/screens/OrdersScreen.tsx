@@ -62,6 +62,7 @@ function matchesFilter(
 type OrdersScreenProps = {
   starterAction: StarterAction | null
   initialOrderId?: string
+  initialPreparationId?: string
   onConsumeOrderIntent?: () => void
   onReturnFromIntent?: () => void
   onConsumeStarterAction: () => void
@@ -72,6 +73,7 @@ type OrdersScreenProps = {
 export default function OrdersScreen({
   starterAction,
   initialOrderId,
+  initialPreparationId,
   onConsumeOrderIntent,
   onReturnFromIntent,
   onConsumeStarterAction,
@@ -80,7 +82,13 @@ export default function OrdersScreen({
 }: OrdersScreenProps) {
   const { state, dispatchIfAccepted } = useAppState()
   const { showToast } = useToast()
-  const [view, setView] = useState<View>(initialOrderId ? "detail" : "list")
+  const [view, setView] = useState<View>(
+    initialPreparationId
+      ? "preparation-product"
+      : initialOrderId
+        ? "detail"
+        : "list",
+  )
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(
     initialOrderId ?? null,
   )
@@ -89,7 +97,7 @@ export default function OrdersScreen({
     string | undefined
   >(undefined)
   const [selectedPreparationId, setSelectedPreparationId] =
-    useState<string | null>(null)
+    useState<string | null>(initialPreparationId ?? null)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<Filter>("Active")
   const [repeatNotice, setRepeatNotice] = useState<string | null>(null)
@@ -98,11 +106,17 @@ export default function OrdersScreen({
   const consumedAction = useRef<StarterAction | null>(null)
 
   useEffect(() => {
-    if (!initialOrderId) return
-    setSelectedOrderId(initialOrderId)
-    setView("detail")
+    if (!initialOrderId && !initialPreparationId) return
+    if (initialPreparationId) {
+      setSelectedOrderId(initialOrderId ?? null)
+      setSelectedPreparationId(initialPreparationId)
+      setView("preparation-product")
+    } else if (initialOrderId) {
+      setSelectedOrderId(initialOrderId)
+      setView("detail")
+    }
     onConsumeOrderIntent?.()
-  }, [initialOrderId, onConsumeOrderIntent])
+  }, [initialOrderId, initialPreparationId, onConsumeOrderIntent])
 
   useEffect(() => {
     if (!starterAction) {

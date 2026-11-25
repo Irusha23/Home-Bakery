@@ -37,7 +37,7 @@ import type {
   ShoppingTripRecord,
   Unit,
 } from "../types"
-import type { SqliteEngine, SqlRow } from "./engine"
+import type { SqliteEngine, SqlParam, SqlRow, SqlStatement } from "./engine"
 import { getAppliedSchemaVersion, runMigrations } from "./migrator"
 import type { AppRepository } from "./repository"
 
@@ -135,6 +135,11 @@ export class SqliteAppRepository implements AppRepository {
 
   async saveAppData(data: AppData): Promise<void> {
     await this.engine.transaction(async () => {
+      const statements: SqlStatement[] = []
+      const enqueue = (sql: string, params?: readonly SqlParam[]) => {
+        statements.push(params ? { sql, params } : { sql })
+      }
+
       // Clear child tables before parent tables so PRAGMA foreign_keys = ON holds
       const clearStatements = [
         "DELETE FROM expense_allocations",
@@ -163,11 +168,11 @@ export class SqliteAppRepository implements AppRepository {
         "DELETE FROM app_settings",
       ]
       for (const stmt of clearStatements) {
-        await this.engine.run(stmt)
+        enqueue(stmt)
       }
 
       const s = data.settings
-      await this.engine.run(
+      enqueue(
         `INSERT INTO app_settings (
           id, business_name, owner_name, default_labour_rate_per_hour,
           default_pricing_mode, default_margin_percent, default_markup_percent,
@@ -190,7 +195,7 @@ export class SqliteAppRepository implements AppRepository {
       )
 
       const b = data.budgetPlan
-      await this.engine.run(
+      enqueue(
         `INSERT INTO budget_plans (
           id, monthly_sales_target, monthly_profit_target,
           ingredient_spend_limit, category_limits_json, updated_at
@@ -205,19 +210,19 @@ export class SqliteAppRepository implements AppRepository {
       )
 
       for (const [index, c] of data.customers.entries()) {
-        await this.engine.run(
+        enqueue(
           "INSERT INTO customers (id, name, phone, sort_order) VALUES (?, ?, ?, ?)",
           [c.id, c.name, c.phone, index],
         )
       }
 
       for (const [index, item] of data.inventory.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO inventory_items (
             inventory_id, name, image, physical, unit, category,
             unbatched_legacy_quantity, low_stock_threshold, average_unit_cost,
-            archived, sort_order
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            grams_per_tsp, ml_per_tsp, track_stock, archived, sort_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             item.inventoryId,
             item.name,
@@ -228,6 +233,9 @@ export class SqliteAppRepository implements AppRepository {
             item.unbatchedLegacyQuantity ?? null,
             item.lowStockThreshold ?? null,
             item.averageUnitCost ?? null,
+            item.gramsPerTsp ?? null,
+            item.mlPerTsp ?? null,
+            item.trackStock === true ? 1 : item.trackStock === false ? 0 : null,
             item.archived ? 1 : 0,
             index,
           ],
@@ -235,7 +243,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [pIndex, product] of data.products.entries()) {
-        await this.engine.run(
+        enqueue(
           "INSERT INTO products (id, name, image, archived, sort_order) VALUES (?, ?, ?, ?, ?)",
           [
             product.id,
@@ -246,7 +254,7 @@ export class SqliteAppRepository implements AppRepository {
           ],
         )
         for (const [vIndex, variant] of product.variants.entries()) {
-          await this.engine.run(
+          enqueue(
             `INSERT INTO product_variants (
               id, product_id, name, unit_label, finished_inventory_id, archived, sort_order
             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -264,7 +272,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, recipe] of data.recipes.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO recipes (
             id, name, image, product_id, variant_id, version, yield, yield_label,
             expected_output_json, preparation_minutes, ingredients_json, packaging_json,
@@ -295,7 +303,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [oIndex, order] of data.orders.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO orders (
             id, reference, customer_id, customer_name, is_quick_order,
             status, preparation_status, payment_status, collection_date, collection_time,
@@ -329,7 +337,7 @@ export class SqliteAppRepository implements AppRepository {
         )
 
         for (const [lIndex, line] of order.lines.entries()) {
-          await this.engine.run(
+          enqueue(
             `INSERT INTO order_lines (
               id, order_id, product_id, product_name, variant_id, variant_name,
               quantity, recipe_id, recipe_snapshot_json, sort_order
@@ -350,7 +358,7 @@ export class SqliteAppRepository implements AppRepository {
         }
 
         for (const [payIndex, payment] of order.payments.entries()) {
-          await this.engine.run(
+          enqueue(
             `INSERT INTO payments (
               id, order_id, date, amount, method, note, sort_order
             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -368,7 +376,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, refund] of data.refunds.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO refunds (
             id, order_id, payment_id, date, amount, reason, sort_order
           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -385,7 +393,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, p] of data.purchases.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO purchases (
             id, inventory_id, purchased_quantity, purchased_unit,
             usable_quantity, usable_unit, usable_base_quantity, total_price,
@@ -409,7 +417,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, m] of data.inventoryMovements.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO inventory_movements (
             id, inventory_id, type, quantity_delta, unit, balance_after,
             date, reason, purchase_id, created_at, sort_order
@@ -431,7 +439,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, rec] of data.preparationRecords.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO preparation_records (
             id, order_id, order_line_id, status, recipe_snapshot_json,
             planned_quantity, actual_usage_json, completed_steps_json,
@@ -456,7 +464,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, plan] of data.extraStockPlans.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO extra_stock_plans (
             id, product_id, variant_id, recipe_id, recipe_snapshot_json,
             quantity, best_before, created_at, updated_at, sort_order
@@ -477,7 +485,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, rec] of data.extraStockPreparations.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO extra_stock_preparations (
             id, plan_id, product_id, variant_id, finished_inventory_id,
             recipe_snapshot_json, planned_batches, status, actual_usage_json,
@@ -504,7 +512,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, batch] of data.finishedStockBatches.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO finished_stock_batches (
             id, source, inventory_id, remaining_quantity, payload_json, sort_order
           ) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -520,7 +528,7 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, tx] of data.finishedStockTransactions.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO finished_stock_transactions (
             id, type, batch_id, inventory_id, quantity, occurred_at,
             unit_cost, total_cost, payload_json, sort_order
@@ -541,14 +549,14 @@ export class SqliteAppRepository implements AppRepository {
       }
 
       for (const [index, cat] of data.expenseCategories.entries()) {
-        await this.engine.run(
+        enqueue(
           "INSERT INTO expense_categories (id, name, source, sort_order) VALUES (?, ?, ?, ?)",
           [cat.id, cat.name, cat.source, index],
         )
       }
 
       for (const [index, exp] of data.expenses.entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO expenses (
             id, amount, paid_date, category_id, description, note,
             attribution_type, attribution_order_id, created_at, sort_order
@@ -570,7 +578,7 @@ export class SqliteAppRepository implements AppRepository {
 
       for (const history of data.expenseAllocationHistories) {
         for (const [vIndex, version] of history.versions.entries()) {
-          await this.engine.run(
+          enqueue(
             `INSERT INTO expense_allocation_versions (
               id, expense_id, version, created_at, reason, sort_order
             ) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -584,7 +592,7 @@ export class SqliteAppRepository implements AppRepository {
             ],
           )
           for (const [aIndex, alloc] of version.allocations.entries()) {
-            await this.engine.run(
+            enqueue(
               `INSERT INTO expense_allocations (
                 id, version_id, order_id, amount, sort_order
               ) VALUES (?, ?, ?, ?, ?)`,
@@ -597,14 +605,14 @@ export class SqliteAppRepository implements AppRepository {
       for (const [inventoryId, quantity] of Object.entries(
         data.shoppingSelections,
       )) {
-        await this.engine.run(
+        enqueue(
           "INSERT INTO shopping_selections (inventory_id, quantity) VALUES (?, ?)",
           [inventoryId, quantity],
         )
       }
 
       for (const [index, trip] of (data.shoppingTrips ?? []).entries()) {
-        await this.engine.run(
+        enqueue(
           `INSERT INTO shopping_trips (
             id, reference, date, created_at, total_spent, expense_id, items_json, sort_order
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -619,6 +627,14 @@ export class SqliteAppRepository implements AppRepository {
             index,
           ],
         )
+      }
+
+      if (this.engine.runBatch) {
+        await this.engine.runBatch(statements)
+      } else {
+        for (const stmt of statements) {
+          await this.engine.run(stmt.sql, stmt.params)
+        }
       }
     })
   }
@@ -702,18 +718,30 @@ export class SqliteAppRepository implements AppRepository {
       )
       const lowStockThreshold = asNullableNumber(row.low_stock_threshold)
       const averageUnitCost = asNullableNumber(row.average_unit_cost)
+      const gramsPerTsp = asNullableNumber(row.grams_per_tsp)
+      const mlPerTsp = asNullableNumber(row.ml_per_tsp)
+      const rawTrackStock = asNullableNumber(row.track_stock)
+      const physical = asNumber(row.physical)
+      const category = asString(row.category, "ingredient") as InventoryCategory
       return {
         inventoryId: asString(row.inventory_id),
         name: asString(row.name),
         ...(image !== null ? { image } : {}),
-        physical: asNumber(row.physical),
+        physical,
         unit: asString(row.unit, "unit") as BaseUnit,
-        category: asString(row.category, "ingredient") as InventoryCategory,
+        category,
         ...(unbatchedLegacyQuantity !== null
           ? { unbatchedLegacyQuantity }
           : {}),
         ...(lowStockThreshold !== null ? { lowStockThreshold } : {}),
         ...(averageUnitCost !== null ? { averageUnitCost } : {}),
+        ...(gramsPerTsp !== null && gramsPerTsp > 0 ? { gramsPerTsp } : {}),
+        ...(mlPerTsp !== null && mlPerTsp > 0 ? { mlPerTsp } : {}),
+        ...(rawTrackStock === 1
+          ? { trackStock: true }
+          : rawTrackStock === 0
+            ? { trackStock: false }
+            : {}),
         ...(asNumber(row.archived) === 1 ? { archived: true } : {}),
       }
     })

@@ -9,6 +9,8 @@ export type BackupShareOptions = {
   content: string
   title: string
   text: string
+  mimeType?: string
+  dialogTitle?: string
 }
 
 function isShareCancelError(error: unknown): boolean {
@@ -31,11 +33,35 @@ export async function shareOrDownloadBackupFile({
   content,
   title,
   text,
+  mimeType = "application/json",
+  dialogTitle = "Save or share backup",
 }: BackupShareOptions): Promise<{
   method: BackupExportMethod
   cancelled?: boolean
 }> {
   if (Capacitor.isNativePlatform()) {
+    try {
+      const existing = await Filesystem.readdir({
+        path: "",
+        directory: Directory.Cache,
+      })
+      for (const entry of existing.files) {
+        if (
+          entry.type === "file" &&
+          /^(?:Udenis-Specials-(?:Encrypted-)?Backup-|udenis-).*\.(?:json|csv)$/i.test(
+            entry.name,
+          ) &&
+          entry.name !== filename
+        ) {
+          await Filesystem.deleteFile({
+            path: entry.name,
+            directory: Directory.Cache,
+          }).catch(() => undefined)
+        }
+      }
+    } catch {
+      // Cache cleanup is best-effort
+    }
     await Filesystem.writeFile({
       path: filename,
       data: content,
@@ -51,7 +77,7 @@ export async function shareOrDownloadBackupFile({
         title,
         text,
         files: [uri],
-        dialogTitle: "Save or share backup",
+        dialogTitle,
       })
       return { method: "share" }
     } catch (error) {
@@ -63,7 +89,7 @@ export async function shareOrDownloadBackupFile({
   }
 
   if (typeof File !== "undefined" && typeof navigator !== "undefined") {
-    const file = new File([content], filename, { type: "application/json" })
+    const file = new File([content], filename, { type: mimeType })
     if (
       typeof navigator.share === "function" &&
       typeof navigator.canShare === "function" &&
@@ -81,13 +107,15 @@ export async function shareOrDownloadBackupFile({
   }
 
   const url = URL.createObjectURL(
-    new Blob([content], { type: "application/json;charset=utf-8" }),
+    new Blob([content], { type: `${mimeType};charset=utf-8` }),
   )
   try {
     const link = document.createElement("a")
     link.href = url
     link.download = filename
+    document.body.appendChild(link)
     link.click()
+    document.body.removeChild(link)
   } finally {
     URL.revokeObjectURL(url)
   }

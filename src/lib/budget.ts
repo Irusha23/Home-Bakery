@@ -93,24 +93,27 @@ export function computeSpendStatus(
 export function selectFinishedStockSalesSummary(
   state: AppData,
   period: DatePeriod,
-): { revenueLkr: number; costLkr: number; saleCount: number } {
+): { revenueLkr: number; costLkr: number; pricedCostLkr: number; saleCount: number } {
   let revenueLkr = 0
   let costLkr = 0
+  let pricedCostLkr = 0
   let saleCount = 0
   for (const tx of state.finishedStockTransactions) {
     if (tx.type !== "sale") continue
     const date = colomboDateFromIsoTimestamp(tx.occurredAt)
     if (!date || date < period.startDate || date > period.endDate) continue
     saleCount += 1
-    costLkr += Number.isFinite(tx.totalCost) ? tx.totalCost : 0
+    const txCost = Number.isFinite(tx.totalCost) ? tx.totalCost : 0
+    costLkr += txCost
     if (
       typeof tx.sellingPrice === "number" &&
       Number.isSafeInteger(tx.sellingPrice)
     ) {
       revenueLkr += tx.sellingPrice
+      pricedCostLkr += txCost
     }
   }
-  return { revenueLkr, costLkr, saleCount }
+  return { revenueLkr, costLkr, pricedCostLkr, saleCount }
 }
 
 export function selectMonthlyBudgetReport(
@@ -137,17 +140,41 @@ export function selectMonthlyBudgetReport(
   )
   const finishedSales = selectFinishedStockSalesSummary(state, period)
 
+  const shoppingExpenseIds = new Set(
+    (state.shoppingTrips ?? [])
+      .map((trip) => trip.expenseId)
+      .filter((id): id is string => Boolean(id)),
+  )
+  const periodShoppingTripSpend = (state.shoppingTrips ?? [])
+    .filter(
+      (trip) =>
+        trip.date >= period.startDate &&
+        trip.date <= period.endDate &&
+        typeof trip.totalSpent === "number" &&
+        Number.isSafeInteger(trip.totalSpent) &&
+        trip.totalSpent > 0,
+    )
+    .reduce((sum, trip) => sum + (trip.totalSpent ?? 0), 0)
+  const nonShoppingExpensesReport = selectRecordedExpenseValue(
+    state.expenses.filter((expense) => !shoppingExpenseIds.has(expense.id)),
+    state.expenseCategories,
+    state.orders,
+    period,
+  )
+
   const totalSales =
     (orderSalesReport.recognizedRevenueLkr ?? 0) + finishedSales.revenueLkr
   const totalExpenses = expensesValue.totalLkr ?? 0
+  const overheadExpenses = nonShoppingExpensesReport.totalLkr ?? 0
   const finishedGrossMargin =
-    finishedSales.revenueLkr > 0
-      ? finishedSales.revenueLkr - finishedSales.costLkr
+    finishedSales.revenueLkr > 0 || finishedSales.pricedCostLkr > 0
+      ? Math.round(finishedSales.revenueLkr - finishedSales.pricedCostLkr)
       : 0
-  const estimatedNetContribution =
+  const estimatedNetContribution = Math.round(
     (orderContribution.estimatedContributionLkr ?? 0) +
-    finishedGrossMargin -
-    totalExpenses
+      finishedGrossMargin -
+      overheadExpenses,
+  )
 
   const {
     monthlySalesTarget,
@@ -183,7 +210,7 @@ export function selectMonthlyBudgetReport(
   }
 
   const ingredientSpend = computeSpendStatus(
-    purchasesReport.totalLkr ?? 0,
+    (purchasesReport.totalLkr ?? 0) + periodShoppingTripSpend,
     ingredientSpendLimit,
   )
 

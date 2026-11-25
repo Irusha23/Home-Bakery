@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Check,
   CheckSquare,
@@ -28,7 +28,13 @@ import Sheet from "../components/ui/Sheet"
 import StatusBadge from "../components/ui/StatusBadge"
 import SwipeableRow from "../components/ui/SwipeableRow"
 import { useToast } from "../components/ui/Toast"
-import { formatDate, formatLkr, formatQuantity } from "../lib/format"
+import {
+  formatDate,
+  formatDualQuantity,
+  formatLkr,
+  formatQuantity,
+  getColomboTodayIso,
+} from "../lib/format"
 import { createId } from "../lib/id"
 import { isValidMoneyAmount } from "../lib/financials"
 import {
@@ -222,62 +228,68 @@ export default function ShoppingScreen({
     return state.expenseCategories[0]?.id ?? "expense-category-other"
   }
 
+  const completingShoppingRef = useRef(false)
+
   const completeShopping = (expenseAmount?: number) => {
-    const checkedItems = allItems.filter((i) => i.checked)
-    const extraIds = checkedItems
-      .filter((i) => i.isManualExtra)
-      .map((i) => i.inventoryId)
+    if (completingShoppingRef.current) return
+    completingShoppingRef.current = true
+    try {
+      const checkedItems = allItems.filter((i) => i.checked)
+      if (!checkedItems.length) return
+      const extraIds = checkedItems
+        .filter((i) => i.isManualExtra)
+        .map((i) => i.inventoryId)
+      const checkedInventoryIds = checkedItems.map((i) => i.inventoryId)
 
-    let recordedExpense = false
-    let expenseId: string | undefined
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const nowIso = new Date().toISOString()
+      let recordedExpense = false
+      let expenseId: string | undefined
+      const todayIso = getColomboTodayIso()
+      const nowIso = new Date().toISOString()
 
-    if (
-      expenseAmount !== undefined &&
-      isValidMoneyAmount(expenseAmount) &&
-      checkedItems.length > 0
-    ) {
-      const orderIds = new Set(
-        checkedItems.flatMap((i) => i.orders.map((o) => o.orderId)),
-      )
-      const hasManual = checkedItems.some((i) => i.isManualExtra)
-      let attribution: ExpenseAttribution = { type: "shared" }
-      if (!hasManual && orderIds.size === 1) {
-        const singleOrderId = [...orderIds][0]
-        const targetOrder = state.orders.find((o) => o.id === singleOrderId)
-        if (
-          targetOrder &&
-          !targetOrder.isQuickOrder &&
-          targetOrder.customerId !== null
-        ) {
-          attribution = { type: "direct", orderId: singleOrderId }
+      if (
+        expenseAmount !== undefined &&
+        isValidMoneyAmount(expenseAmount) &&
+        checkedItems.length > 0
+      ) {
+        const orderIds = new Set(
+          checkedItems.flatMap((i) => i.orders.map((o) => o.orderId)),
+        )
+        const hasManual = checkedItems.some((i) => i.isManualExtra)
+        let attribution: ExpenseAttribution = { type: "shared" }
+        if (!hasManual && orderIds.size === 1) {
+          const singleOrderId = [...orderIds][0]
+          const targetOrder = state.orders.find((o) => o.id === singleOrderId)
+          if (
+            targetOrder &&
+            !targetOrder.isQuickOrder &&
+            targetOrder.customerId !== null
+          ) {
+            attribution = { type: "direct", orderId: singleOrderId }
+          }
+        }
+        const description = `Shopping trip · ${checkedItems.length} ${
+          checkedItems.length === 1 ? "item" : "items"
+        }`
+        const candidateExpenseId = createId("exp")
+
+        recordedExpense = dispatchIfAccepted({
+          type: "RECORD_EXPENSE",
+          expense: {
+            id: candidateExpenseId,
+            amount: expenseAmount,
+            paidDate: todayIso,
+            categoryId: resolveShoppingExpenseCategoryId(),
+            description,
+            attribution,
+            createdAt: nowIso,
+          },
+        })
+        if (recordedExpense) {
+          expenseId = candidateExpenseId
         }
       }
-      const description = `Shopping trip · ${checkedItems.length} ${
-        checkedItems.length === 1 ? "item" : "items"
-      }`
-      const candidateExpenseId = createId("exp")
 
-      recordedExpense = dispatchIfAccepted({
-        type: "RECORD_EXPENSE",
-        expense: {
-          id: candidateExpenseId,
-          amount: expenseAmount,
-          paidDate: todayIso,
-          categoryId: resolveShoppingExpenseCategoryId(),
-          description,
-          attribution,
-          createdAt: nowIso,
-        },
-      })
-      if (recordedExpense) {
-        expenseId = candidateExpenseId
-      }
-    }
-
-    if (checkedItems.length > 0) {
-      dispatchIfAccepted({
+      const tripRecorded = dispatchIfAccepted({
         type: "ADD_SHOPPING_TRIP",
         trip: {
           id: createId("trip"),
@@ -302,20 +314,32 @@ export default function ShoppingScreen({
           })),
         },
       })
-    }
 
-    dispatch({
-      type: "COMPLETE_SHOPPING_CHECKLIST",
-      extraInventoryIds: extraIds,
-    })
-    setCheckedExtraIds(new Set())
-    setFinishSheetOpen(false)
-    showToast({
-      message: recordedExpense
-        ? `Moved to pantry · ${formatLkr(expenseAmount!)} expense recorded`
-        : "Bought items moved to pantry!",
-      tone: "success",
-    })
+      const checklistCompleted = dispatchIfAccepted({
+        type: "COMPLETE_SHOPPING_CHECKLIST",
+        extraInventoryIds: extraIds,
+        checkedInventoryIds,
+      })
+
+      if (!tripRecorded && !checklistCompleted) {
+        showToast({
+          message: "Shopping list could not be updated. Please try again.",
+          tone: "warning",
+        })
+        return
+      }
+
+      setCheckedExtraIds(new Set())
+      setFinishSheetOpen(false)
+      showToast({
+        message: recordedExpense
+          ? `Moved to pantry · ${formatLkr(expenseAmount!)} expense recorded`
+          : "Bought items moved to pantry!",
+        tone: "success",
+      })
+    } finally {
+      completingShoppingRef.current = false
+    }
   }
 
   const handleDoneClick = () => {
@@ -555,7 +579,19 @@ export default function ShoppingScreen({
                       <StatusBadge tone={item.checked ? "success" : "warning"}>
                         {item.checked
                           ? "Bought"
-                          : formatQuantity(item.boughtQuantity, item.unit)}
+                          : (() => {
+                              const inv = selectableItems.find(
+                                (i) => i.inventoryId === item.inventoryId,
+                              )
+                              const dual = formatDualQuantity(
+                                item.boughtQuantity,
+                                item.unit,
+                                inv,
+                              )
+                              return dual.secondary
+                                ? `${dual.primary} (${dual.secondary})`
+                                : dual.primary
+                            })()}
                       </StatusBadge>
                       <div className="mt-1 text-[11px] font-semibold tabular-nums text-cocoa">
                         {item.estimatedCost !== null
@@ -723,11 +759,32 @@ export default function ShoppingScreen({
               value={addUnit}
               options={(selectedInventoryItem
                 ? compatibleUnits(selectedInventoryItem.unit)
-                : (["g", "kg", "ml", "L", "unit"] as Unit[])
+                : (["g", "kg", "ml", "L", "tsp", "tbsp", "cup", "unit"] as Unit[])
               ).map((u) => ({ value: u, label: u }))}
               onChange={(e) => setAddUnit(e.target.value as Unit)}
             />
           </div>
+
+          {selectedInventoryItem &&
+          Number.isFinite(Number(addQty)) &&
+          Number(addQty) > 0 &&
+          (selectedInventoryItem.unit === "g" ||
+            selectedInventoryItem.unit === "ml") &&
+          addUnit !== selectedInventoryItem.unit ? (
+            <p className="text-xs text-muted">
+              Equals{" "}
+              {formatQuantity(
+                Math.round(
+                  toInventoryBaseQuantity(
+                    Number(addQty),
+                    addUnit,
+                    selectedInventoryItem,
+                  ) * 100,
+                ) / 100,
+                selectedInventoryItem.unit,
+              )}
+            </p>
+          ) : null}
 
           {addError ? (
             <p className="text-sm font-medium text-error">{addError}</p>

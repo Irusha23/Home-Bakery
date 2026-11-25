@@ -9,7 +9,7 @@ export function getCollectionTargetMs(
     collectionTime && /^\d{2}:\d{2}/.test(collectionTime)
       ? collectionTime.slice(0, 5)
       : "23:59"
-  const ms = new Date(`${collectionDate}T${timePart}:00`).getTime()
+  const ms = new Date(`${collectionDate}T${timePart}:00+05:30`).getTime()
   return Number.isFinite(ms) ? ms : null
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react"
+import { useEffect, useId, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
@@ -29,6 +29,7 @@ export default function Dialog({
   onClose,
 }: DialogProps) {
   const reducedMotion = useReducedMotion()
+  const titleId = useId()
 
   useBodyScrollLock(open)
   useBackHandler(onClose, open)
@@ -66,7 +67,7 @@ export default function Dialog({
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="dialog-title"
+            aria-labelledby={titleId}
             variants={reducedMotion ? undefined : dialogVariants}
             initial={reducedMotion ? { opacity: 0 } : "initial"}
             animate={reducedMotion ? { opacity: 1 } : "animate"}
@@ -79,7 +80,7 @@ export default function Dialog({
             <div className="flex shrink-0 items-start justify-between gap-4">
               <div>
                 <div
-                  id="dialog-title"
+                  id={titleId}
                   className="text-xl font-semibold tracking-tight text-cocoa"
                 >
                   {title}

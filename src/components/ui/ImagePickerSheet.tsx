@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react"
+import { Capacitor } from "@capacitor/core"
+import {
+  Camera as NativeCamera,
+  CameraResultType,
+  CameraSource,
+} from "@capacitor/camera"
 import { Camera, Check, ImagePlus, Trash2, Upload } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import {
   getImagePresetsByCategory,
   type ImagePresetCategory,
 } from "../../lib/imageLibrary"
-import { compressImageFile } from "../../lib/imageUpload"
+import { compressImageDataUrl, compressImageFile } from "../../lib/imageUpload"
 import { defaultMediaStore } from "../../lib/mediaStore"
 import {
   REDUCED_MOTION_TRANSITION,
@@ -141,14 +147,15 @@ export function ImagePickerSheet({
 
   const presets = getImagePresetsByCategory(category)
 
+  const maxDimension = photoPreset === "reference" ? 720 : 360
+  const maxBytes = photoPreset === "reference" ? 240 * 1024 : 120 * 1024
+
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ""
     if (!file) return
     setUploadError("")
     setCompressing(true)
-    const maxDimension = photoPreset === "reference" ? 720 : 360
-    const maxBytes = photoPreset === "reference" ? 240 * 1024 : 120 * 1024
     const result = await compressImageFile(file, maxDimension, maxBytes)
     if (!result.ok) {
       setCompressing(false)
@@ -158,6 +165,46 @@ export function ImagePickerSheet({
     const storedRef = await defaultMediaStore.saveMedia(result.dataUrl)
     setCompressing(false)
     onSelect(storedRef)
+  }
+
+  const handleNativePick = async (source: CameraSource) => {
+    if (compressing) return
+    setUploadError("")
+    setCompressing(true)
+    try {
+      const photo = await NativeCamera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source,
+      })
+      if (!photo.dataUrl) {
+        setCompressing(false)
+        setUploadError("No photo was returned.")
+        return
+      }
+      const result = await compressImageDataUrl(
+        photo.dataUrl,
+        maxDimension,
+        maxBytes,
+      )
+      if (!result.ok) {
+        setCompressing(false)
+        setUploadError(result.error)
+        return
+      }
+      const storedRef = await defaultMediaStore.saveMedia(result.dataUrl)
+      setCompressing(false)
+      onSelect(storedRef)
+    } catch (caught) {
+      setCompressing(false)
+      const message =
+        caught instanceof Error ? caught.message.toLowerCase() : ""
+      if (message.includes("cancel")) return
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not load photo.",
+      )
+    }
   }
 
   return (
@@ -264,7 +311,13 @@ export function ImagePickerSheet({
                 <button
                   type="button"
                   disabled={compressing}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (Capacitor.isNativePlatform()) {
+                      void handleNativePick(CameraSource.Photos)
+                    } else {
+                      fileInputRef.current?.click()
+                    }
+                  }}
                   className="flex w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-sage-border bg-ivory/70 px-4 py-6 text-center transition hover:bg-sage-soft/50 active:scale-[0.99] disabled:opacity-60"
                 >
                   <span className="inline-flex size-11 items-center justify-center rounded-full bg-white text-sage-dark shadow-subtle">
@@ -277,7 +330,13 @@ export function ImagePickerSheet({
                 <button
                   type="button"
                   disabled={compressing}
-                  onClick={() => cameraInputRef.current?.click()}
+                  onClick={() => {
+                    if (Capacitor.isNativePlatform()) {
+                      void handleNativePick(CameraSource.Camera)
+                    } else {
+                      cameraInputRef.current?.click()
+                    }
+                  }}
                   className="flex w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-sage-border bg-ivory/70 px-4 py-6 text-center transition hover:bg-sage-soft/50 active:scale-[0.99] disabled:opacity-60"
                 >
                   <span className="inline-flex size-11 items-center justify-center rounded-full bg-white text-sage-dark shadow-subtle">

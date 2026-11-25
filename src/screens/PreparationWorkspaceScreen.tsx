@@ -21,6 +21,7 @@ import { useToast } from "../components/ui/Toast"
 import { getBakeTargetMs } from "../lib/countdown"
 import {
   formatDate,
+  formatDualQuantity,
   formatLkr,
   formatQuantity,
   formatTime,
@@ -300,7 +301,16 @@ export function PreparationProductScreen({
                           </span>
                         </div>
                         <span className="shrink-0 text-xs font-semibold tabular-nums text-muted">
-                          {formatQuantity(usage.plannedQuantity, usage.unit)}
+                          {(() => {
+                            const dual = formatDualQuantity(
+                              usage.plannedQuantity,
+                              usage.unit,
+                              invItem,
+                            )
+                            return dual.secondary
+                              ? `${dual.primary} (${dual.secondary})`
+                              : dual.primary
+                          })()}
                         </span>
                       </div>
                     )
@@ -399,7 +409,16 @@ export function PreparationProductScreen({
                               {usage.name}
                             </div>
                             <div className="text-xs text-muted">
-                              {formatQuantity(usage.plannedQuantity, usage.unit)}
+                              {(() => {
+                                const dual = formatDualQuantity(
+                                  usage.plannedQuantity,
+                                  usage.unit,
+                                  invItem,
+                                )
+                                return dual.secondary
+                                  ? `${dual.primary} (${dual.secondary})`
+                                  : dual.primary
+                              })()}
                             </div>
                           </div>
                         </div>

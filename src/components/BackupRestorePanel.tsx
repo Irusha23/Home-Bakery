@@ -29,7 +29,10 @@ type BackupRestorePanelProps = {
 
   recoverySource?: RecoverySource
 
-  onRestore: (raw: string, recoverySource?: RecoverySource) => RestoreResult
+  onRestore: (
+    raw: string,
+    recoverySource?: RecoverySource,
+  ) => RestoreResult | Promise<RestoreResult>
 
   onExportComplete?: (exportedAt: string) => void
 }
@@ -59,6 +62,7 @@ export default function BackupRestorePanel({
   )
   const [unlockPassword, setUnlockPassword] = useState("")
   const [unlocking, setUnlocking] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
   const [selectedBackup, setSelectedBackup] = useState<{
     raw: string
@@ -197,19 +201,32 @@ export default function BackupRestorePanel({
     }
   }
 
-  const handleRestore = () => {
-    if (!selectedBackup) return
+  const handleRestore = async () => {
+    if (!selectedBackup || restoring) return
+    setError(null)
+    setMessage(null)
+    setRestoring(true)
+    try {
+      const result = await onRestore(selectedBackup.raw, recoverySource)
 
-    const result = onRestore(selectedBackup.raw, recoverySource)
-
-    if (result.ok) {
-      setSelectedBackup(null)
-      setMessage("Backup restored and saved successfully.")
-      setError(null)
-      if (fileInput.current) fileInput.current.value = ""
-    } else {
+      if (result.ok) {
+        setSelectedBackup(null)
+        setMessage("Backup restored and saved successfully.")
+        setError(null)
+        if (fileInput.current) fileInput.current.value = ""
+      } else {
+        setMessage(null)
+        setError(result.error)
+      }
+    } catch (caught) {
       setMessage(null)
-      setError(result.error)
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The selected backup could not be restored.",
+      )
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -307,9 +324,13 @@ export default function BackupRestorePanel({
           ref={fileInput}
           id="backup-file"
           type="file"
-          accept="application/json,.json"
+          accept=".json,application/json,application/octet-stream,text/plain,*/*"
           className="block min-h-touch w-full rounded-control border border-warm-border bg-ivory px-3 py-2 text-sm text-cocoa file:mr-3 file:rounded-control file:border-0 file:bg-sage-soft file:px-3 file:py-2 file:font-semibold file:text-sage-dark focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30"
-          onChange={(event) => void handleFile(event.currentTarget.files?.[0])}
+          onChange={(event) => {
+            const picked = event.currentTarget.files?.[0]
+            event.currentTarget.value = ""
+            void handleFile(picked)
+          }}
         />
       </div>
 
@@ -368,9 +389,15 @@ export default function BackupRestorePanel({
             Frozen snapshots will be kept exactly as supplied by the backup.
           </p>
           <div className="mt-3 flex flex-wrap gap-3">
-            <Button onClick={handleRestore}>Confirm restore</Button>
+            <Button
+              disabled={restoring}
+              onClick={() => void handleRestore()}
+            >
+              {restoring ? "Restoring..." : "Confirm restore"}
+            </Button>
             <Button
               variant="secondary"
+              disabled={restoring}
               onClick={() => {
                 setSelectedBackup(null)
                 if (fileInput.current) fileInput.current.value = ""

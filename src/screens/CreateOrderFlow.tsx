@@ -16,7 +16,7 @@ import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import TextAreaField from "../components/ui/TextAreaField"
 import { useToast } from "../components/ui/Toast"
-import { formatLkr } from "../lib/format"
+import { formatLkr, getColomboTodayIso, shiftColomboIsoDate } from "../lib/format"
 import { createId } from "../lib/id"
 import { PAYMENT_METHOD_OPTIONS, isValidMoneyAmount } from "../lib/financials"
 import { calculateCostSnapshot, getRecipeUnitIssues } from "../lib/orders"
@@ -41,9 +41,7 @@ type FormLine = {
 }
 
 function shiftLocalDate(days: number) {
-  const date = new Date()
-  date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return shiftColomboIsoDate(days)
 }
 
 type CreateOrderFlowProps = {
@@ -342,7 +340,12 @@ export default function CreateOrderFlow({
       return
     }
     const resolvedReference = order?.reference ?? makeReference(state.orders)
-    dispatch({ type: "UPSERT_DRAFT", payload: draft })
+    const draftSaved = dispatchIfAccepted({ type: "UPSERT_DRAFT", payload: draft })
+    if (!draftSaved) {
+      setShowConfirmDialog(false)
+      setError("Could not save order draft. Check item details and try again.")
+      return
+    }
     const confirmed = dispatchIfAccepted({
       type: "CONFIRM_ORDER",
       orderId: draftId,
@@ -366,7 +369,7 @@ export default function CreateOrderFlow({
         orderReference: resolvedReference,
         payment: {
           id: createId("pay"),
-          date: new Date().toISOString().slice(0, 10),
+          date: getColomboTodayIso(),
           amount: Number(depositAmount),
           method:
             depositMethod === "Other"

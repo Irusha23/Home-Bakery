@@ -249,6 +249,7 @@ describe("financial reporting selectors", () => {
     })
 
     const credit = createTestOrder("credit", [], {
+      status: "Confirmed",
       agreedPrice: 5000,
 
       payments: [
@@ -937,5 +938,53 @@ describe("financial reporting selectors", () => {
     expect(overflow).toMatchObject({ totalLkr: null, complete: false })
 
     expect(overflow.issues.join(" ")).toContain("safe whole-LKR range")
+  })
+
+  it("excludes Draft orders from receivables, non-Completed orders with stale collectedAt, and duplicate payment IDs", () => {
+    const draft = createTestOrder("draft-quote", [], {
+      status: "Draft",
+      agreedPrice: 12000,
+    })
+    const staleCancelled = createTestOrder("cancelled-stale", [], {
+      status: "Cancelled",
+      agreedPrice: 9000,
+      collectedAt: "2026-10-15T10:00:00.000Z",
+    })
+    const dupOrderA = createTestOrder("dup-a", [], {
+      status: "Confirmed",
+      agreedPrice: 5000,
+      payments: [
+        { id: "shared-pay-id", date: "2026-10-20", amount: 2500, method: "Cash" },
+      ],
+    })
+    const dupOrderB = createTestOrder("dup-b", [], {
+      status: "Confirmed",
+      agreedPrice: 5000,
+      payments: [
+        { id: "shared-pay-id", date: "2026-10-20", amount: 2500, method: "Cash" },
+      ],
+    })
+
+    const balances = selectCustomerBalances([draft, staleCancelled], [])
+    expect(balances).toMatchObject({
+      outstandingLkr: 0,
+      receivableOrderCount: 0,
+      customerCreditLkr: 0,
+      creditOrderCount: 0,
+      complete: true,
+    })
+
+    const collected = selectCollectedSales([staleCancelled], period)
+    expect(collected.collectedOrderCount).toBe(0)
+    expect(collected.recognizedRevenueLkr).toBe(0)
+
+    const cash = selectCustomerCashMovement(
+      [dupOrderA, dupOrderB],
+      [],
+      period,
+    )
+    expect(cash.paymentsReceivedLkr).toBe(2500)
+    expect(cash.paymentCount).toBe(1)
+    expect(cash.complete).toBe(false)
   })
 })

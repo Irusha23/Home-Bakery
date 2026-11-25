@@ -8,6 +8,7 @@ import {
   type StorageLike,
 } from "../state/persistence"
 import { demoData } from "../test/demoFixture"
+import type { SqliteEngine } from "./engine"
 import { NodeSqliteEngine } from "./engines/nodeSqliteEngine"
 import { bootstrapAppRepository } from "./legacyImport"
 import { migration0001InitialSchema } from "./migrations/0001_initial_schema"
@@ -361,8 +362,8 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
     )
 
     const upgrade = await runMigrations(engine, ALL_MIGRATIONS)
-    expect(upgrade.appliedVersions).toEqual([2])
-    expect(upgrade.currentVersion).toBe(2)
+    expect(upgrade.appliedVersions).toEqual([2, 3])
+    expect(upgrade.currentVersion).toBe(3)
 
     const loadedV1 = await repo.loadAppData()
     expect(loadedV1?.orders[0].id).toBe("v1-order")
@@ -370,8 +371,77 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
 
     const withPhoto = migrateState(createStarterData())
     withPhoto.orders[0].referencePhoto = "media:img-ref-123"
+    withPhoto.inventory[0].gramsPerTsp = 3.2
+    withPhoto.inventory[0].trackStock = false
     await repo.saveAppData(withPhoto)
     const reloaded = await repo.loadAppData()
     expect(reloaded?.orders[0].referencePhoto).toBe("media:img-ref-123")
+    expect(reloaded?.inventory[0].gramsPerTsp).toBe(3.2)
+    expect(reloaded?.inventory[0].trackStock).toBe(false)
+  })
+
+  it("persists mlPerTsp, tsp/cup purchases, and optional catalog-only ingredients across SQLite reloads", async () => {
+    const { repo } = createRepo()
+    await repo.init()
+    const state = migrateState(createEmptyAppData())
+    state.inventory.push({
+      inventoryId: "vanilla-ext",
+      name: "Vanilla essence",
+      physical: 0,
+      unit: "ml",
+      category: "ingredient",
+      averageUnitCost: 3.5,
+      mlPerTsp: 4.5,
+      trackStock: false,
+    })
+    state.purchases.push({
+      id: "pur-cup-1",
+      inventoryId: "vanilla-ext",
+      purchasedQuantity: 2,
+      purchasedUnit: "cup",
+      usableQuantity: 2,
+      usableUnit: "cup",
+      usableBaseQuantity: 500,
+      totalPrice: 1750,
+      date: "2026-11-25",
+      note: "Bottle",
+      createdAt: "2026-11-25T09:00:00.000Z",
+    })
+    await repo.saveAppData(state)
+    const loaded = await repo.loadAppData()
+    expect(loaded?.inventory[0]).toMatchObject({
+      inventoryId: "vanilla-ext",
+      mlPerTsp: 4.5,
+      trackStock: false,
+    })
+    expect(loaded?.purchases[0]).toMatchObject({
+      purchasedUnit: "cup",
+      usableBaseQuantity: 500,
+    })
+  })
+
+  it("supports batched saveAppData via runBatch and rolls back if any batch statement fails", async () => {
+    const { engine } = createRepo()
+    const batchSpy = vi.fn(async (statements: readonly { sql: string; params?: readonly (string | number | null)[] }[]) => {
+      for (const stmt of statements) {
+        await engine.run(stmt.sql, stmt.params)
+      }
+    })
+    ;(engine as SqliteEngine).runBatch = batchSpy
+
+    const repo = new SqliteAppRepository(engine)
+    await repo.init()
+
+    const starter = migrateState(createStarterData())
+    await repo.saveAppData(starter)
+    expect(batchSpy).toHaveBeenCalledTimes(1)
+    expect((await repo.loadAppData())?.orders[0].id).toBe(starter.orders[0].id)
+
+    const invalid = migrateState(createStarterData())
+    invalid.inventory[0].physical = -5
+    await expect(repo.saveAppData(invalid)).rejects.toThrow()
+    expect((await repo.loadAppData())?.inventory[0].physical).toBe(
+      starter.inventory[0].physical,
+    )
   })
 })

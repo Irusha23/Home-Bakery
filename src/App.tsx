@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Check } from "lucide-react"
+import { Check, X } from "lucide-react"
 import { MotionConfig } from "motion/react"
 import AppShell from "./components/AppShell"
 import ErrorBoundary from "./components/ErrorBoundary"
@@ -36,7 +36,7 @@ import SettingsScreen from "./screens/SettingsScreen"
 import type { StarterAction, TabId } from "./types"
 
 function AppContent() {
-  const { state } = useAppState()
+  const { state, repository } = useAppState()
   const { showToast } = useToast()
   const { activeTab, starterAction, switchTab, consumeStarterAction } =
     useNavigationStack("today")
@@ -44,14 +44,42 @@ function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [focusedScreen, setFocusedScreen] = useState(false)
   const [orderIntent, setOrderIntent] = useState<string | undefined>()
+  const [preparationIntent, setPreparationIntent] = useState<string | undefined>()
   const [orderReturnTab, setOrderReturnTab] = useState<TabId | null>(null)
   const [notifPrefs, setNotifPrefs] = useState(() =>
     loadNotificationPreferences(),
   )
+  const notifHydratedRef = useRef(false)
+
+  useEffect(() => {
+    if (!repository) {
+      notifHydratedRef.current = true
+      return
+    }
+    let cancelled = false
+    void repository
+      .loadNotificationPrefs()
+      .then((loaded) => {
+        if (cancelled) return
+        if (loaded) {
+          setNotifPrefs(loaded)
+        }
+        notifHydratedRef.current = true
+      })
+      .catch(() => {
+        notifHydratedRef.current = true
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [repository])
 
   useEffect(() => {
     saveNotificationPreferences(notifPrefs)
-  }, [notifPrefs])
+    if (repository && notifHydratedRef.current) {
+      void repository.saveNotificationPrefs(notifPrefs).catch(() => undefined)
+    }
+  }, [notifPrefs, repository])
 
   const allAttentionItems = useMemo(
     () =>
@@ -90,12 +118,40 @@ function AppContent() {
   const openOrder = useCallback(
     (orderId: string) => {
       setNotifPrefs((prev) =>
-        markAllNotificationsRead(prev, [`due-${orderId}`, `payment-${orderId}`]),
+        markAllNotificationsRead(prev, [
+          `due-${orderId}`,
+          `unpaid-${orderId}`,
+          `payment-${orderId}`,
+          `shortage-${orderId}`,
+        ]),
+      )
+      if (activeTab !== "orders") {
+        setOrderReturnTab(activeTab)
+      }
+      setPreparationIntent(undefined)
+      setOrderIntent(orderId)
+      setFocusedScreen(true)
+      switchTab("orders")
+      window.scrollTo(0, 0)
+    },
+    [activeTab, switchTab],
+  )
+
+  const openPreparation = useCallback(
+    (orderId: string, preparationId: string) => {
+      setNotifPrefs((prev) =>
+        markAllNotificationsRead(prev, [
+          `due-${orderId}`,
+          `unpaid-${orderId}`,
+          `payment-${orderId}`,
+          `shortage-${orderId}`,
+        ]),
       )
       if (activeTab !== "orders") {
         setOrderReturnTab(activeTab)
       }
       setOrderIntent(orderId)
+      setPreparationIntent(preparationId)
       setFocusedScreen(true)
       switchTab("orders")
       window.scrollTo(0, 0)
@@ -113,6 +169,7 @@ function AppContent() {
 
   const consumeOrderIntent = useCallback(() => {
     setOrderIntent(undefined)
+    setPreparationIntent(undefined)
   }, [])
 
   const lastBackPressRef = useRef(0)
@@ -153,6 +210,7 @@ function AppContent() {
           onOpenUpdates={() => setIsUpdatesOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenOrder={openOrder}
+          onStartPreparation={openPreparation}
           unreadAlertCount={unreadAttentionCount}
         />
       )
@@ -162,6 +220,7 @@ function AppContent() {
         <OrdersScreen
           starterAction={starterAction}
           initialOrderId={orderIntent}
+          initialPreparationId={preparationIntent}
           onConsumeOrderIntent={consumeOrderIntent}
           onReturnFromIntent={orderReturnTab ? handleOrderBackToOrigin : undefined}
           onConsumeStarterAction={consumeStarterAction}
@@ -339,21 +398,45 @@ function AppContent() {
                             </p>
                           </button>
 
-                          {!isRead ? (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {!isRead ? (
+                              <button
+                                type="button"
+                                aria-label={`Mark "${item.title}" as read`}
+                                title="Mark as read"
+                                onClick={() =>
+                                  setNotifPrefs((prev) =>
+                                    markNotificationRead(prev, item.id),
+                                  )
+                                }
+                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-warm-border/80 bg-white/80 text-muted transition hover:border-sage-border hover:text-cocoa active:scale-button"
+                              >
+                                <Check aria-hidden="true" size={14} />
+                              </button>
+                            ) : null}
                             <button
                               type="button"
-                              aria-label={`Mark "${item.title}" as read`}
-                              title="Mark as read"
-                              onClick={() =>
+                              aria-label={`Dismiss "${item.title}"`}
+                              title="Dismiss"
+                              onClick={() => {
                                 setNotifPrefs((prev) =>
-                                  markNotificationRead(prev, item.id),
+                                  dismissNotification(prev, item.id),
                                 )
-                              }
-                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-warm-border/80 bg-white/80 text-muted transition hover:border-sage-border hover:text-cocoa active:scale-button"
+                                showToast({
+                                  message: "Reminder cleared",
+                                  tone: "info",
+                                  actionLabel: "Undo",
+                                  onAction: () =>
+                                    setNotifPrefs((prev) =>
+                                      restoreNotification(prev, item.id),
+                                    ),
+                                })
+                              }}
+                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-warm-border/80 bg-white/80 text-muted transition hover:border-error/40 hover:text-error active:scale-button"
                             >
-                              <Check aria-hidden="true" size={14} />
+                              <X aria-hidden="true" size={14} />
                             </button>
-                          ) : null}
+                          </div>
                         </div>
                       </SwipeableRow>
                     </AnimatedItem>

@@ -12,7 +12,9 @@ import {
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Button from "../ui/Button"
+import { useBackHandler } from "../../lib/backStack"
 import { INSTANT_TRANSITION, IOS_TRANSITION } from "../../lib/motion"
+import { useBodyScrollLock } from "../../lib/useBodyScrollLock"
 
 type KitchenModeOverlayProps = {
   open: boolean
@@ -47,6 +49,20 @@ export default function KitchenModeOverlay({
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [timerRunning, setTimerRunning] = useState(false)
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null)
+
+  useBackHandler(onClose, open)
+  useBodyScrollLock(open)
+
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [open, onClose])
 
   useEffect(() => {
     if (!open) return
@@ -91,15 +107,18 @@ export default function KitchenModeOverlay({
   }, [open])
 
   useEffect(() => {
-    if (!timerRunning || timerSeconds <= 0) {
-      if (timerSeconds <= 0 && timerRunning) setTimerRunning(false)
-      return
-    }
+    if (!timerRunning) return
     const id = window.setInterval(() => {
-      setTimerSeconds((prev) => (prev <= 1 ? 0 : prev - 1))
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          setTimerRunning(false)
+          return 0
+        }
+        return prev - 1
+      })
     }, 1000)
     return () => window.clearInterval(id)
-  }, [timerRunning, timerSeconds])
+  }, [timerRunning])
 
   if (!open) return null
 
@@ -158,7 +177,7 @@ export default function KitchenModeOverlay({
                 setTimerRunning((r) => !r)
               }}
               aria-label={timerRunning ? "Pause timer" : "Start timer"}
-              className="inline-flex size-10 items-center justify-center rounded-full bg-sage text-white"
+              className="inline-flex size-10 items-center justify-center rounded-full bg-white text-cocoa transition hover:bg-white/90 active:scale-button"
             >
               {timerRunning ? (
                 <Pause aria-hidden="true" size={16} />
@@ -217,7 +236,7 @@ export default function KitchenModeOverlay({
                   idx === stepIndex
                     ? "bg-white"
                     : completedSteps.includes(idx)
-                      ? "bg-sage"
+                      ? "bg-success"
                       : "bg-white/25"
                 }`}
               />

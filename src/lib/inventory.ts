@@ -12,6 +12,59 @@ import type {
   Unit,
 } from "../types"
 
+export const DEFAULT_GRAMS_PER_TSP = 5
+export const DEFAULT_ML_PER_TSP = 5
+export const DEFAULT_ML_PER_CUP = 250
+
+const CULINARY_TSP_GRAMS_RULES: readonly [RegExp, number][] = [
+  [/\bcocoa\b|\bmatcha\b/i, 2.5],
+  [/\bicing\b|\bpowdered sugar\b|\bconfectioner/i, 3],
+  [/\bflour\b|\bcorn\s?flour\b|\bcorn\s?starch\b|\bstarch\b|\bsemolina\b|\boat|\balmond meal\b/i, 3],
+  [/\bbaking powder\b|\bbaking soda\b|\bbicarbonate\b|\byeast\b|\bgelatin\b|\bcinnamon\b|\bcardamom\b|\bnutmeg\b|\bspice/i, 4],
+  [/\bsugar\b|\bcastor\b|\bcaster\b|\bbrown sugar\b/i, 4],
+  [/\bsalt\b/i, 6],
+]
+
+export function getDefaultGramsPerTsp(name: string): number {
+  const normalized = name.trim()
+  for (const [pattern, grams] of CULINARY_TSP_GRAMS_RULES) {
+    if (pattern.test(normalized)) return grams
+  }
+  return DEFAULT_GRAMS_PER_TSP
+}
+
+export function getEffectiveGramsPerTsp(
+  item?: Pick<InventoryItem, "name" | "unit" | "gramsPerTsp">,
+): number {
+  if (
+    item?.gramsPerTsp !== undefined &&
+    Number.isFinite(item.gramsPerTsp) &&
+    item.gramsPerTsp > 0
+  ) {
+    return item.gramsPerTsp
+  }
+  return item ? getDefaultGramsPerTsp(item.name) : DEFAULT_GRAMS_PER_TSP
+}
+
+export function getEffectiveMlPerTsp(
+  item?: Pick<InventoryItem, "unit" | "mlPerTsp">,
+): number {
+  if (
+    item?.mlPerTsp !== undefined &&
+    Number.isFinite(item.mlPerTsp) &&
+    item.mlPerTsp > 0
+  ) {
+    return item.mlPerTsp
+  }
+  return DEFAULT_ML_PER_TSP
+}
+
+export function isStockTracked(item: InventoryItem): boolean {
+  if (inventoryCategory(item) === "finished") return true
+  if (item.trackStock !== undefined) return Boolean(item.trackStock)
+  return item.physical > 0 || (item.lowStockThreshold ?? 0) > 0
+}
+
 export function inventoryCategory(item: InventoryItem): InventoryCategory {
   if (item.category) return item.category
   if (item.unit === "unit") return "packaging"
@@ -19,19 +72,51 @@ export function inventoryCategory(item: InventoryItem): InventoryCategory {
 }
 
 export function compatibleUnits(unit: BaseUnit): Unit[] {
-  if (unit === "g") return ["g", "kg"]
-  if (unit === "ml") return ["ml", "L"]
+  if (unit === "g") return ["g", "kg", "tsp", "tbsp"]
+  if (unit === "ml") return ["ml", "L", "tsp", "tbsp", "cup"]
   return ["unit"]
 }
 
-export function toBaseQuantity(quantity: number, unit: Unit, base: BaseUnit) {
+export type UnitConversionOptions = {
+  gramsPerTsp?: number
+  mlPerTsp?: number
+}
+
+export function toBaseQuantity(
+  quantity: number,
+  unit: Unit,
+  base: BaseUnit,
+  options?: UnitConversionOptions,
+) {
   if (!Number.isFinite(quantity) || quantity < 0) return Number.NaN
-  const converted =
-    (base === "g" && unit === "kg") || (base === "ml" && unit === "L")
-      ? quantity * 1000
-      : unit === base
-        ? quantity
-        : Number.NaN
+  const gramsPerTsp =
+    options?.gramsPerTsp !== undefined &&
+    Number.isFinite(options.gramsPerTsp) &&
+    options.gramsPerTsp > 0
+      ? options.gramsPerTsp
+      : DEFAULT_GRAMS_PER_TSP
+  const mlPerTsp =
+    options?.mlPerTsp !== undefined &&
+    Number.isFinite(options.mlPerTsp) &&
+    options.mlPerTsp > 0
+      ? options.mlPerTsp
+      : DEFAULT_ML_PER_TSP
+
+  let converted = Number.NaN
+  if (base === "g") {
+    if (unit === "g") converted = quantity
+    else if (unit === "kg") converted = quantity * 1000
+    else if (unit === "tsp") converted = quantity * gramsPerTsp
+    else if (unit === "tbsp") converted = quantity * gramsPerTsp * 3
+  } else if (base === "ml") {
+    if (unit === "ml") converted = quantity
+    else if (unit === "L") converted = quantity * 1000
+    else if (unit === "tsp") converted = quantity * mlPerTsp
+    else if (unit === "tbsp") converted = quantity * mlPerTsp * 3
+    else if (unit === "cup") converted = quantity * DEFAULT_ML_PER_CUP
+  } else if (base === "unit" && unit === "unit") {
+    converted = quantity
+  }
   return Number.isFinite(converted) ? converted : Number.NaN
 }
 
@@ -40,7 +125,41 @@ export function toInventoryBaseQuantity(
   unit: Unit,
   item: InventoryItem,
 ) {
-  return toBaseQuantity(quantity, unit, item.unit)
+  return toBaseQuantity(quantity, unit, item.unit, {
+    gramsPerTsp: getEffectiveGramsPerTsp(item),
+    mlPerTsp: getEffectiveMlPerTsp(item),
+  })
+}
+
+export function fromBaseQuantity(
+  baseQuantity: number,
+  targetUnit: Unit,
+  base: BaseUnit,
+  options?: UnitConversionOptions,
+): number {
+  if (!Number.isFinite(baseQuantity) || baseQuantity < 0) return Number.NaN
+  const factor = toBaseQuantity(1, targetUnit, base, options)
+  if (!Number.isFinite(factor) || factor <= 0) return Number.NaN
+  const converted = baseQuantity / factor
+  return Number.isFinite(converted)
+    ? Math.round(converted * 10000) / 10000
+    : Number.NaN
+}
+
+export function convertInventoryUnitQuantity(
+  quantity: number,
+  fromUnit: Unit,
+  toUnit: Unit,
+  item: Pick<InventoryItem, "name" | "unit" | "gramsPerTsp" | "mlPerTsp">,
+): number {
+  if (fromUnit === toUnit) return quantity
+  const opts: UnitConversionOptions = {
+    gramsPerTsp: getEffectiveGramsPerTsp(item),
+    mlPerTsp: getEffectiveMlPerTsp(item),
+  }
+  const baseQty = toBaseQuantity(quantity, fromUnit, item.unit, opts)
+  if (!Number.isFinite(baseQty)) return Number.NaN
+  return fromBaseQuantity(baseQty, toUnit, item.unit, opts)
 }
 
 export function recipeRequirementBaseQuantity(
@@ -161,7 +280,16 @@ export function selectShoppingRequirements(
     }
   }
 
-  for (const plan of state.extraStockPlans) addPlanSources(state, plan, sources)
+  for (const plan of state.extraStockPlans) {
+    const fulfilledOrActiveBatches = state.extraStockPreparations
+      .filter(
+        (prep) => prep.planId === plan.id && prep.status === "Ready",
+      )
+      .reduce((sum, prep) => sum + prep.plannedBatches, 0)
+    const remainingPlanQty = Math.max(0, plan.quantity - fulfilledOrActiveBatches)
+    if (remainingPlanQty <= 0) continue
+    addPlanSources(state, { ...plan, quantity: remainingPlanQty }, sources)
+  }
 
   const reserved = selectReservedByItem(state)
   return state.inventory

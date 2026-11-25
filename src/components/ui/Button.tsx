@@ -76,6 +76,10 @@ export default function Button({
   const isBlocked = Boolean(disabled || loading)
 
   useEffect(() => {
+    if (!isBlocked) setNudgeCount(0)
+  }, [isBlocked])
+
+  useEffect(() => {
     return () => {
       if (reasonTimerRef.current !== null) {
         window.clearTimeout(reasonTimerRef.current)
@@ -136,23 +140,26 @@ export default function Button({
         reducedMotion || isBlocked ? undefined : { y: -0.5 }
       }
       animate={
-        nudgeCount > 0
+        isBlocked && nudgeCount > 0
           ? reducedMotion
-            ? { opacity: [0.48, 0.72, 0.48] }
-            : { x: [0, -5, 4, -2, 0] }
+            ? { opacity: [disabled ? 0.5 : 0.72, 0.78, disabled ? 0.5 : 1] }
+            : { x: [0, -5, 4, -2, 0], opacity: disabled ? 0.5 : 1 }
           : feedbackState === "error" && !reducedMotion
-            ? { x: [0, -4, 4, -2, 0] }
+            ? { x: [0, -4, 4, -2, 0], opacity: disabled ? 0.5 : 1 }
             : { x: 0, opacity: disabled ? 0.5 : 1 }
       }
+      onAnimationComplete={() => {
+        if (nudgeCount > 0) setNudgeCount(0)
+      }}
       transition={
-        nudgeCount > 0 || feedbackState === "error"
+        isBlocked && nudgeCount > 0 || feedbackState === "error"
           ? SPRING_NUDGE
           : reducedMotion
             ? REDUCED_MOTION_TRANSITION
             : SPRING_CONTROL
       }
       className={`relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-[color,background-color,border-color,box-shadow] duration-200 ease-out focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 ${variantClasses[variant]} ${sizeClasses[size]} ${stateColorOverride} ${
-        disabled ? "cursor-not-allowed opacity-50" : ""
+        disabled ? "cursor-not-allowed" : ""
       } ${fullWidth ? "w-full" : ""} ${className}`.trim()}
       {...props}
     >
@@ -231,6 +238,10 @@ export function IconButton({
   const timerRef = useRef<number | null>(null)
 
   useEffect(() => {
+    if (!disabled) setNudgeCount(0)
+  }, [disabled])
+
+  useEffect(() => {
     return () => {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current)
     }
@@ -266,21 +277,24 @@ export function IconButton({
       whileTap={reducedMotion ? undefined : { scale: disabled ? 0.97 : 0.94 }}
       whileHover={reducedMotion || disabled ? undefined : { scale: 1.03 }}
       animate={
-        nudgeCount > 0
+        disabled && nudgeCount > 0
           ? reducedMotion
-            ? { opacity: [0.48, 0.72, 0.48] }
-            : { x: [0, -4, 3, 0] }
+            ? { opacity: [0.5, 0.75, 0.5] }
+            : { x: [0, -4, 3, 0], opacity: 0.5 }
           : { x: 0, opacity: disabled ? 0.5 : 1 }
       }
+      onAnimationComplete={() => {
+        if (nudgeCount > 0) setNudgeCount(0)
+      }}
       transition={
-        nudgeCount > 0
+        disabled && nudgeCount > 0
           ? SPRING_NUDGE
           : reducedMotion
             ? REDUCED_MOTION_TRANSITION
             : SPRING_MICRO
       }
       className={`relative inline-flex size-touch shrink-0 items-center justify-center rounded-full border border-warm-border bg-white text-cocoa shadow-subtle transition-[color,background-color,border-color,box-shadow] duration-200 ease-out hover:bg-sage-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30 ${
-        disabled ? "cursor-not-allowed opacity-50" : ""
+        disabled ? "cursor-not-allowed" : ""
       } ${className}`.trim()}
       {...props}
     >

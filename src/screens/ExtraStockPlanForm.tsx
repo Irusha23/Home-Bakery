@@ -22,7 +22,7 @@ export default function ExtraStockPlanForm({
   onCancel,
   onComplete,
 }: ExtraStockPlanFormProps) {
-  const { state, dispatch } = useAppState()
+  const { state, dispatchIfAccepted } = useAppState()
   const initialProduct =
     state.products.find((product) => product.id === plan?.productId) ??
     state.products[0]
@@ -83,7 +83,7 @@ export default function ExtraStockPlanForm({
       return
     }
     const now = new Date().toISOString()
-    dispatch({
+    const saved = dispatchIfAccepted({
       type: "UPSERT_EXTRA_STOCK_PLAN",
       plan: {
         id: plan?.id ?? createId("extra-plan"),
@@ -97,6 +97,10 @@ export default function ExtraStockPlanForm({
         updatedAt: now,
       },
     })
+    if (!saved) {
+      setError("Could not save plan. Check product variant, quantity, and best-before date.")
+      return
+    }
     onComplete()
   }
 

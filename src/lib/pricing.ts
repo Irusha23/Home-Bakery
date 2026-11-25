@@ -87,6 +87,7 @@ export type RecipeCostBreakdown = {
   totalCost: number
   unpricedItems: string[]
   hasLivePricing: boolean
+  hasCompletePricing: boolean
 }
 
 export function roundCurrencyToStep(
@@ -118,7 +119,7 @@ export function calculateSuggestedPrice(
     }
     const raw = totalCost / (1 - input.marginPercent / 100)
     const rawRounded = Math.round(raw * 100) / 100
-    const suggestedPrice = roundCurrencyToStep(raw, input.roundingStep)
+    const suggestedPrice = roundCurrencyToStep(rawRounded, input.roundingStep)
     return {
       valid: true,
       rawSuggestedPrice: rawRounded,
@@ -141,7 +142,7 @@ export function calculateSuggestedPrice(
   }
   const raw = totalCost * (1 + input.markupPercent / 100)
   const rawRounded = Math.round(raw * 100) / 100
-  const suggestedPrice = roundCurrencyToStep(raw, input.roundingStep)
+  const suggestedPrice = roundCurrencyToStep(rawRounded, input.roundingStep)
   return {
     valid: true,
     rawSuggestedPrice: rawRounded,
@@ -227,6 +228,7 @@ export function estimateRecipeMaterialCost(
     totalCost: ingredientsCost + packagingCost + labourCost,
     unpricedItems,
     hasLivePricing: pricedCount > 0,
+    hasCompletePricing: unpricedItems.length === 0,
   }
 }
 
