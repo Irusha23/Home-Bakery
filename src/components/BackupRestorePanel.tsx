@@ -203,6 +203,8 @@ export default function BackupRestorePanel({
 
   const handleRestore = async () => {
     if (!selectedBackup || restoring) return
+    setError(null)
+    setMessage(null)
     setRestoring(true)
     try {
       const result = await onRestore(selectedBackup.raw, recoverySource)
@@ -216,6 +218,13 @@ export default function BackupRestorePanel({
         setMessage(null)
         setError(result.error)
       }
+    } catch (caught) {
+      setMessage(null)
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The selected backup could not be restored.",
+      )
     } finally {
       setRestoring(false)
     }
@@ -315,9 +324,13 @@ export default function BackupRestorePanel({
           ref={fileInput}
           id="backup-file"
           type="file"
-          accept="application/json,.json"
+          accept=".json,application/json,application/octet-stream,text/plain,*/*"
           className="block min-h-touch w-full rounded-control border border-warm-border bg-ivory px-3 py-2 text-sm text-cocoa file:mr-3 file:rounded-control file:border-0 file:bg-sage-soft file:px-3 file:py-2 file:font-semibold file:text-sage-dark focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30"
-          onChange={(event) => void handleFile(event.currentTarget.files?.[0])}
+          onChange={(event) => {
+            const picked = event.currentTarget.files?.[0]
+            event.currentTarget.value = ""
+            void handleFile(picked)
+          }}
         />
       </div>
 

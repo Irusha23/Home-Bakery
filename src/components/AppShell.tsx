@@ -1,4 +1,6 @@
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
+import { Keyboard } from "@capacitor/keyboard"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { INSTANT_TRANSITION, TAB_TRANSITION } from "../lib/motion"
 import type { TabId } from "../types"
@@ -18,18 +20,50 @@ export default function AppShell({
   onNavigate,
 }: AppShellProps) {
   const reducedMotion = useReducedMotion()
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let mounted = true
+    const handles: PluginListenerHandle[] = []
+    const register = async () => {
+      handles.push(
+        await Keyboard.addListener("keyboardWillShow", () => {
+          if (mounted) setKeyboardOpen(true)
+        }),
+        await Keyboard.addListener("keyboardDidShow", () => {
+          if (mounted) setKeyboardOpen(true)
+        }),
+        await Keyboard.addListener("keyboardWillHide", () => {
+          if (mounted) setKeyboardOpen(false)
+        }),
+        await Keyboard.addListener("keyboardDidHide", () => {
+          if (mounted) setKeyboardOpen(false)
+        }),
+      )
+    }
+    void register().catch(() => undefined)
+    return () => {
+      mounted = false
+      for (const handle of handles) {
+        void handle.remove()
+      }
+    }
+  }, [])
+
+  const navHidden = hideNavigation || keyboardOpen
 
   return (
     <div className="mobile-shell min-h-screen bg-ivory text-cocoa">
       <main
         className={`screen-safe-top min-h-screen w-full overflow-x-clip px-5 ${
-          hideNavigation ? "pb-6" : "screen-bottom-padding"
+          navHidden ? "pb-safe-bottom" : "screen-bottom-padding"
         }`}
       >
         {children}
       </main>
       <AnimatePresence initial={false}>
-        {!hideNavigation ? (
+        {!navHidden ? (
           <motion.div
             key="bottom-nav-wrapper"
             initial={reducedMotion ? { opacity: 0 } : { y: 80, opacity: 0 }}

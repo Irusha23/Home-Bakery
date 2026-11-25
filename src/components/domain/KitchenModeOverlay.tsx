@@ -12,7 +12,9 @@ import {
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Button from "../ui/Button"
+import { useBackHandler } from "../../lib/backStack"
 import { INSTANT_TRANSITION, IOS_TRANSITION } from "../../lib/motion"
+import { useBodyScrollLock } from "../../lib/useBodyScrollLock"
 
 type KitchenModeOverlayProps = {
   open: boolean
@@ -47,6 +49,20 @@ export default function KitchenModeOverlay({
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [timerRunning, setTimerRunning] = useState(false)
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null)
+
+  useBackHandler(onClose, open)
+  useBodyScrollLock(open)
+
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [open, onClose])
 
   useEffect(() => {
     if (!open) return

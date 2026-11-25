@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { ArrowLeft } from "lucide-react"
+import { useIsPresent } from "motion/react"
 import { useBackHandler } from "../lib/backStack"
 import { IconButton } from "./ui/Button"
 
@@ -24,7 +25,8 @@ export default function ScreenHeader({
   backLabel = "Go back",
   compact = false,
 }: ScreenHeaderProps) {
-  useBackHandler(onBack, Boolean(onBack))
+  const isPresent = useIsPresent()
+  useBackHandler(onBack, Boolean(onBack) && isPresent)
 
   return (
     <header

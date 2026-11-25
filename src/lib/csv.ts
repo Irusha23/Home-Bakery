@@ -1,4 +1,6 @@
 import type { AppData } from "../types"
+import { shareOrDownloadBackupFile } from "./backupShare"
+import { netRetainedPayments } from "./financials"
 
 function escapeCsvCell(value: unknown): string {
   const raw = value === null || value === undefined ? "" : String(value)
@@ -31,7 +33,7 @@ export function buildOrdersCsv(state: AppData): string {
     "EstimatedCostLKR",
   ]
   const rows = state.orders.map((order) => {
-    const paid = order.payments.reduce((sum, p) => sum + p.amount, 0)
+    const paid = netRetainedPayments(order, state.refunds)
     return [
       order.reference,
       order.customerName,
@@ -94,14 +96,17 @@ export function buildExpensesCsv(state: AppData): string {
   return toCsv(headers, rows)
 }
 
-export function downloadCsvFile(filename: string, csvContent: string) {
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.setAttribute("download", filename)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+export async function downloadCsvFile(
+  filename: string,
+  csvContent: string,
+  title = "Udeni's Specials CSV Export",
+) {
+  return shareOrDownloadBackupFile({
+    filename,
+    content: csvContent,
+    title,
+    text: "Udeni's Specials bakery CSV report.",
+    mimeType: "text/csv",
+    dialogTitle: "Save or share CSV",
+  })
 }

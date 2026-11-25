@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react"
+import { Capacitor } from "@capacitor/core"
+import { Share } from "@capacitor/share"
 import {
   BellOff,
   Download,
   RefreshCw,
   RotateCcw,
   Save,
+  Share2,
   ShieldAlert,
 } from "lucide-react"
 import BackupRestorePanel from "../components/BackupRestorePanel"
@@ -474,15 +477,54 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                   {updateResult.notes}
                 </p>
               ) : null}
-              <a
-                href={updateResult.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-touch items-center justify-center gap-2 rounded-control bg-sage px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
-              >
-                <Download aria-hidden="true" size={16} />
-                Download updated APK
-              </a>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={updateResult.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => {
+                    if (Capacitor.isNativePlatform()) {
+                      event.preventDefault()
+                      window.open(
+                        updateResult.downloadUrl,
+                        "_system",
+                        "noopener,noreferrer",
+                      )
+                    }
+                  }}
+                  className="inline-flex min-h-touch items-center justify-center gap-2 rounded-control bg-sage px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+                >
+                  <Download aria-hidden="true" size={16} />
+                  Download updated APK
+                </a>
+                <Button
+                  variant="secondary"
+                  leadingIcon={<Share2 aria-hidden="true" size={16} />}
+                  onClick={() => {
+                    const shareUrl = updateResult.downloadUrl
+                    if (Capacitor.isNativePlatform()) {
+                      void Share.share({
+                        title: `Udeni's Specials v${updateResult.latestVersion}`,
+                        text: `Download Udeni's Specials v${updateResult.latestVersion} APK`,
+                        url: shareUrl,
+                        dialogTitle: "Open or share update link",
+                      }).catch(() => undefined)
+                    } else if (navigator.clipboard?.writeText) {
+                      void navigator.clipboard
+                        .writeText(shareUrl)
+                        .then(() =>
+                          showToast({
+                            message: "Update link copied",
+                            tone: "info",
+                          }),
+                        )
+                        .catch(() => undefined)
+                    }
+                  }}
+                >
+                  Share / copy link
+                </Button>
+              </div>
             </>
           ) : (
             <p className="text-xs leading-relaxed text-muted">

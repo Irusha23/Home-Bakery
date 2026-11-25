@@ -287,22 +287,53 @@ export default function MoneyScreen({
     [orderProfits],
   )
 
-  const handleExportCsv = (kind: "orders" | "purchases" | "expenses") => {
-    if (kind === "orders") {
-      downloadCsvFile(`udenis-orders-${monthKey}.csv`, buildOrdersCsv(state))
-      showToast({ message: "Orders CSV downloaded", tone: "success" })
-    } else if (kind === "purchases") {
-      downloadCsvFile(
-        `udenis-purchases-${monthKey}.csv`,
-        buildPurchasesCsv(state),
+  const handleExportCsv = async (kind: "orders" | "purchases" | "expenses") => {
+    const config =
+      kind === "orders"
+        ? {
+            filename: `udenis-orders-${monthKey}.csv`,
+            content: buildOrdersCsv(state),
+            title: "Orders CSV",
+            label: "Orders",
+          }
+        : kind === "purchases"
+          ? {
+              filename: `udenis-purchases-${monthKey}.csv`,
+              content: buildPurchasesCsv(state),
+              title: "Purchases CSV",
+              label: "Purchases",
+            }
+          : {
+              filename: `udenis-expenses-${monthKey}.csv`,
+              content: buildExpensesCsv(state),
+              title: "Expenses CSV",
+              label: "Expenses",
+            }
+    try {
+      const result = await downloadCsvFile(
+        config.filename,
+        config.content,
+        config.title,
       )
-      showToast({ message: "Purchases CSV downloaded", tone: "success" })
-    } else {
-      downloadCsvFile(
-        `udenis-expenses-${monthKey}.csv`,
-        buildExpensesCsv(state),
-      )
-      showToast({ message: "Expenses CSV downloaded", tone: "success" })
+      if (result.cancelled) {
+        showToast({ message: `${config.label} export cancelled`, tone: "info" })
+        return
+      }
+      showToast({
+        message:
+          result.method === "share"
+            ? `${config.label} CSV ready to save or share`
+            : `${config.label} CSV downloaded`,
+        tone: "success",
+      })
+    } catch (error) {
+      showToast({
+        message:
+          error instanceof Error
+            ? error.message
+            : `Could not export ${config.label.toLowerCase()} CSV`,
+        tone: "warning",
+      })
     }
   }
 
@@ -541,7 +572,7 @@ export default function MoneyScreen({
               size="compact"
               variant="secondary"
               leadingIcon={<Download aria-hidden="true" size={14} />}
-              onClick={() => handleExportCsv("orders")}
+              onClick={() => void handleExportCsv("orders")}
             >
               Orders CSV
             </Button>
@@ -549,7 +580,7 @@ export default function MoneyScreen({
               size="compact"
               variant="secondary"
               leadingIcon={<Download aria-hidden="true" size={14} />}
-              onClick={() => handleExportCsv("expenses")}
+              onClick={() => void handleExportCsv("expenses")}
             >
               Expenses CSV
             </Button>
@@ -558,7 +589,7 @@ export default function MoneyScreen({
                 size="compact"
                 variant="secondary"
                 leadingIcon={<Download aria-hidden="true" size={14} />}
-                onClick={() => handleExportCsv("purchases")}
+                onClick={() => void handleExportCsv("purchases")}
               >
                 Purchases CSV
               </Button>
