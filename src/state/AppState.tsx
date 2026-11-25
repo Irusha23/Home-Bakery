@@ -22,6 +22,10 @@ import { bootstrapAppRepository } from "../db/legacyImport"
 import type { AppRepository } from "../db/repository"
 import { createId } from "../lib/id"
 import {
+  ingestAppDataMediaForRestore,
+  pruneUnusedMedia,
+} from "../lib/mediaStore"
+import {
   getUsageToBuyQuantity,
   hasUnpurchasedShoppingItems,
   inventoryCategory,
@@ -81,6 +85,7 @@ import type {
 } from "../types"
 import {
   errorMessage,
+  parseBackup,
   persistAppData,
   readPersistedState,
   restoreBackup,
@@ -259,13 +264,29 @@ type AppAction =
       preparationId: string
     }
 
+export type StorageDiagnostics = {
+  backendName: string
+  schemaVersion: number | null
+  fallbackActive: boolean
+}
+
 type AppStateValue = {
   state: AppData
   dispatch: React.Dispatch<AppAction>
   dispatchIfAccepted: (action: AppAction) => boolean
-  restoreBackupFromRaw: (raw: string, source?: RecoverySource) => RestoreResult
+  restoreBackupFromRaw: (
+    raw: string,
+    source?: RecoverySource,
+  ) => Promise<RestoreResult>
   persistenceError: string | null
   retryPersistence: () => void
+  storageInfo: StorageDiagnostics
+  repository: AppRepository | null
+  runIdempotentAction: (
+    key: string,
+    operation: string,
+    action: AppAction,
+  ) => Promise<boolean>
 }
 
 const ADJUSTMENT_MOVEMENT_TYPES = new Set<InventoryMovementType>([
@@ -2869,6 +2890,11 @@ export default function AppStateProvider({
   const [bootstrap, setBootstrap] = useState<PersistenceBootstrap | null>(null)
   const [activeRepository, setActiveRepository] =
     useState<AppRepository | null>(null)
+  const [storageInfo, setStorageInfo] = useState<StorageDiagnostics>({
+    backendName: repositoryRef.current.backendName,
+    schemaVersion: null,
+    fallbackActive: false,
+  })
 
   const runBootstrap = useCallback(async () => {
     const repository = repositoryRef.current!
@@ -2879,17 +2905,36 @@ export default function AppStateProvider({
         getFallbackData: getInitialAppData,
         normalize: migrateState,
       })
+      const schemaVersion = await repository
+        .getSchemaVersion()
+        .catch(() => null)
       setActiveRepository(repository)
+      setStorageInfo({
+        backendName: repository.backendName,
+        schemaVersion,
+        fallbackActive: false,
+      })
       setBootstrap(next)
-    } catch {
-      setActiveRepository(null)
-      setBootstrap(
-        readPersistedState(
-          () => window.localStorage,
-          getInitialAppData(),
-          migrateState,
-        ),
+    } catch (error) {
+      const fallback = readPersistedState(
+        () => window.localStorage,
+        getInitialAppData(),
+        migrateState,
       )
+      setActiveRepository(null)
+      setStorageInfo({
+        backendName: "localstorage-fallback",
+        schemaVersion: null,
+        fallbackActive: true,
+      })
+      if (fallback.kind === "ready") {
+        setBootstrap({
+          ...fallback,
+          persistenceError: `Primary database could not be opened (${errorMessage(error)}). Using temporary browser storage.`,
+        })
+      } else {
+        setBootstrap(fallback)
+      }
     }
   }, [])
 
@@ -2931,31 +2976,69 @@ export default function AppStateProvider({
           }
           setBootstrap(next)
         }}
-        onRestore={(raw, source) => {
-          const result = restoreBackup(() => window.localStorage, raw, source)
-          if (result.ok) {
-            if (repositoryRef.current) {
-              void repositoryRef.current
-                .init()
-                .then(() => repositoryRef.current!.saveAppData(result.data))
-                .then(() => setActiveRepository(repositoryRef.current))
-                .catch(() => undefined)
+        onRestore={async (raw, source) => {
+          let parsed: AppData
+          try {
+            parsed = parseBackup(raw)
+          } catch (error) {
+            return {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "The selected backup could not be validated.",
             }
-            setBootstrap({
-              kind: "ready",
-              data: result.data,
-              source: "current",
-              persistenceEnabled: true,
-            })
           }
-          return result
+
+          const ingested = await ingestAppDataMediaForRestore(parsed)
+          if (repositoryRef.current) {
+            try {
+              await repositoryRef.current.init()
+              await repositoryRef.current.saveAppData(ingested)
+              const schemaVersion = await repositoryRef.current
+                .getSchemaVersion()
+                .catch(() => null)
+              setActiveRepository(repositoryRef.current)
+              setStorageInfo({
+                backendName: repositoryRef.current.backendName,
+                schemaVersion,
+                fallbackActive: false,
+              })
+            } catch (error) {
+              return {
+                ok: false,
+                error: `Could not save restored backup to database: ${errorMessage(error)}`,
+              }
+            }
+          }
+
+          try {
+            persistAppData(() => window.localStorage, ingested)
+          } catch {
+            if (!repositoryRef.current) {
+              return restoreBackup(() => window.localStorage, raw, source)
+            }
+          }
+
+          void pruneUnusedMedia(ingested).catch(() => undefined)
+          setBootstrap({
+            kind: "ready",
+            data: ingested,
+            source: "current",
+            persistenceEnabled: true,
+          })
+          return { ok: true, data: ingested }
         }}
       />
     )
   }
 
   return (
-    <ReadyAppStateProvider bootstrap={bootstrap} repository={activeRepository}>
+    <ReadyAppStateProvider
+      bootstrap={bootstrap}
+      repository={activeRepository}
+      storageInfo={storageInfo}
+    >
       {children}
     </ReadyAppStateProvider>
   )
@@ -2964,24 +3047,32 @@ export default function AppStateProvider({
 function ReadyAppStateProvider({
   bootstrap,
   repository,
+  storageInfo,
   children,
 }: {
   bootstrap: PersistenceReady
   repository: AppRepository | null
+  storageInfo: StorageDiagnostics
   children: ReactNode
 }) {
   const [state, dispatch] = useReducer(reducer, bootstrap.data)
   const latestStateRef = useRef(state)
   latestStateRef.current = state
-  const writeChainRef = useRef<Promise<void>>(Promise.resolve())
+  const isPersistingRef = useRef(false)
+  const pendingSnapshotRef = useRef<AppData | null>(null)
   const lastPersistedStateRef = useRef<AppData>(bootstrap.data)
+  const idempotencyCacheRef = useRef(new Set<string>())
   const [persistenceError, setPersistenceError] = useState(
     bootstrap.persistenceError ?? null,
   )
 
-  const enqueuePersist = useCallback(
-    (snapshot: AppData) => {
-      writeChainRef.current = writeChainRef.current.then(async () => {
+  const flushPendingPersist = useCallback(async () => {
+    if (isPersistingRef.current) return
+    isPersistingRef.current = true
+    try {
+      while (pendingSnapshotRef.current) {
+        const snapshot = pendingSnapshotRef.current
+        pendingSnapshotRef.current = null
         if (repository) {
           try {
             await repository.saveAppData(snapshot)
@@ -2991,52 +3082,106 @@ function ReadyAppStateProvider({
               // Secondary localStorage mirror is best-effort once repository succeeds
             }
             setPersistenceError(null)
-            return
           } catch (error) {
             setPersistenceError(
               `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
             )
-            return
+          }
+        } else {
+          try {
+            persistAppData(() => window.localStorage, snapshot)
+            setPersistenceError(null)
+          } catch (error) {
+            setPersistenceError(
+              `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
+            )
           }
         }
+      }
+    } finally {
+      isPersistingRef.current = false
+      if (pendingSnapshotRef.current) {
+        void flushPendingPersist()
+      }
+    }
+  }, [repository])
 
-        try {
-          persistAppData(() => window.localStorage, snapshot)
-          setPersistenceError(null)
-        } catch (error) {
-          setPersistenceError(
-            `Your changes are currently only in this session and were not saved: ${errorMessage(error)}`,
-          )
-        }
-      })
+  const enqueuePersist = useCallback(
+    (snapshot: AppData) => {
+      pendingSnapshotRef.current = snapshot
+      void flushPendingPersist()
     },
-    [repository],
+    [flushPendingPersist],
   )
 
   useEffect(() => {
-    if (!bootstrap.persistenceEnabled || persistenceError) return
+    if (!bootstrap.persistenceEnabled) return
     if (state === lastPersistedStateRef.current) return
     lastPersistedStateRef.current = state
     enqueuePersist(state)
-  }, [bootstrap.persistenceEnabled, enqueuePersist, persistenceError, state])
+  }, [bootstrap.persistenceEnabled, enqueuePersist, state])
 
   const retryPersistence = useCallback(() => {
     if (!bootstrap.persistenceEnabled) return
     enqueuePersist(latestStateRef.current)
   }, [bootstrap.persistenceEnabled, enqueuePersist])
 
-  const handleRestore = useCallback((raw: string, source?: RecoverySource) => {
-    const result = restoreBackup(() => window.localStorage, raw, source)
-    if (result.ok) {
-      dispatch({ type: "RESTORE_DATA", data: result.data })
+  const handleRestore = useCallback(
+    async (raw: string, source?: RecoverySource): Promise<RestoreResult> => {
+      let parsed: AppData
+      try {
+        parsed = parseBackup(raw)
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "The selected backup could not be validated.",
+        }
+      }
+
+      const ingested = await ingestAppDataMediaForRestore(parsed)
+
+      if (repository) {
+        try {
+          await repository.saveAppData(ingested)
+        } catch (error) {
+          return {
+            ok: false,
+            error: `Could not save restored backup to database: ${errorMessage(error)}`,
+          }
+        }
+        try {
+          persistAppData(() => window.localStorage, ingested)
+        } catch {
+          // Best-effort mirror; never fail restore on 5 MB WebView localStorage quota
+        }
+      } else {
+        const legacyResult = restoreBackup(() => window.localStorage, raw, source)
+        if (!legacyResult.ok) return legacyResult
+      }
+
+      lastPersistedStateRef.current = ingested
+      latestStateRef.current = ingested
+      dispatch({ type: "RESTORE_DATA", data: ingested })
       setPersistenceError(null)
-    }
-    return result
-  }, [])
+      void pruneUnusedMedia(ingested).catch(() => undefined)
+      return { ok: true, data: ingested }
+    },
+    [repository],
+  )
 
   const trackedDispatch = useCallback((action: AppAction) => {
-    latestStateRef.current = reducer(latestStateRef.current, action)
+    const next = reducer(latestStateRef.current, action)
+    latestStateRef.current = next
     dispatch(action)
+    if (
+      action.type === "CLEAR_WORKSPACE" ||
+      action.type === "LOAD_STARTER_SAMPLE"
+    ) {
+      void pruneUnusedMedia(next).catch(() => undefined)
+    }
   }, [])
 
   const dispatchIfAccepted = useCallback((action: AppAction) => {
@@ -3044,8 +3189,34 @@ function ReadyAppStateProvider({
     if (next === latestStateRef.current) return false
     latestStateRef.current = next
     dispatch(action)
+    if (
+      action.type === "CLEAR_WORKSPACE" ||
+      action.type === "LOAD_STARTER_SAMPLE"
+    ) {
+      void pruneUnusedMedia(next).catch(() => undefined)
+    }
     return true
   }, [])
+
+  const runIdempotentAction = useCallback(
+    async (key: string, operation: string, action: AppAction) => {
+      if (idempotencyCacheRef.current.has(key)) return false
+      idempotencyCacheRef.current.add(key)
+      if (repository) {
+        try {
+          const acceptedByRepo = await repository.recordIdempotencyKey(
+            key,
+            operation,
+          )
+          if (!acceptedByRepo) return false
+        } catch {
+          // Proceed with in-memory deduplication if repository key check fails
+        }
+      }
+      return dispatchIfAccepted(action)
+    },
+    [dispatchIfAccepted, repository],
+  )
 
   const value = useMemo(
     () => ({
@@ -3055,6 +3226,9 @@ function ReadyAppStateProvider({
       restoreBackupFromRaw: handleRestore,
       persistenceError,
       retryPersistence,
+      storageInfo,
+      repository,
+      runIdempotentAction,
     }),
     [
       state,
@@ -3063,6 +3237,9 @@ function ReadyAppStateProvider({
       handleRestore,
       persistenceError,
       retryPersistence,
+      storageInfo,
+      repository,
+      runIdempotentAction,
     ],
   )
 

@@ -45,20 +45,15 @@ function encodeCanvas(
 }
 
 /**
- * Compresses a gallery/camera image file on an offscreen canvas to a compact
- * thumbnail or reference photo data URL suitable for local media storage and JSON backups.
+ * Compresses an image data URL on an offscreen canvas to a compact
+ * thumbnail or reference photo data URL suitable for local media storage.
  */
-export async function compressImageFile(
-  file: File,
+export async function compressImageDataUrl(
+  rawUrl: string,
   maxDimension = MAX_DIMENSION_PX,
   maxBytes = MAX_COMPRESSED_BYTES,
 ): Promise<ImageUploadResult> {
-  if (!file.type.startsWith("image/")) {
-    return { ok: false, error: "Choose an image file (JPG, PNG, or WebP)." }
-  }
-
   try {
-    const rawUrl = await readFileAsDataUrl(file)
     const img = await loadHtmlImage(rawUrl)
     const width = img.naturalWidth || img.width
     const height = img.naturalHeight || img.height
@@ -90,6 +85,31 @@ export async function compressImageFile(
       ok: false,
       error: "Image is still too large after compression. Try a smaller photo.",
     }
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error ? err.message : "Could not process this image.",
+    }
+  }
+}
+
+/**
+ * Compresses a gallery/camera image file on an offscreen canvas to a compact
+ * thumbnail or reference photo data URL suitable for local media storage and JSON backups.
+ */
+export async function compressImageFile(
+  file: File,
+  maxDimension = MAX_DIMENSION_PX,
+  maxBytes = MAX_COMPRESSED_BYTES,
+): Promise<ImageUploadResult> {
+  if (!file.type.startsWith("image/")) {
+    return { ok: false, error: "Choose an image file (JPG, PNG, or WebP)." }
+  }
+
+  try {
+    const rawUrl = await readFileAsDataUrl(file)
+    return compressImageDataUrl(rawUrl, maxDimension, maxBytes)
   } catch (err) {
     return {
       ok: false,

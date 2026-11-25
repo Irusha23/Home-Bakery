@@ -17,7 +17,10 @@ type PersistenceRecoveryScreenProps = {
 
   onStartFresh: () => void
 
-  onRestore: (raw: string, source?: RecoverySource) => RestoreResult
+  onRestore: (
+    raw: string,
+    source?: RecoverySource,
+  ) => RestoreResult | Promise<RestoreResult>
 }
 
 function exportRawData(raw: string) {

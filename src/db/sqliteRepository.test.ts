@@ -8,6 +8,7 @@ import {
   type StorageLike,
 } from "../state/persistence"
 import { demoData } from "../test/demoFixture"
+import type { SqliteEngine } from "./engine"
 import { NodeSqliteEngine } from "./engines/nodeSqliteEngine"
 import { bootstrapAppRepository } from "./legacyImport"
 import { migration0001InitialSchema } from "./migrations/0001_initial_schema"
@@ -373,5 +374,30 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
     await repo.saveAppData(withPhoto)
     const reloaded = await repo.loadAppData()
     expect(reloaded?.orders[0].referencePhoto).toBe("media:img-ref-123")
+  })
+
+  it("supports batched saveAppData via runBatch and rolls back if any batch statement fails", async () => {
+    const { engine } = createRepo()
+    const batchSpy = vi.fn(async (statements: readonly { sql: string; params?: readonly (string | number | null)[] }[]) => {
+      for (const stmt of statements) {
+        await engine.run(stmt.sql, stmt.params)
+      }
+    })
+    ;(engine as SqliteEngine).runBatch = batchSpy
+
+    const repo = new SqliteAppRepository(engine)
+    await repo.init()
+
+    const starter = migrateState(createStarterData())
+    await repo.saveAppData(starter)
+    expect(batchSpy).toHaveBeenCalledTimes(1)
+    expect((await repo.loadAppData())?.orders[0].id).toBe(starter.orders[0].id)
+
+    const invalid = migrateState(createStarterData())
+    invalid.inventory[0].physical = -5
+    await expect(repo.saveAppData(invalid)).rejects.toThrow()
+    expect((await repo.loadAppData())?.inventory[0].physical).toBe(
+      starter.inventory[0].physical,
+    )
   })
 })

@@ -173,12 +173,27 @@ function requireUniqueId(ids: Set<string>, id: string, label: string) {
   ids.add(id)
 }
 
+function validateOptionalImageRef(value: unknown, label: string) {
+  if (value === undefined) return
+  requireValue(
+    typeof value === "string" &&
+      (value.startsWith("preset:") ||
+        value.startsWith("media:") ||
+        /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(
+          value,
+        )),
+    `${label} is invalid.`,
+  )
+}
+
 function validateRecipeSnapshot(value: unknown, label: string) {
   const recipe = requireRecord(value, label)
 
   requireString(recipe.id, `${label} ID`)
 
   requireString(recipe.name, `${label} name`)
+
+  validateOptionalImageRef(recipe.image, `${label} image`)
 
   requireString(recipe.productId, `${label} product`)
 
@@ -822,6 +837,8 @@ function validateBackupData(
 
     requireString(item.name, "Inventory name")
 
+    validateOptionalImageRef(item.image, "Inventory image")
+
     requireFiniteNumber(item.physical, "Inventory physical quantity")
 
     requireValue(
@@ -850,6 +867,8 @@ function validateBackupData(
     const product = requireRecordId(value, `Product ${index + 1}`)
 
     requireString(product.name, "Product name")
+
+    validateOptionalImageRef(product.image, "Product image")
 
     const variants = requireArray(product.variants, "Product variants")
 
@@ -926,6 +945,8 @@ function validateBackupData(
     const order = requireRecordId(value, `Order ${index + 1}`)
 
     requireString(order.reference, "Order reference")
+
+    validateOptionalImageRef(order.referencePhoto, "Order reference photo")
 
     requireUniqueId(
       orderReferences,

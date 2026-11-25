@@ -36,7 +36,7 @@ import SettingsScreen from "./screens/SettingsScreen"
 import type { StarterAction, TabId } from "./types"
 
 function AppContent() {
-  const { state } = useAppState()
+  const { state, repository } = useAppState()
   const { showToast } = useToast()
   const { activeTab, starterAction, switchTab, consumeStarterAction } =
     useNavigationStack("today")
@@ -48,10 +48,37 @@ function AppContent() {
   const [notifPrefs, setNotifPrefs] = useState(() =>
     loadNotificationPreferences(),
   )
+  const notifHydratedRef = useRef(false)
+
+  useEffect(() => {
+    if (!repository) {
+      notifHydratedRef.current = true
+      return
+    }
+    let cancelled = false
+    void repository
+      .loadNotificationPrefs()
+      .then((loaded) => {
+        if (cancelled) return
+        if (loaded) {
+          setNotifPrefs(loaded)
+        }
+        notifHydratedRef.current = true
+      })
+      .catch(() => {
+        notifHydratedRef.current = true
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [repository])
 
   useEffect(() => {
     saveNotificationPreferences(notifPrefs)
-  }, [notifPrefs])
+    if (repository && notifHydratedRef.current) {
+      void repository.saveNotificationPrefs(notifPrefs).catch(() => undefined)
+    }
+  }, [notifPrefs, repository])
 
   const allAttentionItems = useMemo(
     () =>

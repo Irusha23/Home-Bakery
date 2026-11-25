@@ -36,6 +36,26 @@ export async function shareOrDownloadBackupFile({
   cancelled?: boolean
 }> {
   if (Capacitor.isNativePlatform()) {
+    try {
+      const existing = await Filesystem.readdir({
+        path: "",
+        directory: Directory.Cache,
+      })
+      for (const entry of existing.files) {
+        if (
+          entry.type === "file" &&
+          /^Udenis-Specials-(?:Encrypted-)?Backup-.*\.json$/.test(entry.name) &&
+          entry.name !== filename
+        ) {
+          await Filesystem.deleteFile({
+            path: entry.name,
+            directory: Directory.Cache,
+          }).catch(() => undefined)
+        }
+      }
+    } catch {
+      // Cache cleanup is best-effort
+    }
     await Filesystem.writeFile({
       path: filename,
       data: content,

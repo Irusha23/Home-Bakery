@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import { Capacitor } from "@capacitor/core"
 import {
   BellOff,
   Download,
@@ -19,6 +18,7 @@ import SegmentedControl from "../components/ui/SegmentedControl"
 import SelectField from "../components/ui/SelectField"
 import { useToast } from "../components/ui/Toast"
 import {
+  APP_BUILD_CODE,
   APP_VERSION,
   checkForAppUpdate,
   type UpdateCheckResult,
@@ -34,8 +34,13 @@ type SettingsScreenProps = {
 }
 
 export default function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const { state, dispatch, dispatchIfAccepted, restoreBackupFromRaw } =
-    useAppState()
+  const {
+    state,
+    dispatch,
+    dispatchIfAccepted,
+    restoreBackupFromRaw,
+    storageInfo,
+  } = useAppState()
   const { showToast } = useToast()
 
   const [businessName, setBusinessName] = useState(state.settings.businessName)
@@ -410,18 +415,25 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       </Card>
 
       <GroupedList title="About">
-        <ListRow title="App version" value={`v${APP_VERSION}`} />
+        <ListRow
+          title="App version"
+          value={`v${APP_VERSION} (Build ${APP_BUILD_CODE})`}
+        />
         <ListRow
           title="Storage engine"
           value={
-            Capacitor.isNativePlatform()
+            storageInfo.backendName === "capacitor-sqlite"
               ? "SQLite (Android)"
-              : "IndexedDB (Browser)"
+              : storageInfo.backendName === "indexeddb"
+                ? "IndexedDB (Browser)"
+                : storageInfo.backendName === "node-sqlite"
+                  ? "SQLite (Node)"
+                  : "LocalStorage (Fallback)"
           }
         />
         <ListRow
           title="Database schema"
-          value={`v${LATEST_DB_SCHEMA_VERSION}`}
+          value={`v${storageInfo.schemaVersion ?? LATEST_DB_SCHEMA_VERSION}`}
         />
         <ListRow title="Currency & precision" value="Whole LKR" />
         <ListRow title="Business timezone" value="Asia/Colombo" />

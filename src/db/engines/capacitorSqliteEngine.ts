@@ -1,5 +1,11 @@
 import { CapacitorSQLite } from "@capacitor-community/sqlite"
-import type { SqliteEngine, SqlParam, SqlRow, SqlRunResult } from "../engine"
+import type {
+  SqliteEngine,
+  SqlParam,
+  SqlRow,
+  SqlRunResult,
+  SqlStatement,
+} from "../engine"
 
 const DEFAULT_DB_NAME = "udenis_specials"
 
@@ -41,7 +47,12 @@ export class CapacitorSqliteEngine implements SqliteEngine {
       })
       await CapacitorSQLite.execute({
         database: this.database,
-        statements: "PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;",
+        statements: "PRAGMA foreign_keys = ON;",
+        transaction: false,
+      })
+      await CapacitorSQLite.execute({
+        database: this.database,
+        statements: "PRAGMA journal_mode = WAL;",
         transaction: false,
       })
       this.opened = true
@@ -73,6 +84,23 @@ export class CapacitorSqliteEngine implements SqliteEngine {
       transaction: false,
     })
     return { changes: Number(result.changes?.changes ?? 0) }
+  }
+
+  async runBatch(statements: readonly SqlStatement[]): Promise<void> {
+    if (statements.length === 0) return
+    await this.ensureOpen()
+    const chunkSize = 250
+    for (let i = 0; i < statements.length; i += chunkSize) {
+      const chunk = statements.slice(i, i + chunkSize)
+      await CapacitorSQLite.executeSet({
+        database: this.database,
+        set: chunk.map((stmt) => ({
+          statement: stmt.sql,
+          values: [...(stmt.params ?? [])],
+        })),
+        transaction: false,
+      })
+    }
   }
 
   async query<T extends SqlRow = SqlRow>(

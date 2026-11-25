@@ -29,7 +29,10 @@ type BackupRestorePanelProps = {
 
   recoverySource?: RecoverySource
 
-  onRestore: (raw: string, recoverySource?: RecoverySource) => RestoreResult
+  onRestore: (
+    raw: string,
+    recoverySource?: RecoverySource,
+  ) => RestoreResult | Promise<RestoreResult>
 
   onExportComplete?: (exportedAt: string) => void
 }
@@ -59,6 +62,7 @@ export default function BackupRestorePanel({
   )
   const [unlockPassword, setUnlockPassword] = useState("")
   const [unlocking, setUnlocking] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
   const [selectedBackup, setSelectedBackup] = useState<{
     raw: string
@@ -197,19 +201,23 @@ export default function BackupRestorePanel({
     }
   }
 
-  const handleRestore = () => {
-    if (!selectedBackup) return
+  const handleRestore = async () => {
+    if (!selectedBackup || restoring) return
+    setRestoring(true)
+    try {
+      const result = await onRestore(selectedBackup.raw, recoverySource)
 
-    const result = onRestore(selectedBackup.raw, recoverySource)
-
-    if (result.ok) {
-      setSelectedBackup(null)
-      setMessage("Backup restored and saved successfully.")
-      setError(null)
-      if (fileInput.current) fileInput.current.value = ""
-    } else {
-      setMessage(null)
-      setError(result.error)
+      if (result.ok) {
+        setSelectedBackup(null)
+        setMessage("Backup restored and saved successfully.")
+        setError(null)
+        if (fileInput.current) fileInput.current.value = ""
+      } else {
+        setMessage(null)
+        setError(result.error)
+      }
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -368,9 +376,15 @@ export default function BackupRestorePanel({
             Frozen snapshots will be kept exactly as supplied by the backup.
           </p>
           <div className="mt-3 flex flex-wrap gap-3">
-            <Button onClick={handleRestore}>Confirm restore</Button>
+            <Button
+              disabled={restoring}
+              onClick={() => void handleRestore()}
+            >
+              {restoring ? "Restoring..." : "Confirm restore"}
+            </Button>
             <Button
               variant="secondary"
+              disabled={restoring}
               onClick={() => {
                 setSelectedBackup(null)
                 if (fileInput.current) fileInput.current.value = ""
