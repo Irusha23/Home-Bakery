@@ -14,17 +14,22 @@ if (!mode) {
 }
 
 function run(command, args, cwd = ROOT_DIR) {
-  const result = spawnSync(command, args, {
+  const isWin = process.platform === "win32"
+  const isBatch = isWin && /\.(bat|cmd)$/i.test(command)
+  const execCmd = isBatch ? process.env.ComSpec || "cmd.exe" : command
+  const execArgs = isBatch ? ["/d", "/c", command, ...args] : args
+
+  const result = spawnSync(execCmd, execArgs, {
     cwd,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: false,
   })
   if (result.status !== 0) {
     process.exit(result.status ?? 1)
   }
 }
 
-function findApksigner() {
+function findApksignerJar() {
   const sdkRoot =
     process.env.ANDROID_HOME ||
     process.env.ANDROID_SDK_ROOT ||
@@ -43,11 +48,15 @@ function findApksigner() {
     .sort()
     .reverse()
 
-  const binaryName = process.platform === "win32" ? "apksigner.bat" : "apksigner"
   for (const version of versions) {
-    const candidate = path.join(buildToolsDir, version, binaryName)
-    if (fs.existsSync(candidate)) {
-      return candidate
+    const jarCandidate = path.join(buildToolsDir, version, "lib", "apksigner.jar")
+    if (fs.existsSync(jarCandidate)) {
+      return { type: "jar", path: jarCandidate }
+    }
+    const binName = process.platform === "win32" ? "apksigner.bat" : "apksigner"
+    const binCandidate = path.join(buildToolsDir, version, binName)
+    if (fs.existsSync(binCandidate)) {
+      return { type: "bin", path: binCandidate }
     }
   }
   return null
@@ -55,13 +64,14 @@ function findApksigner() {
 
 const versionInfo = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "src", "version.json"), "utf8"))
 const gradleTask = mode === "release" ? "assembleRelease" : "assembleDebug"
+const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew"
 
 console.log(`1/3 Building web bundle for v${versionInfo.version} (build ${versionInfo.versionCode})...`)
-run("pnpm", ["build"])
+run(pnpmCmd, ["build"])
 
 console.log("2/3 Syncing Capacitor Android project...")
-run("pnpm", ["exec", "cap", "sync", "android"])
+run(pnpmCmd, ["exec", "cap", "sync", "android"])
 
 console.log(`3/3 Running Gradle ${gradleTask}...`)
 run(gradlew, [gradleTask], ANDROID_DIR)
@@ -78,10 +88,17 @@ const sizeMb = (fs.statSync(apkPath).size / (1024 * 1024)).toFixed(2)
 console.log(`\nAPK built successfully: ${apkPath} (${sizeMb} MB)`)
 
 if (mode === "release") {
-  const apksigner = findApksigner()
+  const apksigner = findApksignerJar()
   if (apksigner) {
     console.log("Verifying APK signature with apksigner...")
-    run(apksigner, ["verify", "--print-certs", apkPath])
+    if (apksigner.type === "jar") {
+      const javaExe = process.env.JAVA_HOME
+        ? path.join(process.env.JAVA_HOME, "bin", process.platform === "win32" ? "java.exe" : "java")
+        : "java"
+      run(javaExe, ["-jar", apksigner.path, "verify", "--print-certs", apkPath])
+    } else {
+      run(apksigner.path, ["verify", "--print-certs", apkPath])
+    }
   } else {
     console.warn("apksigner not found in ANDROID_HOME/LOCALAPPDATA; skipping signature verification.")
   }
