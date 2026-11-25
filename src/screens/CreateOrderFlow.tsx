@@ -556,7 +556,7 @@ export default function CreateOrderFlow({
 
               <div className="grid grid-cols-[1fr_auto] items-end gap-3">
                 <SelectField
-                  label="Size"
+                  label="Size / pack"
                   value={line.variantId}
                   options={
                     variants.length > 0
@@ -747,7 +747,7 @@ export default function CreateOrderFlow({
         {showNotes ? (
           <TextAreaField
             label="Special notes"
-            placeholder="Inscription, sugar level, packaging notes..."
+            placeholder="Spice level, inscription, packaging notes..."
             value={instructions}
             onChange={(event) => setInstructions(event.target.value)}
           />

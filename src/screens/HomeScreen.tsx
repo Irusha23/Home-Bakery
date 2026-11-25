@@ -212,7 +212,7 @@ export default function HomeScreen({
           <EmptyState
             illustration="caught-up-cupcake"
             title="All caught up"
-            description="No bakes queued right now."
+            description="Nothing queued to prepare right now."
             actionLabel="New order"
             onAction={() => onNavigate("orders", "create-order")}
           />
@@ -284,7 +284,7 @@ export default function HomeScreen({
             </span>
             <span className="mt-0.5 block text-xs text-muted">
               {workload.inProgressCount > 0
-                ? `${workload.inProgressCount} baking now`
+                ? `${workload.inProgressCount} preparing now`
                 : "Schedule"}
             </span>
           </button>

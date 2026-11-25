@@ -35,7 +35,7 @@ function orderTone(status: OrderStatus, prepStatus: Order["preparationStatus"]) 
 function orderLabel(status: OrderStatus, prepStatus: Order["preparationStatus"]) {
   if (status === "Confirmed" || status === "In Progress") {
     if (prepStatus === "Ready") return "Ready"
-    if (prepStatus === "In progress") return "Baking"
+    if (prepStatus === "In progress") return "Preparing"
     return "Confirmed"
   }
   return status

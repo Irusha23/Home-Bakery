@@ -10,7 +10,7 @@ type AppLoaderProps = {
  * Appealing animated bakery loading indicator for splash and async states.
  */
 export default function AppLoader({
-  label = "Warming up the oven...",
+  label = "Getting your kitchen ready...",
   className = "",
 }: AppLoaderProps) {
   const reducedMotion = useReducedMotion()

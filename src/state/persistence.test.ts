@@ -1392,4 +1392,31 @@ describe("local persistence recovery", () => {
     envelope.data.orders[0].referencePhoto = "javascript:alert(1)"
     expect(() => parseBackup(JSON.stringify(envelope))).toThrow()
   })
+
+  it("round-trips standalone recipes with no linked product", () => {
+    const custom = createBackupEnvelope(demoData).data
+    const standalone = {
+      ...custom.recipes[0],
+      id: "recipe-standalone",
+      name: "Mango chutney",
+      productId: "",
+      variantId: "",
+      yieldLabel: "3 jars",
+    }
+    const nextData = {
+      ...custom,
+      products: [],
+      orders: [],
+      preparationRecords: [],
+      extraStockPlans: [],
+      extraStockPreparations: [],
+      finishedStockBatches: [],
+      finishedStockTransactions: [],
+      recipes: [standalone],
+    }
+    const parsed = parseBackup(serializeBackup(nextData))
+    expect(parsed.recipes).toHaveLength(1)
+    expect(parsed.recipes[0].productId).toBe("")
+    expect(parsed.recipes[0].variantId).toBe("")
+  })
 })

@@ -444,4 +444,26 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
       starter.inventory[0].physical,
     )
   })
+
+  it("saves and reloads standalone recipes with empty product and variant links", async () => {
+    const { engine } = createRepo()
+    const repo = new SqliteAppRepository(engine)
+    await repo.init()
+
+    const state = migrateState(createStarterData())
+    const templateRecipe = state.recipes[0]
+    state.recipes.push({
+      ...structuredClone(templateRecipe),
+      id: "recipe-standalone-paste",
+      name: "Devilled chili paste",
+      productId: "",
+      variantId: "",
+      yieldLabel: "2 jars",
+    })
+    await repo.saveAppData(state)
+    const loaded = await repo.loadAppData()
+    const saved = loaded?.recipes.find((r) => r.id === "recipe-standalone-paste")
+    expect(saved?.productId).toBe("")
+    expect(saved?.variantId).toBe("")
+  })
 })

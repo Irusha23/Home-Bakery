@@ -185,7 +185,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   return (
     <div className="pb-8 space-y-5">
       <ScreenHeader
-        eyebrow="Bakery preferences"
+        eyebrow="Kitchen preferences"
         title="Settings"
         subtitle="Defaults, pricing rules, and local backups"
         onBack={onBack}
@@ -211,7 +211,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           </p>
         </div>
         <Field
-          label="Bakery / business name"
+          label="Business name"
           value={businessName}
           onChange={(event) => {
             setBusinessName(event.target.value)
@@ -219,7 +219,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           }}
         />
         <Field
-          label="Owner / baker name"
+          label="Owner name"
           value={ownerName}
           onChange={(event) => {
             setOwnerName(event.target.value)

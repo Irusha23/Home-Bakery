@@ -627,7 +627,7 @@ export default function FinancesScreen({
       <Sheet
         open={addSheetOpen}
         title="Add expense"
-        subtitle="Record a paid bakery expense"
+        subtitle="Record a paid kitchen expense"
         onClose={() => setAddSheetOpen(false)}
         footer={
           <div className="flex gap-2">
@@ -703,7 +703,7 @@ export default function FinancesScreen({
               setAttribution(event.target.value as "direct" | "shared")
             }
             options={[
-              { value: "shared", label: "Shared bakery expense" },
+              { value: "shared", label: "Shared kitchen expense" },
               { value: "direct", label: "For one customer order" },
             ]}
           />

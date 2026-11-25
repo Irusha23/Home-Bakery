@@ -17,7 +17,10 @@ import {
   compatibleUnits,
   convertInventoryUnitQuantity,
 } from "../../lib/inventory"
-import { convertDraftOnUnitChange } from "../../lib/quantityInput"
+import {
+  convertDraftOnUnitChange,
+  sanitizeNumericDraft,
+} from "../../lib/quantityInput"
 import {
   estimateRecipeMaterialCost,
   fromDisplayUnitPrice,
@@ -93,9 +96,9 @@ export default function RecipeEditorSheet({
   const [image, setImage] = useState<string | undefined>(undefined)
   const [productId, setProductId] = useState("")
   const [variantId, setVariantId] = useState("")
-  const [yieldCount, setYieldCount] = useState("1")
+  const [alsoAddProduct, setAlsoAddProduct] = useState(false)
   const [yieldLabel, setYieldLabel] = useState("")
-  const [prepMinutes, setPrepMinutes] = useState("60")
+  const [prepMinutes, setPrepMinutes] = useState("30")
   const [ingredients, setIngredients] = useState<IngredientRowDraft[]>([])
   const [packaging, setPackaging] = useState<PackagingRowDraft[]>([])
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({})
@@ -114,6 +117,7 @@ export default function RecipeEditorSheet({
     if (!open) return
     setError("")
     setNewStep("")
+    setAlsoAddProduct(false)
     setShowCustomPrices(false)
     const initialPrices: Record<string, string> = {}
     for (const item of state.inventory) {
@@ -126,6 +130,13 @@ export default function RecipeEditorSheet({
 
     const source = recipe ?? baseRecipe
     if (source) {
+      const nextProdId = initialProductId ?? source.productId ?? ""
+      const nextProd = activeProducts.find((p) => p.id === nextProdId)
+      const nextVarId =
+        initialVariantId ||
+        (nextProdId && source.productId === nextProdId ? source.variantId : "") ||
+        nextProd?.variants[0]?.id ||
+        ""
       setImage(source.image)
       setName(
         recipe
@@ -134,18 +145,10 @@ export default function RecipeEditorSheet({
             ? `${source.name} (custom)`
             : source.name,
       )
-      setProductId(initialProductId || source.productId || activeProducts[0]?.id || "")
-      setVariantId(
-        initialVariantId ||
-          source.variantId ||
-          activeProducts.find((p) => p.id === (initialProductId || source.productId))
-            ?.variants[0]?.id ||
-          activeProducts[0]?.variants[0]?.id ||
-          "",
-      )
-      setYieldCount(String(source.yield || 1))
+      setProductId(nextProd ? nextProd.id : "")
+      setVariantId(nextProd ? nextVarId : "")
       setYieldLabel(source.yieldLabel || "")
-      setPrepMinutes(String(source.preparationMinutes || 60))
+      setPrepMinutes(String(source.preparationMinutes ?? 30))
       setIngredients(
         source.ingredients.map((item) => ({
           key: createId("ing"),
@@ -161,12 +164,14 @@ export default function RecipeEditorSheet({
           quantity: String(item.quantity),
         })),
       )
-      setSteps(source.instructions.length ? [...source.instructions] : [""])
+      setSteps(source.instructions.length ? [...source.instructions] : [])
       setSaveToLibrary(!isOrderCustomMode)
     } else {
-      const defaultProduct =
-        activeProducts.find((p) => p.id === initialProductId) ??
-        activeProducts[0]
+      const defaultProduct = initialProductId
+        ? activeProducts.find((p) => p.id === initialProductId)
+        : isOrderCustomMode
+          ? activeProducts[0]
+          : undefined
       const defaultVariant =
         defaultProduct?.variants.find((v) => v.id === initialVariantId) ??
         defaultProduct?.variants[0]
@@ -181,25 +186,24 @@ export default function RecipeEditorSheet({
       )
       setProductId(defaultProduct?.id ?? "")
       setVariantId(defaultVariant?.id ?? "")
-      setYieldCount("1")
       setYieldLabel(
-        defaultVariant ? `1 × ${defaultVariant.unitLabel}` : "1 batch",
+        defaultVariant ? `1 × ${defaultVariant.name}` : "",
       )
-      setPrepMinutes("60")
+      setPrepMinutes("30")
       setIngredients(
         firstIng
           ? [
               {
                 key: createId("ing"),
                 inventoryId: firstIng.inventoryId,
-                quantity: "250",
+                quantity: firstIng.unit === "unit" ? "1" : "250",
                 unit: firstIng.unit,
               },
             ]
           : [],
       )
       setPackaging([])
-      setSteps(isOrderCustomMode ? [] : ["Preheat oven and prepare baking tin."])
+      setSteps([])
       setSaveToLibrary(!isOrderCustomMode)
     }
   }, [
@@ -354,15 +358,54 @@ export default function RecipeEditorSheet({
       setError("Add at least one ingredient or packaging item.")
       return
     }
-    const parsedYield = Number(yieldCount)
-    if (!Number.isFinite(parsedYield) || parsedYield <= 0) {
-      setError("Recipe yield must be greater than 0.")
-      return
-    }
-    const parsedMinutes = Number(prepMinutes)
+    const parsedYield = recipe?.yield && recipe.yield > 0 ? recipe.yield : 1
+    const parsedMinutes = prepMinutes.trim() === "" ? 0 : Number(prepMinutes)
     if (!Number.isFinite(parsedMinutes) || parsedMinutes < 0) {
       setError("Prep time must be 0 minutes or higher.")
       return
+    }
+
+    let finalProductId = ""
+    let finalVariantId = ""
+    if (isOrderCustomMode) {
+      const targetProd =
+        activeProducts.find((p) => p.id === productId) ?? activeProducts[0]
+      finalProductId = productId || targetProd?.id || "custom-product"
+      finalVariantId =
+        variantId || targetProd?.variants[0]?.id || "custom-variant"
+    } else if (productId) {
+      const targetProd = activeProducts.find((p) => p.id === productId)
+      const targetVariant =
+        targetProd?.variants.find((v) => v.id === variantId) ??
+        targetProd?.variants[0]
+      if (targetProd && targetVariant) {
+        finalProductId = targetProd.id
+        finalVariantId = targetVariant.id
+      }
+    } else if (alsoAddProduct) {
+      const newProductId = createId("product")
+      const newVariantId = createId("variant")
+      const created = dispatchIfAccepted({
+        type: "ADD_PRODUCT",
+        product: {
+          id: newProductId,
+          name: trimmedName,
+          ...(image ? { image } : {}),
+          variants: [
+            {
+              id: newVariantId,
+              name: yieldLabel.trim() || "Standard",
+              unitLabel: "pack",
+            },
+          ],
+        },
+      })
+      if (!created) {
+        setError("Could not create the matching product.")
+        return
+      }
+      finalProductId = newProductId
+      finalVariantId = newVariantId
     }
 
     // Persist any updated unit prices globally across all recipes
@@ -404,21 +447,18 @@ export default function RecipeEditorSheet({
       id: recipe?.id ?? createId("recipe"),
       name: trimmedName,
       ...(image ? { image } : {}),
-      productId: productId || activeProducts[0]?.id || "custom-product",
-      variantId:
-        variantId ||
-        activeProducts.find((p) => p.id === productId)?.variants[0]?.id ||
-        "custom-variant",
+      productId: finalProductId,
+      variantId: finalVariantId,
       version: recipe ? recipe.version + 1 : 1,
       yield: parsedYield,
-      yieldLabel: yieldLabel.trim() || `${parsedYield} × batch`,
+      yieldLabel: yieldLabel.trim() || "1 batch",
       expectedOutput: recipe?.expectedOutput ?? null,
       preparationMinutes: Math.round(parsedMinutes),
       ingredients: compiledIngredients,
       packaging: compiledPackaging,
       instructions: cleanedSteps.length
         ? cleanedSteps
-        : ["Follow standard bakery preparation method."],
+        : ["Follow saved preparation steps."],
       estimatedCost,
       updatedAt: new Date().toISOString(),
     }
@@ -473,17 +513,20 @@ export default function RecipeEditorSheet({
               />
               <Field
                 label="Prep (min)"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                placeholder="30"
                 value={prepMinutes}
-                onChange={(e) => setPrepMinutes(e.target.value)}
+                onChange={(e) =>
+                  setPrepMinutes(sanitizeNumericDraft(e.target.value, false))
+                }
               />
             </div>
           ) : (
             <>
               <Field
                 label="Recipe name"
-                placeholder="e.g., Signature chocolate cake, Devilled chili paste"
+                placeholder="e.g., Chili paste, Chocolate cake, Mango chutney"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value)
@@ -498,57 +541,63 @@ export default function RecipeEditorSheet({
                 onChange={setImage}
               />
 
-              {activeProducts.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <SelectField
-                    label="Product"
-                    value={productId}
-                    options={activeProducts.map((p) => ({
-                      value: p.id,
-                      label: p.name,
-                    }))}
-                    onChange={(e) => {
-                      const nextP = activeProducts.find(
-                        (p) => p.id === e.target.value,
-                      )
-                      setProductId(e.target.value)
-                      setVariantId(nextP?.variants[0]?.id ?? "")
-                    }}
-                  />
-                  <SelectField
-                    label="Variant"
-                    value={variantId}
-                    options={
-                      variantOptions.length
-                        ? variantOptions
-                        : [{ value: "", label: "Default" }]
-                    }
-                    onChange={(e) => setVariantId(e.target.value)}
-                  />
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <Field
-                  label="Batch yield"
-                  type="number"
-                  min="1"
-                  value={yieldCount}
-                  onChange={(e) => setYieldCount(e.target.value)}
-                />
-                <Field
-                  label="Yield label"
-                  placeholder="1 × 1 kg cake"
+                  label="Makes"
+                  placeholder="e.g., 1 jar, 500 g, 12 pcs"
                   value={yieldLabel}
                   onChange={(e) => setYieldLabel(e.target.value)}
                 />
                 <Field
-                  label="Prep (mins)"
-                  type="number"
-                  min="0"
+                  label="Prep time (min)"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="30"
                   value={prepMinutes}
-                  onChange={(e) => setPrepMinutes(e.target.value)}
+                  onChange={(e) =>
+                    setPrepMinutes(sanitizeNumericDraft(e.target.value, false))
+                  }
                 />
+              </div>
+
+              <div className="space-y-3 rounded-control border border-warm-border bg-ivory/60 p-3">
+                <SelectField
+                  label="Link to product (optional)"
+                  value={productId}
+                  options={[
+                    { value: "", label: "None — standalone recipe" },
+                    ...activeProducts.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    })),
+                  ]}
+                  onChange={(e) => {
+                    const nextId = e.target.value
+                    const nextP = activeProducts.find((p) => p.id === nextId)
+                    setProductId(nextId)
+                    setVariantId(nextP?.variants[0]?.id ?? "")
+                    if (nextId) setAlsoAddProduct(false)
+                  }}
+                />
+                {selectedProduct ? (
+                  <SelectField
+                    label="Size / pack"
+                    value={variantId}
+                    options={
+                      variantOptions.length
+                        ? variantOptions
+                        : [{ value: "", label: "Standard" }]
+                    }
+                    onChange={(e) => setVariantId(e.target.value)}
+                  />
+                ) : (
+                  <CheckboxField
+                    checked={alsoAddProduct}
+                    onChange={setAlsoAddProduct}
+                    label="Also add to Products for customer orders"
+                    description="Creates a product option so you can select this recipe when taking orders."
+                  />
+                )}
               </div>
             </>
           )}
@@ -958,7 +1007,7 @@ export default function RecipeEditorSheet({
                     variant="ghost"
                     onClick={() => setQuickItemCat("packaging")}
                   >
-                    + New box/board
+                    + New packaging
                   </Button>
                   <Button
                     size="compact"
@@ -1160,7 +1209,7 @@ export default function RecipeEditorSheet({
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Add another step..."
+                  placeholder="e.g., Roast spices, mix ingredients, pack into jars..."
                   value={newStep}
                   onChange={(e) => setNewStep(e.target.value)}
                   onKeyDown={(e) => {

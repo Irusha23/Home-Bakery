@@ -1090,6 +1090,61 @@ describe("application reducer business rules", () => {
     expect(next.extraStockPlans[0].recipeSnapshot).toEqual(snapshot)
   })
 
+  it("allows creating and later linking a standalone recipe when no products exist", () => {
+    const state = createTestAppData({
+      products: [],
+      recipes: [],
+      inventory: [createTestInventoryItem({ inventoryId: "chili", name: "Chili powder", unit: "g" })],
+    })
+    const standalone = {
+      ...createTestRecipeSnapshot({
+        id: "recipe-chili-paste",
+        name: "Devilled chili paste",
+        productId: "",
+        variantId: "",
+        yieldLabel: "2 × 250g jars",
+        ingredients: [{ inventoryId: "chili", name: "Chili powder", quantity: 200, unit: "g" as const }],
+      }),
+      updatedAt: "2026-11-25T10:00:00.000Z",
+    }
+
+    const withStandalone = reducer(state, {
+      type: "ADD_RECIPE",
+      recipe: standalone,
+    })
+    expect(withStandalone.recipes).toHaveLength(1)
+    expect(withStandalone.recipes[0].productId).toBe("")
+
+    // Reject broken non-empty product link
+    expect(
+      reducer(state, {
+        type: "ADD_RECIPE",
+        recipe: { ...standalone, id: "bad-link", productId: "missing", variantId: "v1" },
+      }),
+    ).toBe(state)
+
+    // Create a product later and link the standalone recipe to it
+    const withProduct = reducer(withStandalone, {
+      type: "ADD_PRODUCT",
+      product: {
+        id: "prod-chili",
+        name: "Devilled chili paste",
+        variants: [{ id: "var-250g", name: "250g jar", unitLabel: "jar" }],
+      },
+    })
+    const linked = reducer(withProduct, {
+      type: "UPDATE_RECIPE",
+      recipe: {
+        ...withProduct.recipes[0],
+        productId: "prod-chili",
+        variantId: "var-250g",
+        updatedAt: "2026-11-25T10:05:00.000Z",
+      },
+    })
+    expect(linked.recipes[0].productId).toBe("prod-chili")
+    expect(linked.recipes[0].variantId).toBe("var-250g")
+  })
+
   it("converts recipe quantities and saved reservations to inventory base units", () => {
     const recipeSnapshot = createTestRecipeSnapshot({
       ingredients: [

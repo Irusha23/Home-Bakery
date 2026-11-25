@@ -478,7 +478,7 @@ export default function OrderDetailScreen({
             {([
               { label: "Confirmed", done: true },
               {
-                label: "Baking",
+                label: "Preparing",
                 done:
                   order.status === "In Progress" ||
                   order.status === "Completed" ||
@@ -676,7 +676,7 @@ export default function OrderDetailScreen({
                               prepRecord.startedAt ?? prepRecord.updatedAt,
                               prepRecord.recipeSnapshot.preparationMinutes,
                             )}
-                            prefix="Bake"
+                            prefix="Prep"
                             overdueLabel="Time up"
                             urgentThresholdMs={15 * 60_000}
                           />
@@ -925,8 +925,8 @@ export default function OrderDetailScreen({
                         prepRecord?.status === "Ready"
                           ? "View prep"
                           : prepRecord?.status === "In progress"
-                            ? "Bake"
-                            : "Start bake"}
+                            ? "Prepare"
+                            : "Start prep"}
                       </Button>
                     )
                   ) : null}

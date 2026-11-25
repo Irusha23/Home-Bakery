@@ -63,6 +63,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
     useState<Recipe | "new" | null>(null)
   const [productEditorTarget, setProductEditorTarget] =
     useState<Product | "new" | null>(null)
+  const [linkRecipeTarget, setLinkRecipeTarget] = useState<Recipe | null>(null)
   const [pricingTarget, setPricingTarget] = useState<Recipe | null>(null)
   const [editingPriceItem, setEditingPriceItem] =
     useState<InventoryItem | null>(null)
@@ -154,7 +155,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
       <div className="focused-flow pb-10">
           <ScreenHeader
             title={selectedRecipe.name}
-            subtitle={`${product?.name ?? "Custom product"}${
+            subtitle={`${product ? product.name : "Standalone recipe"}${
               variant ? ` · ${variant.name}` : ""
             } · v${selectedRecipe.version}`}
             onBack={closeRecipe}
@@ -191,25 +192,33 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3 border-t border-warm-border pt-3">
+              <div className="flex items-center justify-between gap-3 border-t border-warm-border pt-3">
                 <div>
                   <div className="text-xs text-muted">
                     {scaleMultiplier === 1
-                      ? "Live cost (1× batch)"
-                      : `Live cost (${scaleMultiplier}× batch)`}
+                      ? "Estimated cost"
+                      : `Estimated cost (${scaleMultiplier}×)`}
                   </div>
                   <div className="mt-0.5 text-lg font-bold text-cocoa">
                     <MoneyText
                       amount={Math.round(effectiveCost * scaleMultiplier)}
                     />
                   </div>
-                  {scaleMultiplier !== 1 ? (
-                    <div className="text-[11px] text-muted">
-                      Scaled ×{scaleMultiplier}
-                    </div>
-                  ) : null}
                 </div>
-                <div className="flex items-center justify-end">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {!product && !selectedRecipe.archived ? (
+                    <Button
+                      size="compact"
+                      variant="secondary"
+                      leadingIcon={<Plus aria-hidden="true" size={14} />}
+                      onClick={() => {
+                        setLinkRecipeTarget(selectedRecipe)
+                        setProductEditorTarget("new")
+                      }}
+                    >
+                      Add to Products
+                    </Button>
+                  ) : null}
                   <Button
                     size="compact"
                     variant="soft"
@@ -228,10 +237,10 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             >
               <div className="flex items-center gap-2 text-sm font-semibold text-cocoa">
                 <Scale aria-hidden="true" size={16} />
-                Batch scale
+                Scale recipe
               </div>
               <Stepper
-                label="Batch scale multiplier"
+                label="Recipe scale multiplier"
                 value={scaleMultiplier}
                 min={0.5}
                 max={10}
@@ -524,7 +533,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
           isSearch
           placeholder={
             section === "recipes"
-              ? "Search recipes, pizzas, pastes..."
+              ? "Search recipes..."
               : "Search products..."
           }
           value={search}
@@ -575,9 +584,10 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                               ) : null}
                             </div>
                             <p className="mt-0.5 text-xs text-muted">
-                              {product?.name ?? "Custom"}
-                              {variant ? ` · ${variant.name}` : ""} · v
-                              {recipe.version}
+                              {product
+                                ? `${product.name}${variant ? ` · ${variant.name}` : ""} · `
+                                : ""}
+                              v{recipe.version}
                             </p>
                           </div>
                         </div>
@@ -633,7 +643,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                       </div>
                       <p className="mt-0.5 text-xs text-muted">
                         {product.variants.length}{" "}
-                        {product.variants.length === 1 ? "variant" : "variants"}
+                        {product.variants.length === 1 ? "option" : "options"}
                       </p>
                     </div>
                   </div>
@@ -683,7 +693,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
           <EmptyState
             illustration="recipe-book"
             title="No products yet"
-            description="Add the cakes, boxes, or treats you sell so orders and recipes stay organized."
+            description="Add the items, jars, or treats you sell so customer orders stay organized."
             actionLabel="Add product"
             onAction={() => setProductEditorTarget("new")}
           />
@@ -725,8 +735,18 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
       <ProductEditorSheet
         open={productEditorTarget !== null}
         product={productEditorTarget === "new" ? null : productEditorTarget}
-        onClose={() => setProductEditorTarget(null)}
-        onSaved={(saved) => showToast(`Saved ${saved.name}`)}
+        linkRecipe={linkRecipeTarget}
+        onClose={() => {
+          setProductEditorTarget(null)
+          setLinkRecipeTarget(null)
+        }}
+        onSaved={(saved) =>
+          showToast(
+            linkRecipeTarget
+              ? `Added ${saved.name} to Products and linked recipe`
+              : `Saved ${saved.name}`,
+          )
+        }
       />
 
       <PricingCalculatorSheet

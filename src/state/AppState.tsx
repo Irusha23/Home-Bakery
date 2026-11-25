@@ -1967,10 +1967,11 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
     case "ADD_RECIPE": {
       const r = action.recipe
+      const isStandalone = r.productId === "" && r.variantId === ""
       const product = state.products.find((prod) => prod.id === r.productId)
-      const variantValid = Boolean(
-        product?.variants.some((variant) => variant.id === r.variantId),
-      )
+      const linkValid =
+        isStandalone ||
+        Boolean(product?.variants.some((variant) => variant.id === r.variantId))
       const invIds = new Set(state.inventory.map((i) => i.inventoryId))
       const materialsValid = [
         ...r.ingredients,
@@ -1979,7 +1980,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       if (
         !r.id.trim() ||
         !r.name.trim() ||
-        !variantValid ||
+        !linkValid ||
         !materialsValid ||
         (r.expectedOutput !== null && !isValidExpectedOutput(r.expectedOutput)) ||
         state.recipes.some((item) => item.id === r.id)
@@ -1991,8 +1992,9 @@ export function reducer(state: AppData, action: AppAction): AppData {
 
     case "UPDATE_RECIPE": {
       if (
-        action.recipe.expectedOutput !== null &&
-        !isValidExpectedOutput(action.recipe.expectedOutput)
+        !action.recipe.name.trim() ||
+        (action.recipe.expectedOutput !== null &&
+          !isValidExpectedOutput(action.recipe.expectedOutput))
       ) {
         return state
       }
@@ -2000,6 +2002,24 @@ export function reducer(state: AppData, action: AppAction): AppData {
         (item) => item.id === action.recipe.id,
       )
       if (!existing) return state
+      const linkChanged =
+        action.recipe.productId !== existing.productId ||
+        action.recipe.variantId !== existing.variantId
+      if (linkChanged) {
+        const isStandalone =
+          action.recipe.productId === "" && action.recipe.variantId === ""
+        const product = state.products.find(
+          (prod) => prod.id === action.recipe.productId,
+        )
+        const linkValid =
+          isStandalone ||
+          Boolean(
+            product?.variants.some(
+              (variant) => variant.id === action.recipe.variantId,
+            ),
+          )
+        if (!linkValid) return state
+      }
       const nextHistory = [
         snapshotRecipe(existing),
         ...(existing.history ?? []),

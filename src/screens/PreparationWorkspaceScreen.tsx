@@ -74,8 +74,8 @@ export default function PreparationWorkspaceScreen({
   return (
     <div className="space-y-4 pb-6">
       <ScreenHeader
-        title="Bake queue"
-        subtitle={`${records.length - ready} active bakes`}
+        title="Prep queue"
+        subtitle={`${records.length - ready} active`}
         onBack={onBack}
         backLabel="Back to orders"
       />
@@ -91,7 +91,7 @@ export default function PreparationWorkspaceScreen({
         </Card>
         <Card tone="sage" className="p-3 text-center">
           <p className="text-xl font-bold text-sage-dark">{inProgress}</p>
-          <p className="mt-1 text-nav font-bold uppercase text-muted">Baking</p>
+          <p className="mt-1 text-nav font-bold uppercase text-muted">Preparing</p>
         </Card>
         <Card className="p-3 text-center">
           <p className="text-xl font-bold text-success">{ready}</p>
@@ -195,7 +195,7 @@ export function PreparationProductScreen({
   const finishBake = () => {
     if (!allStepsChecked) {
       showToast({
-        message: "Check off all baking steps before marking ready.",
+        message: "Check off all preparation steps before marking ready.",
         tone: "warning",
       })
       return
@@ -211,7 +211,7 @@ export function PreparationProductScreen({
       })
       return
     }
-    showToast({ message: "Bake marked ready for pickup!", tone: "success" })
+    showToast({ message: "Marked ready for pickup!", tone: "success" })
     onBack()
   }
 
@@ -364,10 +364,10 @@ export function PreparationProductScreen({
                           <p className="text-xs font-semibold text-cocoa">
                             Buy {shortageItems.length}{" "}
                             {shortageItems.length === 1 ? "item" : "items"} before
-                            baking
+                            preparing
                           </p>
                           <p className="mt-0.5 text-xs text-muted">
-                            Baking is locked until all missing items are bought or
+                            Preparation is locked until all missing items are bought or
                             marked In pantry.
                           </p>
                         </div>
@@ -479,7 +479,7 @@ export function PreparationProductScreen({
                   <h2 className="text-base font-semibold text-cocoa">
                     {record.status === "In progress"
                       ? "Preparation steps"
-                      : "2. Baking steps"}
+                      : "2. Preparation steps"}
                   </h2>
                   {record.status === "In progress" && !hasShortages ? (
                     <span className="text-xs font-semibold text-sage-dark">
@@ -591,13 +591,13 @@ export function PreparationProductScreen({
                     })
                   }
                 >
-                  Start bake
+                  Start prep
                 </Button>
               ) : (
                 <>
                   {!allStepsChecked ? (
                     <p className="text-center text-xs font-medium text-muted">
-                      Check all baking steps ({record.completedSteps.length}/
+                      Check all steps ({record.completedSteps.length}/
                       {totalSteps}) to mark ready
                     </p>
                   ) : null}

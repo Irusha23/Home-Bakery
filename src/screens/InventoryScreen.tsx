@@ -200,7 +200,7 @@ export default function InventoryScreen({
       {showSalesNotice ? (
         <Card tone="sage" className="py-3">
           <p className="text-xs font-medium text-cocoa">
-            Tap any baked item below to record a sale or write-off by batch.
+            Tap any ready item below to record a sale or write-off by batch.
           </p>
         </Card>
       ) : null}
@@ -266,8 +266,8 @@ export default function InventoryScreen({
               }
               description={
                 category === "finished"
-                  ? "Extra-stock bakes you finish will appear here for quick sales."
-                  : `Add your first ${category === "packaging" ? "box or board" : "ingredient"} to track stock and costs.`
+                  ? "Extra-stock items you finish will appear here for quick sales."
+                  : `Add your first ${category === "packaging" ? "jar, box, or bag" : "ingredient"} to track stock and costs.`
               }
               actionLabel={
                 category === "finished"

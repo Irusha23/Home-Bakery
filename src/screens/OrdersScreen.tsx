@@ -275,7 +275,7 @@ export default function OrdersScreen({
       )
       if (prepRecord) {
         return {
-          label: "Bake",
+          label: "Prepare",
           run: () => {
             setSelectedOrderId(order.id)
             setSelectedPreparationId(prepRecord.id)
@@ -530,7 +530,7 @@ export default function OrdersScreen({
               No {filter === "All" ? "" : `${filter.toLowerCase()} `}orders
             </div>
             <p className="mx-auto mt-1 max-w-empty text-xs leading-relaxed text-muted">
-              Tap New above whenever a customer requests a bake.
+              Tap New above whenever a customer places an order.
             </p>
           </Card>
         )}

@@ -196,9 +196,9 @@ function validateRecipeSnapshot(value: unknown, label: string) {
 
   validateOptionalImageRef(recipe.image, `${label} image`)
 
-  requireString(recipe.productId, `${label} product`)
+  requireString(recipe.productId, `${label} product`, true)
 
-  requireString(recipe.variantId, `${label} variant`)
+  requireString(recipe.variantId, `${label} variant`, true)
 
   requireFiniteNumber(recipe.yield, `${label} yield`, Number.MIN_VALUE)
 
@@ -253,9 +253,15 @@ function validateRecipeReferences(
 
   inventoryIds: Set<string>,
 ) {
+  const isStandaloneRecipe =
+    label.startsWith("Recipe") &&
+    recipe.productId === "" &&
+    recipe.variantId === ""
+
   requireValue(
-    productIds.has(recipe.productId as string) &&
-      variantProductIds.get(recipe.variantId as string) === recipe.productId,
+    isStandaloneRecipe ||
+      (productIds.has(recipe.productId as string) &&
+        variantProductIds.get(recipe.variantId as string) === recipe.productId),
 
     `${label} refers to a missing product or variant.`,
   )

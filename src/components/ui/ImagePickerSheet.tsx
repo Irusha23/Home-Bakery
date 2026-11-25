@@ -65,7 +65,7 @@ export function ImagePickerField({
                   ? "Attached to this order"
                   : "Shown on cards & lists"
                 : galleryOnly
-                  ? "Cake design, sketch, or WhatsApp photo"
+                  ? "Reference photo, sketch, or WhatsApp image"
                   : "Library icon or gallery photo"}
             </p>
           </div>
@@ -239,8 +239,8 @@ export function ImagePickerSheet({
                 value={category}
                 onChange={(next) => setCategory(next as ImagePresetCategory)}
                 segments={[
-                  { value: "bakes", label: "Bakes" },
-                  { value: "savories", label: "Savories" },
+                  { value: "bakes", label: "Sweet" },
+                  { value: "savories", label: "Savory" },
                   { value: "ingredients", label: "Ingredients" },
                   { value: "packaging", label: "Packaging" },
                 ]}

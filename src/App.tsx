@@ -274,7 +274,7 @@ function AppContent() {
 
       <Sheet
         open={isUpdatesOpen}
-        title="Bakery reminders"
+        title="Kitchen reminders"
         subtitle="Live alerts derived from your orders, stock, and backups"
         onClose={() => setIsUpdatesOpen(false)}
       >
@@ -448,7 +448,7 @@ function AppContent() {
             <div className="rounded-card bg-sage-soft/70 px-4 py-6 text-center text-sm text-cocoa">
               <Illustration name="all-clear-bell" size="md" />
               <p className="mt-2 font-medium">
-                Everything looks clear right now — no shortages or overdue bakes.
+                Everything looks clear right now — no shortages or overdue orders.
               </p>
             </div>
           )}

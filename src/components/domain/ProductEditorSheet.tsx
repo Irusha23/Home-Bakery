@@ -12,6 +12,7 @@ import type { Product, ProductVariant, Recipe } from "../../types"
 type ProductEditorSheetProps = {
   open: boolean
   product?: Product | null
+  linkRecipe?: Recipe | null
   onClose: () => void
   onSaved?: (product: Product, createdRecipe?: Recipe) => void
 }
@@ -27,6 +28,7 @@ type VariantDraft = {
 export default function ProductEditorSheet({
   open,
   product,
+  linkRecipe,
   onClose,
   onSaved,
 }: ProductEditorSheetProps) {
@@ -54,19 +56,30 @@ export default function ProductEditorSheet({
           archived: v.archived,
         })),
       )
+    } else if (linkRecipe) {
+      setName(linkRecipe.name)
+      setImage(linkRecipe.image)
+      setVariants([
+        {
+          id: createId("variant"),
+          name: linkRecipe.yieldLabel || "Standard",
+          unitLabel: "pack",
+          finishedInventoryId: "",
+        },
+      ])
     } else {
       setName("")
       setImage(undefined)
       setVariants([
         {
           id: createId("variant"),
-          name: "Standard size",
-          unitLabel: "unit",
+          name: "Standard",
+          unitLabel: "pack",
           finishedInventoryId: "",
         },
       ])
     }
-  }, [open, product?.id])
+  }, [linkRecipe?.id, open, product?.id])
 
   const handleAddVariant = () => {
     setVariants((current) => [
@@ -74,7 +87,7 @@ export default function ProductEditorSheet({
       {
         id: createId("variant"),
         name: "",
-        unitLabel: "unit",
+        unitLabel: "pack",
         finishedInventoryId: "",
       },
     ])
@@ -91,7 +104,7 @@ export default function ProductEditorSheet({
       .map((v) => ({
         id: v.id,
         name: v.name.trim(),
-        unitLabel: v.unitLabel.trim() || "unit",
+        unitLabel: v.unitLabel.trim() || "pack",
         ...(v.finishedInventoryId
           ? { finishedInventoryId: v.finishedInventoryId }
           : {}),
@@ -99,7 +112,9 @@ export default function ProductEditorSheet({
       }))
 
     if (!cleanVariants.length || cleanVariants.some((v) => !v.name)) {
-      setError("Add at least one variant with a name (e.g., 1 kg, Box of 6).")
+      setError(
+        "Add at least one size or pack option (e.g., 250g jar, 1 kg, Box of 6).",
+      )
       return
     }
 
@@ -117,15 +132,23 @@ export default function ProductEditorSheet({
         : { type: "ADD_PRODUCT", product: nextProduct },
     )
     if (!accepted) {
-      setError("Could not save product. Check variant details.")
+      setError("Could not save product. Check size/pack options.")
       return
     }
 
     let createdRecipe: Recipe | undefined
-    if (!product && sourceRecipeId) {
+    const primaryVariant = cleanVariants[0]
+    if (!product && linkRecipe && primaryVariant) {
+      const updatedLink: Recipe = {
+        ...structuredClone(linkRecipe),
+        productId: nextProduct.id,
+        variantId: primaryVariant.id,
+        updatedAt: new Date().toISOString(),
+      }
+      dispatchIfAccepted({ type: "UPDATE_RECIPE", recipe: updatedLink })
+    } else if (!product && sourceRecipeId && primaryVariant) {
       const sourceRecipe = state.recipes.find((r) => r.id === sourceRecipeId)
-      const primaryVariant = cleanVariants[0]
-      if (sourceRecipe && primaryVariant) {
+      if (sourceRecipe) {
         const candidate: Recipe = {
           ...structuredClone(sourceRecipe),
           id: createId("recipe"),
@@ -154,7 +177,7 @@ export default function ProductEditorSheet({
     <Sheet
       open={open}
       title={product ? "Edit product" : "New product"}
-      subtitle="Define sizes or pack variants customers can order"
+      subtitle="Set the sizes or pack options customers can order"
       onClose={onClose}
       footer={
         <div className="flex gap-2">
@@ -170,7 +193,7 @@ export default function ProductEditorSheet({
       <div className="space-y-4">
         <Field
           label="Product name"
-          placeholder="e.g., Chocolate cake, Chicken pizza, Chili paste"
+          placeholder="e.g., Chili paste, Chocolate cake, Mango chutney"
           value={name}
           onChange={(e) => {
             setName(e.target.value)
@@ -185,11 +208,11 @@ export default function ProductEditorSheet({
           onChange={setImage}
         />
 
-        {!product && activeRecipes.length > 0 ? (
+        {!product && !linkRecipe && activeRecipes.length > 0 ? (
           <SelectField
             label="Copy recipe from (optional)"
             value={sourceRecipeId}
-            helperText="Clones ingredients, packaging, and steps to the first variant."
+            helperText="Clones ingredients, packaging, and steps to the first option."
             options={[
               { value: "", label: "None — add recipe later" },
               ...activeRecipes.map((r) => ({
@@ -204,7 +227,7 @@ export default function ProductEditorSheet({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-cocoa">
-              Sizes & variants
+              Sizes or packs
             </span>
             <Button
               size="compact"
@@ -212,7 +235,7 @@ export default function ProductEditorSheet({
               leadingIcon={<Plus aria-hidden="true" size={15} />}
               onClick={handleAddVariant}
             >
-              Add variant
+              Add option
             </Button>
           </div>
 
@@ -223,11 +246,11 @@ export default function ProductEditorSheet({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-muted">
-                  Variant {index + 1}
+                  Option {index + 1}
                 </span>
                 {variants.length > 1 ? (
                   <IconButton
-                    label={`Remove variant ${index + 1}`}
+                    label={`Remove option ${index + 1}`}
                     className="size-8"
                     onClick={() =>
                       setVariants((current) =>
@@ -242,8 +265,8 @@ export default function ProductEditorSheet({
 
               <div className="grid grid-cols-2 gap-2">
                 <Field
-                  label="Variant name"
-                  placeholder="1 kg / Box of 6"
+                  label="Size or pack"
+                  placeholder="e.g., 250g jar, 1 kg, Box of 6"
                   value={variant.name}
                   onChange={(e) =>
                     setVariants((current) =>
@@ -256,8 +279,8 @@ export default function ProductEditorSheet({
                   }
                 />
                 <Field
-                  label="Unit label"
-                  placeholder="cake / box"
+                  label="Sold as"
+                  placeholder="e.g., jar, pack, cake"
                   value={variant.unitLabel}
                   onChange={(e) =>
                     setVariants((current) =>
