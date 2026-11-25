@@ -65,7 +65,12 @@ export default function FinancesScreen({
   const customerOrders = useMemo(
     () =>
       state.orders
-        .filter((order) => !order.isQuickOrder && order.customerId !== null)
+        .filter(
+          (order) =>
+            !order.isQuickOrder &&
+            order.customerId !== null &&
+            order.status !== "Cancelled",
+        )
         .slice()
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
     [state.orders],
