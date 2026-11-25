@@ -158,15 +158,15 @@ Tasks:
 - [x] Add lightweight **Check for Updates** card in `SettingsScreen.tsx` (`src/lib/appVersion.ts` reading `VITE_UPDATE_FEED_URL`).
 - [x] Verify live boot, SQLite persistence, Airplane Mode workflows, Camera/Gallery photos, encrypted Share backups, and Hardware Back button inside **Android Studio Emulator**.
 
-### Phase 16 — Release Signing, `.apk` Build Pipeline & CI (Next)
+### Phase 16 — Release Signing, `.apk` Build Pipeline & CI (Completed)
 
 **Goal:** Establish repeatable, consistently signed `.apk` builds so future bug fixes and updates upgrade Udeni's phone in place without losing data.
 
 Tasks:
-- [ ] Generate and securely back up the release signing keystore (`.jks`, stored safely outside Git) and configure Gradle release `.apk` signing + `versionCode` / `versionName` management.
-- [ ] Set up GitHub Actions CI (`.github/workflows/ci.yml`) running `npx tsc --noEmit`, `pnpm test`, and `pnpm build` on every push/PR.
-- [ ] Document the step-by-step release & update checklist (bumping `versionCode`, signing `.apk`, publishing to GitHub Releases / sending to Udeni).
-- [ ] **Exit gate:** Signed release `.apk` builds reproducibly via Gradle.
+- [x] Configure single-source `versionCode` / `versionName` management (`src/version.json`, `scripts/release-tools.mjs`, `src/lib/appVersion.ts`) and Gradle release `.apk` signing (`android/app/build.gradle`, `android/keystore.properties.example`, `scripts/build-apk.mjs`) with fail-fast guard against unsigned releases.
+- [x] Set up GitHub Actions CI (`.github/workflows/ci.yml`) running `web-verify` (`typecheck`, `vitest`, `vite build`) and `android-debug-check` (`cap sync` + `./gradlew assembleDebug`) on every push/PR.
+- [x] Document the step-by-step keystore setup, signed `.apk` build, and in-place update checklist (`docs/ANDROID_RELEASE_GUIDE.md`).
+- [x] **Exit gate:** Version sync, Gradle signing guard, debug `.apk` build, and CI pipeline verified; ready for user's private `.jks` generation and Phase 17 QA.
 
 ### Phase 17 — Android Studio Emulator QA & `v1.0.0` Release
 

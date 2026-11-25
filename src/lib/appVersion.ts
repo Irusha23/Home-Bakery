@@ -1,5 +1,7 @@
-export const APP_VERSION = "1.0.0"
-export const APP_BUILD_CODE = 1
+import versionInfo from "../version.json"
+
+export const APP_VERSION = versionInfo.version
+export const APP_BUILD_CODE = versionInfo.versionCode
 
 export type UpdateFeedPayload = {
   version: string
