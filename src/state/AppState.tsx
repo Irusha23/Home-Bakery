@@ -105,112 +105,112 @@ type AppAction =
   | { type: "COLLECT_ORDER"; orderId: string }
   | { type: "REPEAT_ORDER"; orderId: string; newOrderId: string }
   | {
-      type: "SET_ORDER_REFERENCE_PHOTO"
-      orderId: string
-      referencePhoto?: string
-    }
+    type: "SET_ORDER_REFERENCE_PHOTO"
+    orderId: string
+    referencePhoto?: string
+  }
   | {
-      type: "RECORD_PAYMENT"
-      orderId: string
-      orderReference: string
-      payment: Order["payments"][number]
-    }
+    type: "RECORD_PAYMENT"
+    orderId: string
+    orderReference: string
+    payment: Order["payments"][number]
+  }
   | { type: "RECORD_REFUND"; refund: Refund }
   | { type: "RECORD_REFUNDS"; refunds: Refund[] }
   | { type: "SET_CANCELLATION_FEE"; orderId: string; fee: number }
   | { type: "RECORD_EXPENSE"; expense: Expense }
   | { type: "ADD_EXPENSE_CATEGORY"; category: ExpenseCategory }
   | {
-      type: "ALLOCATE_SHARED_EXPENSE"
-      version: ExpenseAllocationVersion
-    }
+    type: "ALLOCATE_SHARED_EXPENSE"
+    version: ExpenseAllocationVersion
+  }
   | { type: "ADD_CUSTOMER"; customer: Customer }
   | { type: "ADD_RECIPE"; recipe: Recipe }
   | { type: "UPDATE_RECIPE"; recipe: Recipe }
   | {
-      type: "SET_VARIANT_FINISHED_INVENTORY"
-      productId: string
-      variantId: string
-      inventoryId: string | null
-    }
+    type: "SET_VARIANT_FINISHED_INVENTORY"
+    productId: string
+    variantId: string
+    inventoryId: string | null
+  }
   | { type: "CLEAR_WORKSPACE" }
   | { type: "LOAD_STARTER_SAMPLE" }
   | { type: "RESTORE_DATA"; data: AppData }
   | { type: "UPSERT_EXTRA_STOCK_PLAN"; plan: ExtraStockPlan }
   | { type: "REMOVE_EXTRA_STOCK_PLAN"; planId: string }
   | {
-      type: "START_EXTRA_STOCK_PREPARATION"
-      planId: string
-      preparationId: string
-    }
+    type: "START_EXTRA_STOCK_PREPARATION"
+    planId: string
+    preparationId: string
+  }
   | {
-      type: "COMPLETE_EXTRA_STOCK_PREPARATION"
-      preparationId: string
-      actualUsage: PreparationUsage[]
-      usableOutputQuantity: number
-    }
+    type: "COMPLETE_EXTRA_STOCK_PREPARATION"
+    preparationId: string
+    actualUsage: PreparationUsage[]
+    usableOutputQuantity: number
+  }
   | {
-      type: "SELL_FINISHED_STOCK"
-      transactionId: string
-      batchId: string
-      quantity: number
-      sellingPrice?: number
-      customerId?: string | null
-      customerName?: string
-      paymentMethod?: string
-    }
+    type: "SELL_FINISHED_STOCK"
+    transactionId: string
+    batchId: string
+    quantity: number
+    sellingPrice?: number
+    customerId?: string | null
+    customerName?: string
+    paymentMethod?: string
+  }
   | {
-      type: "WRITE_OFF_FINISHED_STOCK"
-      transactionId: string
-      batchId: string
-      quantity: number
-      reason: string
-    }
+    type: "WRITE_OFF_FINISHED_STOCK"
+    transactionId: string
+    batchId: string
+    quantity: number
+    reason: string
+  }
   | {
-      type: "RECONCILE_LEGACY_FINISHED_STOCK"
-      batchId: string
-      inventoryId: string
-      quantity: number
-      unitCost: number
-      reason: string
-    }
+    type: "RECONCILE_LEGACY_FINISHED_STOCK"
+    batchId: string
+    inventoryId: string
+    quantity: number
+    unitCost: number
+    reason: string
+  }
   | {
-      type: "SET_PURCHASE_QUANTITY"
-      inventoryId: string
-      quantity: number
-    }
+    type: "SET_PURCHASE_QUANTITY"
+    inventoryId: string
+    quantity: number
+  }
   | { type: "RECORD_PURCHASE"; purchase: PurchaseRecord }
   | {
-      type: "ADJUST_INVENTORY"
-      adjustment: {
-        id: string
-        inventoryId: string
-        type: Exclude<
-          InventoryMovementType,
-          | "Opening balance"
-          | "Purchase"
-          | "Preparation consumption"
-          | "Production"
-          | "Finished stock sale"
-          | "Finished stock write-off"
-        >
-        quantityDelta: number
-        date: string
-        reason: string
-      }
+    type: "ADJUST_INVENTORY"
+    adjustment: {
+      id: string
+      inventoryId: string
+      type: Exclude<
+        InventoryMovementType,
+        | "Opening balance"
+        | "Purchase"
+        | "Preparation consumption"
+        | "Production"
+        | "Finished stock sale"
+        | "Finished stock write-off"
+      >
+      quantityDelta: number
+      date: string
+      reason: string
     }
+  }
   | { type: "START_PREPARATION"; preparationId: string }
   | {
-      type: "TOGGLE_PREPARATION_STEP"
-      preparationId: string
-      stepIndex: number
-    }
+    type: "TOGGLE_PREPARATION_STEP"
+    preparationId: string
+    stepIndex: number
+  }
   | {
-      type: "UPDATE_PREPARATION_USAGE"
-      preparationId: string
-      inventoryId: string
-      quantity: number
-    }
+    type: "UPDATE_PREPARATION_USAGE"
+    preparationId: string
+    inventoryId: string
+    quantity: number
+  }
   | { type: "COMPLETE_PREPARATION"; preparationId: string }
   | { type: "UPDATE_SETTINGS"; patch: Partial<AppSettings> }
   | { type: "RECORD_BACKUP_EXPORT"; exportedAt: string }
@@ -220,59 +220,59 @@ type AppAction =
   | { type: "ARCHIVE_PRODUCT"; productId: string; archived: boolean }
   | { type: "ADD_INVENTORY_ITEM"; item: InventoryItem }
   | {
-      type: "UPDATE_INVENTORY_ITEM"
-      inventoryId: string
-      patch: {
-        name?: string
-        image?: string | null
-        category?: "ingredient" | "packaging"
-        unit?: InventoryItem["unit"]
-        physical?: number
-        lowStockThreshold?: number
-        averageUnitCost?: number
-        gramsPerTsp?: number | null
-        mlPerTsp?: number | null
-        trackStock?: boolean
-        archived?: boolean
-      }
+    type: "UPDATE_INVENTORY_ITEM"
+    inventoryId: string
+    patch: {
+      name?: string
+      image?: string | null
+      category?: "ingredient" | "packaging"
+      unit?: InventoryItem["unit"]
+      physical?: number
+      lowStockThreshold?: number
+      averageUnitCost?: number
+      gramsPerTsp?: number | null
+      mlPerTsp?: number | null
+      trackStock?: boolean
+      archived?: boolean
     }
+  }
   | { type: "ARCHIVE_RECIPE"; recipeId: string; archived: boolean }
   | { type: "UPDATE_BUDGET_PLAN"; budgetPlan: Partial<BudgetPlan> }
   | {
-      type: "SET_PANTRY_CHECKLIST_ITEM"
-      preparationId: string
-      inventoryId: string
-      inPantry: boolean
-      toBuyQuantity?: number
-    }
+    type: "SET_PANTRY_CHECKLIST_ITEM"
+    preparationId: string
+    inventoryId: string
+    inPantry: boolean
+    toBuyQuantity?: number
+  }
   | {
-      type: "MARK_ALL_PANTRY_CHECKLIST"
-      preparationId: string
-      inPantry: boolean
-    }
+    type: "MARK_ALL_PANTRY_CHECKLIST"
+    preparationId: string
+    inPantry: boolean
+  }
   | {
-      type: "UPDATE_SHOPPING_CHECKLIST_ITEM"
-      inventoryId: string
-      checked: boolean
-      boughtQuantity?: number
-    }
+    type: "UPDATE_SHOPPING_CHECKLIST_ITEM"
+    inventoryId: string
+    checked: boolean
+    boughtQuantity?: number
+  }
   | {
-      type: "COMPLETE_SHOPPING_CHECKLIST"
-      extraInventoryIds?: string[]
-      checkedInventoryIds?: string[]
-    }
+    type: "COMPLETE_SHOPPING_CHECKLIST"
+    extraInventoryIds?: string[]
+    checkedInventoryIds?: string[]
+  }
   | {
-      type: "ADD_SHOPPING_TRIP"
-      trip: ShoppingTripRecord
-    }
+    type: "ADD_SHOPPING_TRIP"
+    trip: ShoppingTripRecord
+  }
   | {
-      type: "REMOVE_MANUAL_SHOPPING_ITEM"
-      inventoryId: string
-    }
+    type: "REMOVE_MANUAL_SHOPPING_ITEM"
+    inventoryId: string
+  }
   | {
-      type: "FINISH_PREPARATION_SIMPLE"
-      preparationId: string
-    }
+    type: "FINISH_PREPARATION_SIMPLE"
+    preparationId: string
+  }
 
 export type StorageDiagnostics = {
   backendName: string
@@ -355,10 +355,10 @@ function scopeRequirementsToLines(
       if (!recipeRequirement) return []
       const basePerUnit = targetItem
         ? toInventoryBaseQuantity(
-            recipeRequirement.quantity,
-            recipeRequirement.unit,
-            targetItem,
-          )
+          recipeRequirement.quantity,
+          recipeRequirement.unit,
+          targetItem,
+        )
         : recipeRequirement.quantity
       const required =
         Number.isFinite(basePerUnit) && basePerUnit > 0
@@ -410,18 +410,18 @@ function normalizeBudgetPlan(raw?: Partial<BudgetPlan> | null): BudgetPlan {
   }
   return {
     ...(typeof raw.monthlySalesTarget === "number" &&
-    Number.isSafeInteger(raw.monthlySalesTarget) &&
-    raw.monthlySalesTarget >= 0
+      Number.isSafeInteger(raw.monthlySalesTarget) &&
+      raw.monthlySalesTarget >= 0
       ? { monthlySalesTarget: raw.monthlySalesTarget }
       : {}),
     ...(typeof raw.monthlyProfitTarget === "number" &&
-    Number.isSafeInteger(raw.monthlyProfitTarget) &&
-    raw.monthlyProfitTarget >= 0
+      Number.isSafeInteger(raw.monthlyProfitTarget) &&
+      raw.monthlyProfitTarget >= 0
       ? { monthlyProfitTarget: raw.monthlyProfitTarget }
       : {}),
     ...(typeof raw.ingredientSpendLimit === "number" &&
-    Number.isSafeInteger(raw.ingredientSpendLimit) &&
-    raw.ingredientSpendLimit >= 0
+      Number.isSafeInteger(raw.ingredientSpendLimit) &&
+      raw.ingredientSpendLimit >= 0
       ? { ingredientSpendLimit: raw.ingredientSpendLimit }
       : {}),
     categoryLimits,
@@ -444,8 +444,8 @@ function normalizeSettings(raw?: Partial<AppSettings> | null): AppSettings {
       typeof raw.ownerName === "string" ? raw.ownerName.trim() : base.ownerName,
     defaultLabourRatePerHour:
       typeof raw.defaultLabourRatePerHour === "number" &&
-      Number.isFinite(raw.defaultLabourRatePerHour) &&
-      raw.defaultLabourRatePerHour >= 0
+        Number.isFinite(raw.defaultLabourRatePerHour) &&
+        raw.defaultLabourRatePerHour >= 0
         ? Math.round(raw.defaultLabourRatePerHour)
         : base.defaultLabourRatePerHour,
     defaultPricingMode:
@@ -454,37 +454,37 @@ function normalizeSettings(raw?: Partial<AppSettings> | null): AppSettings {
         : base.defaultPricingMode,
     defaultMarginPercent:
       typeof raw.defaultMarginPercent === "number" &&
-      Number.isFinite(raw.defaultMarginPercent) &&
-      raw.defaultMarginPercent >= 0 &&
-      raw.defaultMarginPercent < 100
+        Number.isFinite(raw.defaultMarginPercent) &&
+        raw.defaultMarginPercent >= 0 &&
+        raw.defaultMarginPercent < 100
         ? raw.defaultMarginPercent
         : base.defaultMarginPercent,
     defaultMarkupPercent:
       typeof raw.defaultMarkupPercent === "number" &&
-      Number.isFinite(raw.defaultMarkupPercent) &&
-      raw.defaultMarkupPercent >= 0
+        Number.isFinite(raw.defaultMarkupPercent) &&
+        raw.defaultMarkupPercent >= 0
         ? raw.defaultMarkupPercent
         : base.defaultMarkupPercent,
     priceRoundingStep:
       raw.priceRoundingStep === 1 ||
-      raw.priceRoundingStep === 50 ||
-      raw.priceRoundingStep === 100
+        raw.priceRoundingStep === 50 ||
+        raw.priceRoundingStep === 100
         ? raw.priceRoundingStep
         : base.priceRoundingStep,
     defaultLowStockThreshold:
       typeof raw.defaultLowStockThreshold === "number" &&
-      Number.isFinite(raw.defaultLowStockThreshold) &&
-      raw.defaultLowStockThreshold >= 0
+        Number.isFinite(raw.defaultLowStockThreshold) &&
+        raw.defaultLowStockThreshold >= 0
         ? raw.defaultLowStockThreshold
         : base.defaultLowStockThreshold,
     backupReminderDismissedAt:
       typeof raw.backupReminderDismissedAt === "string" &&
-      isValidTimestamp(raw.backupReminderDismissedAt)
+        isValidTimestamp(raw.backupReminderDismissedAt)
         ? raw.backupReminderDismissedAt
         : null,
     backupReminderSnoozedUntil:
       typeof raw.backupReminderSnoozedUntil === "string" &&
-      isValidTimestamp(raw.backupReminderSnoozedUntil)
+        isValidTimestamp(raw.backupReminderSnoozedUntil)
         ? raw.backupReminderSnoozedUntil
         : null,
     lastBackupAt:
@@ -513,7 +513,7 @@ export function migrateState(source: AppData): AppData {
       batchedByInventory.set(
         batch.inventoryId,
         (batchedByInventory.get(batch.inventoryId) ?? 0) +
-          batch.remainingQuantity,
+        batch.remainingQuantity,
       )
     }
   }
@@ -538,16 +538,16 @@ export function migrateState(source: AppData): AppData {
   const inventoryMovements = existingMovements.length
     ? existingMovements
     : inventory.map((item) => ({
-        id: `movement-opening-${item.inventoryId}`,
-        inventoryId: item.inventoryId,
-        type: "Opening balance" as const,
-        quantityDelta: item.physical,
-        unit: item.unit,
-        balanceAfter: item.physical,
-        date: "2025-04-01",
-        reason: "Opening balance",
-        createdAt: "2025-04-01T08:00:00.000Z",
-      }))
+      id: `movement-opening-${item.inventoryId}`,
+      inventoryId: item.inventoryId,
+      type: "Opening balance" as const,
+      quantityDelta: item.physical,
+      unit: item.unit,
+      balanceAfter: item.physical,
+      date: "2025-04-01",
+      reason: "Opening balance",
+      createdAt: "2025-04-01T08:00:00.000Z",
+    }))
 
   const stateForPreparation = {
     ...defaults,
@@ -582,9 +582,9 @@ export function migrateState(source: AppData): AppData {
   })
   const preparationRecords = Array.isArray(source.preparationRecords)
     ? source.preparationRecords.map((record) => ({
-        ...record,
-        recipeSnapshot: normalizeRecipeSnapshot(record.recipeSnapshot),
-      }))
+      ...record,
+      recipeSnapshot: normalizeRecipeSnapshot(record.recipeSnapshot),
+    }))
     : []
   for (const order of orders) {
     if (order.status === "Draft" || order.status === "Cancelled") continue
@@ -598,7 +598,7 @@ export function migrateState(source: AppData): AppData {
         return
       const status: PreparationRecord["status"] =
         order.preparationStatus === "Ready" ||
-        order.preparationStatus === "Completed"
+          order.preparationStatus === "Completed"
           ? "Ready"
           : order.preparationStatus === "In progress" && index === 0
             ? "In progress"
@@ -623,16 +623,16 @@ export function migrateState(source: AppData): AppData {
     inventory,
     extraStockPlans: Array.isArray(source.extraStockPlans)
       ? source.extraStockPlans.map((plan) => ({
-          ...plan,
-          recipeSnapshot: normalizeRecipeSnapshot(plan.recipeSnapshot),
-        }))
+        ...plan,
+        recipeSnapshot: normalizeRecipeSnapshot(plan.recipeSnapshot),
+      }))
       : [],
     extraStockPreparations: Array.isArray(source.extraStockPreparations)
       ? source.extraStockPreparations.map((record) => ({
-          ...record,
-          recipeSnapshot: normalizeRecipeSnapshot(record.recipeSnapshot),
-          actualCost: record.actualCost ?? null,
-        }))
+        ...record,
+        recipeSnapshot: normalizeRecipeSnapshot(record.recipeSnapshot),
+        actualCost: record.actualCost ?? null,
+      }))
       : [],
     finishedStockBatches: Array.isArray(source.finishedStockBatches)
       ? source.finishedStockBatches
@@ -770,10 +770,10 @@ function applyFinishedStockTransaction(
     )
     productionLinksValid = Boolean(
       preparation?.status === "Ready" &&
-        preparation.planId === batch.planId &&
-        preparation.productId === batch.productId &&
-        preparation.variantId === batch.variantId &&
-        preparation.finishedInventoryId === batch.inventoryId,
+      preparation.planId === batch.planId &&
+      preparation.productId === batch.productId &&
+      preparation.variantId === batch.variantId &&
+      preparation.finishedInventoryId === batch.inventoryId,
     )
   }
   const batchUnitCost =
@@ -850,43 +850,43 @@ function applyFinishedStockTransaction(
   const history =
     transaction.type === "sale"
       ? {
-          id: transaction.id,
-          type: "sale" as const,
-          batchId: batch.id,
-          inventoryId: batch.inventoryId,
-          quantity: transaction.quantity,
-          occurredAt,
-          unitCost: batchUnitCost,
-          totalCost,
-          ...(transaction.sellingPrice !== undefined
-            ? { sellingPrice: transaction.sellingPrice }
-            : {}),
-          ...(resolvedCustomer
+        id: transaction.id,
+        type: "sale" as const,
+        batchId: batch.id,
+        inventoryId: batch.inventoryId,
+        quantity: transaction.quantity,
+        occurredAt,
+        unitCost: batchUnitCost,
+        totalCost,
+        ...(transaction.sellingPrice !== undefined
+          ? { sellingPrice: transaction.sellingPrice }
+          : {}),
+        ...(resolvedCustomer
+          ? {
+            customerId: resolvedCustomer.id,
+            customerName: resolvedCustomer.name,
+          }
+          : transaction.customerName?.trim()
             ? {
-                customerId: resolvedCustomer.id,
-                customerName: resolvedCustomer.name,
-              }
-            : transaction.customerName?.trim()
-              ? {
-                  customerId: null,
-                  customerName: transaction.customerName.trim(),
-                }
-              : {}),
-          ...(transaction.paymentMethod?.trim()
-            ? { paymentMethod: transaction.paymentMethod.trim() }
+              customerId: null,
+              customerName: transaction.customerName.trim(),
+            }
             : {}),
-        }
+        ...(transaction.paymentMethod?.trim()
+          ? { paymentMethod: transaction.paymentMethod.trim() }
+          : {}),
+      }
       : {
-          id: transaction.id,
-          type: "write-off" as const,
-          batchId: batch.id,
-          inventoryId: batch.inventoryId,
-          quantity: transaction.quantity,
-          occurredAt,
-          reason,
-          unitCost: batchUnitCost,
-          totalCost,
-        }
+        id: transaction.id,
+        type: "write-off" as const,
+        batchId: batch.id,
+        inventoryId: batch.inventoryId,
+        quantity: transaction.quantity,
+        occurredAt,
+        reason,
+        unitCost: batchUnitCost,
+        totalCost,
+      }
 
   return {
     ...state,
@@ -898,9 +898,9 @@ function applyFinishedStockTransaction(
     finishedStockBatches: state.finishedStockBatches.map((item) =>
       item.id === batch.id
         ? {
-            ...item,
-            remainingQuantity: item.remainingQuantity - transaction.quantity,
-          }
+          ...item,
+          remainingQuantity: item.remainingQuantity - transaction.quantity,
+        }
         : item,
     ),
     finishedStockTransactions: [history, ...state.finishedStockTransactions],
@@ -1059,13 +1059,13 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const updatedOrders = state.orders.map((item) =>
         item.id === order.id
           ? {
-              ...item,
-              status: "Cancelled" as const,
-              preparationStatus: "Cancelled" as const,
-              reservations: [],
-              shortages: [],
-              updatedAt: now,
-            }
+            ...item,
+            status: "Cancelled" as const,
+            preparationStatus: "Cancelled" as const,
+            reservations: [],
+            shortages: [],
+            updatedAt: now,
+          }
           : item,
       )
       const updatedHistories = state.expenseAllocationHistories.map((history) => {
@@ -1105,10 +1105,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         preparationRecords: state.preparationRecords.map((record) =>
           record.orderId === order.id
             ? {
-                ...record,
-                status: "Cancelled",
-                updatedAt: now,
-              }
+              ...record,
+              status: "Cancelled",
+              updatedAt: now,
+            }
             : record,
         ),
       }
@@ -1124,14 +1124,14 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                status: "Completed",
-                preparationStatus: "Completed",
-                collectedAt: now,
-                reservations: [],
-                shortages: [],
-                updatedAt: now,
-              }
+              ...item,
+              status: "Completed",
+              preparationStatus: "Completed",
+              collectedAt: now,
+              reservations: [],
+              shortages: [],
+              updatedAt: now,
+            }
             : item,
         ),
       }
@@ -1158,8 +1158,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
         const currentRecipe =
           (line.recipeId
             ? state.recipes.find(
-                (recipe) => recipe.id === line.recipeId && !recipe.archived,
-              )
+              (recipe) => recipe.id === line.recipeId && !recipe.archived,
+            )
             : undefined) ??
           state.recipes.find(
             (recipe) =>
@@ -1325,10 +1325,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                paymentStatus: derivePaymentStatus(item, refunds),
-                updatedAt: new Date().toISOString(),
-              }
+              ...item,
+              paymentStatus: derivePaymentStatus(item, refunds),
+              updatedAt: new Date().toISOString(),
+            }
             : item,
         ),
       }
@@ -1382,10 +1382,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           touchedOrderIds.has(item.id)
             ? {
-                ...item,
-                paymentStatus: derivePaymentStatus(item, nextRefunds),
-                updatedAt: now,
-              }
+              ...item,
+              paymentStatus: derivePaymentStatus(item, nextRefunds),
+              updatedAt: now,
+            }
             : item,
         ),
       }
@@ -1411,10 +1411,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                cancellationFee: action.fee,
-                updatedAt: new Date().toISOString(),
-              }
+              ...item,
+              cancellationFee: action.fee,
+              updatedAt: new Date().toISOString(),
+            }
             : item,
         ),
       }
@@ -1456,7 +1456,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
           (item) =>
             item.id === category.id ||
             item.name.trim().toLocaleLowerCase() ===
-              category.name.trim().toLocaleLowerCase(),
+            category.name.trim().toLocaleLowerCase(),
         )
       ) {
         return state
@@ -1546,8 +1546,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
         ...state,
         expenseAllocationHistories: history
           ? state.expenseAllocationHistories.map((item) =>
-              item === history ? nextHistory : item,
-            )
+            item === history ? nextHistory : item,
+          )
           : [...state.expenseAllocationHistories, nextHistory],
       }
     }
@@ -1572,10 +1572,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         customers: state.customers.map((item) =>
           item.id === action.customer.id
             ? {
-                ...item,
-                name: action.customer.name.trim(),
-                phone: action.customer.phone.trim(),
-              }
+              ...item,
+              name: action.customer.name.trim(),
+              phone: action.customer.phone.trim(),
+            }
             : item,
         ),
       }
@@ -1738,7 +1738,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       }
       const item: InventoryItem =
         rawItem.category === "finished" &&
-        rawItem.unbatchedLegacyQuantity === undefined
+          rawItem.unbatchedLegacyQuantity === undefined
           ? { ...structuredClone(rawItem), unbatchedLegacyQuantity: rawItem.physical }
           : structuredClone(rawItem)
       const now = new Date().toISOString()
@@ -1746,21 +1746,21 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const openingMovement: InventoryMovement[] =
         item.physical > 0
           ? [
-              {
-                id: makeUniqueId(
-                  "movement-open",
-                  new Set(state.inventoryMovements.map((m) => m.id)),
-                ),
-                inventoryId: item.inventoryId,
-                type: "Opening balance",
-                quantityDelta: item.physical,
-                unit: item.unit,
-                balanceAfter: item.physical,
-                date: today,
-                reason: "Initial inventory balance",
-                createdAt: now,
-              },
-            ]
+            {
+              id: makeUniqueId(
+                "movement-open",
+                new Set(state.inventoryMovements.map((m) => m.id)),
+              ),
+              inventoryId: item.inventoryId,
+              type: "Opening balance",
+              quantityDelta: item.physical,
+              unit: item.unit,
+              balanceAfter: item.physical,
+              date: today,
+              reason: "Initial inventory balance",
+              createdAt: now,
+            },
+          ]
           : []
       return {
         ...state,
@@ -1893,21 +1893,21 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const stockMovement: InventoryMovement[] =
         patch.physical !== undefined && Math.abs(stockDelta) > 1e-9
           ? [
-              {
-                id: makeUniqueId(
-                  "movement-adjust",
-                  new Set(state.inventoryMovements.map((m) => m.id)),
-                ),
-                inventoryId: target.inventoryId,
-                type: "Correction",
-                quantityDelta: stockDelta,
-                unit: target.unit,
-                balanceAfter: patch.physical,
-                date: getColomboTodayIso(new Date(now)),
-                reason: "Updated available stock",
-                createdAt: now,
-              },
-            ]
+            {
+              id: makeUniqueId(
+                "movement-adjust",
+                new Set(state.inventoryMovements.map((m) => m.id)),
+              ),
+              inventoryId: target.inventoryId,
+              type: "Correction",
+              quantityDelta: stockDelta,
+              unit: target.unit,
+              balanceAfter: patch.physical,
+              date: getColomboTodayIso(new Date(now)),
+              reason: "Updated available stock",
+              createdAt: now,
+            },
+          ]
           : []
       const nextRecipes = state.recipes.map((recipe) => {
         const usesItem =
@@ -1919,18 +1919,18 @@ export function reducer(state: AppData, action: AppAction): AppData {
         const updatedIngredients =
           patch.name !== undefined
             ? recipe.ingredients.map((ing) =>
-                ing.inventoryId === action.inventoryId
-                  ? { ...ing, name: patch.name!.trim() }
-                  : ing,
-              )
+              ing.inventoryId === action.inventoryId
+                ? { ...ing, name: patch.name!.trim() }
+                : ing,
+            )
             : recipe.ingredients
         const updatedPackaging =
           patch.name !== undefined
             ? recipe.packaging.map((pkg) =>
-                pkg.inventoryId === action.inventoryId
-                  ? { ...pkg, name: patch.name!.trim() }
-                  : pkg,
-              )
+              pkg.inventoryId === action.inventoryId
+                ? { ...pkg, name: patch.name!.trim() }
+                : pkg,
+            )
             : recipe.packaging
         const breakdown = estimateRecipeMaterialCost(
           {
@@ -1940,7 +1940,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
             estimatedCost: recipe.estimatedCost,
           },
           nextInventory,
-          state.settings.defaultLabourRatePerHour,
+          recipe.pricing?.labourRatePerHour ??
+            state.settings.defaultLabourRatePerHour,
         )
         const canUpdateCost =
           (patch.averageUnitCost !== undefined ||
@@ -2088,18 +2089,18 @@ export function reducer(state: AppData, action: AppAction): AppData {
           item.id !== product.id
             ? item
             : {
-                ...item,
-                variants: item.variants.map((variant) => {
-                  if (variant.id !== action.variantId) return variant
-                  const { finishedInventoryId: _, ...unmappedVariant } = variant
-                  return action.inventoryId === null
-                    ? unmappedVariant
-                    : {
-                        ...variant,
-                        finishedInventoryId: action.inventoryId,
-                      }
-                }),
-              },
+              ...item,
+              variants: item.variants.map((variant) => {
+                if (variant.id !== action.variantId) return variant
+                const { finishedInventoryId: _, ...unmappedVariant } = variant
+                return action.inventoryId === null
+                  ? unmappedVariant
+                  : {
+                    ...variant,
+                    finishedInventoryId: action.inventoryId,
+                  }
+              }),
+            },
         ),
       }
     }
@@ -2132,8 +2133,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
         ...state,
         extraStockPlans: existing
           ? state.extraStockPlans.map((item) =>
-              item.id === nextPlan.id ? nextPlan : item,
-            )
+            item.id === nextPlan.id ? nextPlan : item,
+          )
           : [nextPlan, ...state.extraStockPlans],
       }
     }
@@ -2160,8 +2161,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
       )
       const finishedInventory = variant?.finishedInventoryId
         ? state.inventory.find(
-            (item) => item.inventoryId === variant.finishedInventoryId,
-          )
+          (item) => item.inventoryId === variant.finishedInventoryId,
+        )
         : undefined
       const output: unknown = plan.recipeSnapshot.expectedOutput
       if (
@@ -2484,10 +2485,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         inventory: state.inventory.map((item) =>
           item.inventoryId === inventoryItem.inventoryId
             ? {
-                ...item,
-                unbatchedLegacyQuantity:
-                  unbatchedLegacyQuantity - action.quantity,
-              }
+              ...item,
+              unbatchedLegacyQuantity:
+                unbatchedLegacyQuantity - action.quantity,
+            }
             : item,
         ),
         finishedStockBatches: [batch, ...state.finishedStockBatches],
@@ -2718,21 +2719,21 @@ export function reducer(state: AppData, action: AppAction): AppData {
         preparationRecords: state.preparationRecords.map((item) =>
           item.id === record.id
             ? {
-                ...item,
-                status: "In progress",
-                startedAt: now,
-                updatedAt: now,
-              }
+              ...item,
+              status: "In progress",
+              startedAt: now,
+              updatedAt: now,
+            }
             : item,
         ),
         orders: state.orders.map((item) =>
           item.id === record.orderId
             ? {
-                ...item,
-                status: "In Progress",
-                preparationStatus: "In progress",
-                updatedAt: now,
-              }
+              ...item,
+              status: "In Progress",
+              preparationStatus: "In progress",
+              updatedAt: now,
+            }
             : item,
         ),
       }
@@ -2753,10 +2754,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         preparationRecords: state.preparationRecords.map((item) =>
           item.id === record.id
             ? {
-                ...item,
-                completedSteps,
-                updatedAt: new Date().toISOString(),
-              }
+              ...item,
+              completedSteps,
+              updatedAt: new Date().toISOString(),
+            }
             : item,
         ),
       }
@@ -2773,14 +2774,14 @@ export function reducer(state: AppData, action: AppAction): AppData {
         preparationRecords: state.preparationRecords.map((item) =>
           item.id === record.id
             ? {
-                ...item,
-                actualUsage: item.actualUsage.map((usage) =>
-                  usage.inventoryId === action.inventoryId
-                    ? { ...usage, actualQuantity: action.quantity }
-                    : usage,
-                ),
-                updatedAt: new Date().toISOString(),
-              }
+              ...item,
+              actualUsage: item.actualUsage.map((usage) =>
+                usage.inventoryId === action.inventoryId
+                  ? { ...usage, actualQuantity: action.quantity }
+                  : usage,
+              ),
+              updatedAt: new Date().toISOString(),
+            }
             : item,
         ),
       }
@@ -2876,17 +2877,17 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                status: "In Progress",
-                preparationStatus: allReady ? "Ready" : "In progress",
-                reservations: item.reservations.filter(
-                  (reservation) => reservation.lineId !== record.orderLineId,
-                ),
-                shortages: item.shortages.filter(
-                  (shortage) => shortage.lineId !== record.orderLineId,
-                ),
-                updatedAt: now,
-              }
+              ...item,
+              status: "In Progress",
+              preparationStatus: allReady ? "Ready" : "In progress",
+              reservations: item.reservations.filter(
+                (reservation) => reservation.lineId !== record.orderLineId,
+              ),
+              shortages: item.shortages.filter(
+                (shortage) => shortage.lineId !== record.orderLineId,
+              ),
+              updatedAt: now,
+            }
             : item,
         ),
       }
@@ -3018,8 +3019,8 @@ export function reducer(state: AppData, action: AppAction): AppData {
           if (usage.inventoryId !== action.inventoryId) return usage
           const defaultToBuy =
             action.toBuyQuantity !== undefined &&
-            Number.isFinite(action.toBuyQuantity) &&
-            action.toBuyQuantity > 0
+              Number.isFinite(action.toBuyQuantity) &&
+              action.toBuyQuantity > 0
               ? action.toBuyQuantity
               : usage.plannedQuantity
           return {
@@ -3087,10 +3088,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                shortages: nextShortages,
-                updatedAt: now,
-              }
+              ...item,
+              shortages: nextShortages,
+              updatedAt: now,
+            }
             : item,
         ),
       }
@@ -3176,10 +3177,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                shortages: nextShortages,
-                updatedAt: now,
-              }
+              ...item,
+              shortages: nextShortages,
+              updatedAt: now,
+            }
             : item,
         ),
       }
@@ -3437,17 +3438,17 @@ export function reducer(state: AppData, action: AppAction): AppData {
         orders: state.orders.map((item) =>
           item.id === order.id
             ? {
-                ...item,
-                status: "In Progress",
-                preparationStatus: allReady ? "Ready" : "In progress",
-                reservations: item.reservations.filter(
-                  (reservation) => reservation.lineId !== record.orderLineId,
-                ),
-                shortages: item.shortages.filter(
-                  (shortage) => shortage.lineId !== record.orderLineId,
-                ),
-                updatedAt: now,
-              }
+              ...item,
+              status: "In Progress",
+              preparationStatus: allReady ? "Ready" : "In progress",
+              reservations: item.reservations.filter(
+                (reservation) => reservation.lineId !== record.orderLineId,
+              ),
+              shortages: item.shortages.filter(
+                (shortage) => shortage.lineId !== record.orderLineId,
+              ),
+              updatedAt: now,
+            }
             : item,
         ),
       }

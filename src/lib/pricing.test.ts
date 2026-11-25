@@ -5,8 +5,10 @@ import {
   estimateRecipeMaterialCost,
   fromDisplayUnitPrice,
   getDisplayPriceUnitLabel,
+  resolveRecipeSellingPrice,
   toDisplayUnitPrice,
 } from "./pricing"
+import { calculateCostSnapshot } from "./orders"
 import { selectManualShoppingList } from "./inventory"
 import { reducer } from "../state/AppState"
 import {
@@ -432,5 +434,60 @@ describe("pricing calculations", () => {
     )
     expect(breakdown.ingredientsCost).toBe(190)
     expect(breakdown.hasCompletePricing).toBe(true)
+  })
+
+  it("keeps saved recipe selling price while updating live cost & margin, and uses saved price in orders", () => {
+    const state = createTestAppData({
+      inventory: [
+        createTestInventoryItem({
+          inventoryId: "flour",
+          name: "Flour",
+          unit: "g",
+          averageUnitCost: 0.4, // Rs. 400 / kg
+        }),
+      ],
+    })
+    const recipeSnapshot = createTestRecipeSnapshot({
+      ingredients: [{ inventoryId: "flour", name: "Flour", quantity: 1000, unit: "g" }],
+      packaging: [],
+      preparationMinutes: 60, // Rs. 600 labour @ 600/hr -> base cost 1000
+      estimatedCost: 1000,
+      sellingPrice: 2500,
+      pricing: {
+        mode: "margin",
+        marginPercent: 50,
+        markupPercent: 100,
+        labourRatePerHour: 800, // cost = 400 + 800 = 1200
+        roundingStep: 50,
+      },
+    })
+
+    // Resolved recipe price honours saved sellingPrice (2500) & custom labour rate (800 -> cost 1200)
+    const resolved = resolveRecipeSellingPrice(recipeSnapshot, state.inventory, state.settings)
+    expect(resolved.source).toBe("saved")
+    expect(resolved.sellingPrice).toBe(2500)
+    expect(resolved.effectiveCost).toBe(1200)
+    expect(resolved.profitLkr).toBe(1300)
+
+    // When ingredient price rises later, saved sellingPrice stays 2500 while cost/profit update live
+    const updatedInventory = [
+      { ...state.inventory[0], averageUnitCost: 0.5 }, // cost = 500 + 800 = 1300
+    ]
+    const afterFlourHike = resolveRecipeSellingPrice(
+      recipeSnapshot,
+      updatedInventory,
+      state.settings,
+    )
+    expect(afterFlourHike.sellingPrice).toBe(2500)
+    expect(afterFlourHike.effectiveCost).toBe(1300)
+    expect(afterFlourHike.profitLkr).toBe(1200)
+
+    // New orders use saved recipe sellingPrice * qty cleanly
+    const orderCost = calculateCostSnapshot(
+      [createTestOrderLine("l-saved", recipeSnapshot, { quantity: 2 })],
+      state,
+    )
+    expect(orderCost.estimatedTotal).toBe(2400)
+    expect(orderCost.suggestedPrice).toBe(5000)
   })
 })

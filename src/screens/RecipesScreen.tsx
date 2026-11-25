@@ -34,8 +34,8 @@ import { createId } from "../lib/id"
 import { convertInventoryUnitQuantity } from "../lib/inventory"
 import {
   calculateItemRecipeCost,
-  estimateRecipeMaterialCost,
   getDisplayPriceUnitLabel,
+  resolveRecipeSellingPrice,
   toDisplayUnitPrice,
 } from "../lib/pricing"
 import { useAppState } from "../state/AppState"
@@ -142,14 +142,12 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
     const variant = product?.variants.find(
       (item) => item.id === selectedRecipe.variantId,
     )
-    const liveBreakdown = estimateRecipeMaterialCost(
+    const resolvedPrice = resolveRecipeSellingPrice(
       selectedRecipe,
       state.inventory,
-      state.settings.defaultLabourRatePerHour,
+      state.settings,
     )
-    const effectiveCost = liveBreakdown.hasLivePricing
-      ? liveBreakdown.totalCost
-      : selectedRecipe.estimatedCost
+    const effectiveCost = resolvedPrice.effectiveCost
 
     return (
       <div className="focused-flow pb-10">
@@ -195,14 +193,27 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
               <div className="flex items-center justify-between gap-3 border-t border-warm-border pt-3">
                 <div>
                   <div className="text-xs text-muted">
-                    {scaleMultiplier === 1
-                      ? "Estimated cost"
-                      : `Estimated cost (${scaleMultiplier}×)`}
+                    {resolvedPrice.source === "saved"
+                      ? scaleMultiplier === 1
+                        ? "Selling price"
+                        : `Selling price (${scaleMultiplier}×)`
+                      : scaleMultiplier === 1
+                        ? "Suggested price"
+                        : `Suggested price (${scaleMultiplier}×)`}
                   </div>
                   <div className="mt-0.5 text-lg font-bold text-cocoa">
                     <MoneyText
-                      amount={Math.round(effectiveCost * scaleMultiplier)}
+                      amount={Math.round(
+                        resolvedPrice.sellingPrice * scaleMultiplier,
+                      )}
                     />
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    Est. cost{" "}
+                    <MoneyText
+                      amount={Math.round(effectiveCost * scaleMultiplier)}
+                    />{" "}
+                    · {resolvedPrice.marginPercent}% margin
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -551,14 +562,11 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                 const variant = product?.variants.find(
                   (item) => item.id === recipe.variantId,
                 )
-                const cost = estimateRecipeMaterialCost(
+                const resolvedCardPrice = resolveRecipeSellingPrice(
                   recipe,
                   state.inventory,
-                  state.settings.defaultLabourRatePerHour,
+                  state.settings,
                 )
-                const displayCost = cost.hasLivePricing
-                  ? cost.totalCost
-                  : recipe.estimatedCost
                 return (
                   <button
                     key={recipe.id}
@@ -593,9 +601,10 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="text-sm font-bold text-cocoa">
-                            <MoneyText amount={displayCost} />
+                            <MoneyText amount={resolvedCardPrice.sellingPrice} />
                           </div>
                           <div className="text-[11px] text-muted">
+                            Cost <MoneyText amount={resolvedCardPrice.effectiveCost} /> ·{" "}
                             {recipe.preparationMinutes} mins
                           </div>
                         </div>
@@ -753,6 +762,45 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
         open={pricingTarget !== null}
         recipe={pricingTarget ?? undefined}
         quantity={scaleMultiplier >= 1 ? Math.round(scaleMultiplier) : 1}
+        currentSellingPrice={
+          pricingTarget
+            ? resolveRecipeSellingPrice(
+                pricingTarget,
+                state.inventory,
+                state.settings,
+              ).sellingPrice *
+              (scaleMultiplier >= 1 ? Math.round(scaleMultiplier) : 1)
+            : undefined
+        }
+        allowSaveDefaults
+        applyLabel="Save price"
+        onApplyPricing={({ sellingPrice, pricing, saveAsDefault }) => {
+          if (!pricingTarget) return
+          const updatedRecipe: Recipe = {
+            ...structuredClone(pricingTarget),
+            sellingPrice,
+            pricing,
+            updatedAt: new Date().toISOString(),
+          }
+          if (dispatchIfAccepted({ type: "UPDATE_RECIPE", recipe: updatedRecipe })) {
+            showToast({
+              message: `Saved selling price ${formatLkr(sellingPrice)}`,
+              tone: "success",
+            })
+          }
+          if (saveAsDefault) {
+            dispatchIfAccepted({
+              type: "UPDATE_SETTINGS",
+              patch: {
+                defaultPricingMode: pricing.mode,
+                defaultMarginPercent: pricing.marginPercent,
+                defaultMarkupPercent: pricing.markupPercent,
+                defaultLabourRatePerHour: pricing.labourRatePerHour,
+                priceRoundingStep: pricing.roundingStep,
+              },
+            })
+          }
+        }}
         onClose={() => setPricingTarget(null)}
       />
 

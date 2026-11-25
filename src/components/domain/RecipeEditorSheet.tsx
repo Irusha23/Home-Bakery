@@ -25,6 +25,7 @@ import {
   estimateRecipeMaterialCost,
   fromDisplayUnitPrice,
   getDisplayPriceUnitLabel,
+  resolveRecipeSellingPrice,
   toDisplayUnitPrice,
 } from "../../lib/pricing"
 import { useAppState } from "../../state/AppState"
@@ -34,6 +35,7 @@ import type {
   PackagingRequirement,
   Recipe,
   RecipeIngredient,
+  RecipePricingConfig,
   Unit,
 } from "../../types"
 
@@ -104,6 +106,12 @@ export default function RecipeEditorSheet({
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({})
   const [steps, setSteps] = useState<string[]>([])
   const [newStep, setNewStep] = useState("")
+  const [sellingPriceDraft, setSellingPriceDraft] = useState<number | undefined>(
+    undefined,
+  )
+  const [pricingDraft, setPricingDraft] = useState<
+    RecipePricingConfig | undefined
+  >(undefined)
   const [saveToLibrary, setSaveToLibrary] = useState(!isOrderCustomMode)
   const [showCustomPrices, setShowCustomPrices] = useState(false)
   const [error, setError] = useState("")
@@ -165,6 +173,8 @@ export default function RecipeEditorSheet({
         })),
       )
       setSteps(source.instructions.length ? [...source.instructions] : [])
+      setSellingPriceDraft(source.sellingPrice)
+      setPricingDraft(source.pricing ? { ...source.pricing } : undefined)
       setSaveToLibrary(!isOrderCustomMode)
     } else {
       const defaultProduct = initialProductId
@@ -204,6 +214,8 @@ export default function RecipeEditorSheet({
       )
       setPackaging([])
       setSteps([])
+      setSellingPriceDraft(undefined)
+      setPricingDraft(undefined)
       setSaveToLibrary(!isOrderCustomMode)
     }
   }, [
@@ -269,25 +281,32 @@ export default function RecipeEditorSheet({
       .filter((item): item is PackagingRequirement => item !== null)
   }, [effectiveInventory, packaging])
 
-  const liveCost = useMemo(
+  const resolvedDraftPrice = useMemo(
     () =>
-      estimateRecipeMaterialCost(
+      resolveRecipeSellingPrice(
         {
           ingredients: compiledIngredients,
           packaging: compiledPackaging,
           preparationMinutes: Number(prepMinutes) || 0,
+          estimatedCost: recipe?.estimatedCost,
+          sellingPrice: sellingPriceDraft,
+          pricing: pricingDraft,
         },
         effectiveInventory,
-        state.settings.defaultLabourRatePerHour,
+        state.settings,
       ),
     [
       compiledIngredients,
       compiledPackaging,
       effectiveInventory,
       prepMinutes,
-      state.settings.defaultLabourRatePerHour,
+      pricingDraft,
+      recipe?.estimatedCost,
+      sellingPriceDraft,
+      state.settings,
     ],
   )
+  const liveCost = resolvedDraftPrice.breakdown
 
   const handleAddIngredient = () => {
     const unused =
@@ -460,6 +479,10 @@ export default function RecipeEditorSheet({
         ? cleanedSteps
         : ["Follow saved preparation steps."],
       estimatedCost,
+      ...(sellingPriceDraft !== undefined && sellingPriceDraft > 0
+        ? { sellingPrice: Math.round(sellingPriceDraft) }
+        : {}),
+      ...(pricingDraft ? { pricing: pricingDraft } : {}),
       updatedAt: new Date().toISOString(),
     }
 
@@ -1231,17 +1254,14 @@ export default function RecipeEditorSheet({
             <Card tone="sage" className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-sage-dark">
-                  Live batch cost estimate
+                  {sellingPriceDraft ? "Selling price (saved)" : "Suggested price"}
                 </div>
                 <div className="mt-0.5 text-base font-bold text-cocoa">
-                  <MoneyText amount={liveCost.totalCost} />
+                  <MoneyText amount={resolvedDraftPrice.sellingPrice} />
                 </div>
                 <div className="text-[11px] text-muted">
-                  Materials{" "}
-                  <MoneyText
-                    amount={liveCost.ingredientsCost + liveCost.packagingCost}
-                  />{" "}
-                  + Labour <MoneyText amount={liveCost.labourCost} />
+                  Cost <MoneyText amount={resolvedDraftPrice.effectiveCost} /> ·{" "}
+                  {resolvedDraftPrice.marginPercent}% margin
                 </div>
               </div>
               <Button
@@ -1250,7 +1270,7 @@ export default function RecipeEditorSheet({
                 leadingIcon={<Calculator aria-hidden="true" size={15} />}
                 onClick={() => setPricingOpen(true)}
               >
-                Price check
+                Set price
               </Button>
             </Card>
           ) : null}
@@ -1310,12 +1330,34 @@ export default function RecipeEditorSheet({
 
       <PricingCalculatorSheet
         open={pricingOpen}
+        inventoryOverride={effectiveInventory}
         recipe={{
           name: name.trim() || "Recipe draft",
           ingredients: compiledIngredients,
           packaging: compiledPackaging,
           preparationMinutes: Number(prepMinutes) || 0,
           estimatedCost: liveCost.totalCost,
+          sellingPrice: sellingPriceDraft,
+          pricing: pricingDraft,
+        }}
+        currentSellingPrice={sellingPriceDraft}
+        allowSaveDefaults
+        applyLabel="Apply"
+        onApplyPricing={({ sellingPrice: nextPrice, pricing: nextPricing, saveAsDefault }) => {
+          setSellingPriceDraft(nextPrice)
+          setPricingDraft(nextPricing)
+          if (saveAsDefault) {
+            dispatchIfAccepted({
+              type: "UPDATE_SETTINGS",
+              patch: {
+                defaultPricingMode: nextPricing.mode,
+                defaultMarginPercent: nextPricing.marginPercent,
+                defaultMarkupPercent: nextPricing.markupPercent,
+                defaultLabourRatePerHour: nextPricing.labourRatePerHour,
+                priceRoundingStep: nextPricing.roundingStep,
+              },
+            })
+          }
         }}
         onClose={() => setPricingOpen(false)}
       />

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Calculator } from "lucide-react"
 import Button from "../ui/Button"
 import Card from "../ui/Card"
+import CheckboxField from "../ui/CheckboxField"
 import Field from "../ui/Field"
 import MoneyText from "../ui/MoneyText"
 import SegmentedControl from "../ui/SegmentedControl"
@@ -11,16 +12,41 @@ import {
   calculateSuggestedPrice,
   estimateRecipeMaterialCost,
 } from "../../lib/pricing"
+import { sanitizeNumericDraft } from "../../lib/quantityInput"
 import { useAppState } from "../../state/AppState"
-import type { PricingMode, RecipeSnapshot } from "../../types"
+import type {
+  InventoryItem,
+  PricingMode,
+  RecipePricingConfig,
+  RecipeSnapshot,
+} from "../../types"
+
+type PricingApplyPayload = {
+  sellingPrice: number
+  pricing: RecipePricingConfig
+  saveAsDefault: boolean
+}
 
 type PricingCalculatorSheetProps = {
   open: boolean
   title?: string
-  recipe?: Pick<RecipeSnapshot, "name" | "ingredients" | "packaging" | "preparationMinutes" | "estimatedCost">
+  recipe?: Pick<
+    RecipeSnapshot,
+    | "name"
+    | "ingredients"
+    | "packaging"
+    | "preparationMinutes"
+    | "estimatedCost"
+    | "sellingPrice"
+    | "pricing"
+  >
+  inventoryOverride?: InventoryItem[]
   quantity?: number
   currentSellingPrice?: number
+  allowSaveDefaults?: boolean
+  applyLabel?: string
   onApplyPrice?: (price: number) => void
+  onApplyPricing?: (payload: PricingApplyPayload) => void
   onClose: () => void
 }
 
@@ -28,9 +54,13 @@ export default function PricingCalculatorSheet({
   open,
   title,
   recipe,
+  inventoryOverride,
   quantity = 1,
   currentSellingPrice,
+  allowSaveDefaults = false,
+  applyLabel,
   onApplyPrice,
+  onApplyPricing,
   onClose,
 }: PricingCalculatorSheetProps) {
   const { state } = useAppState()
@@ -49,9 +79,43 @@ export default function PricingCalculatorSheet({
   const [labourRateText, setLabourRateText] = useState(
     String(state.settings.defaultLabourRatePerHour),
   )
+  const [saveAsDefault, setSaveAsDefault] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const source = recipe?.pricing
+    setMode(source?.mode ?? state.settings.defaultPricingMode)
+    setMarginText(
+      String(source?.marginPercent ?? state.settings.defaultMarginPercent),
+    )
+    setMarkupText(
+      String(source?.markupPercent ?? state.settings.defaultMarkupPercent),
+    )
+    setRoundingStep(source?.roundingStep ?? state.settings.priceRoundingStep)
+    setLabourRateText(
+      String(
+        source?.labourRatePerHour ?? state.settings.defaultLabourRatePerHour,
+      ),
+    )
+    setSaveAsDefault(false)
+  }, [
+    open,
+    recipe?.name,
+    recipe?.pricing?.labourRatePerHour,
+    recipe?.pricing?.marginPercent,
+    recipe?.pricing?.markupPercent,
+    recipe?.pricing?.mode,
+    recipe?.pricing?.roundingStep,
+    state.settings.defaultLabourRatePerHour,
+    state.settings.defaultMarginPercent,
+    state.settings.defaultMarkupPercent,
+    state.settings.defaultPricingMode,
+    state.settings.priceRoundingStep,
+  ])
 
   const labourRate = Math.max(0, Number(labourRateText) || 0)
   const safeQty = Math.max(1, quantity)
+  const activeInventory = inventoryOverride ?? state.inventory
 
   const breakdown = useMemo(() => {
     if (!recipe) {
@@ -66,7 +130,7 @@ export default function PricingCalculatorSheet({
     }
     const perBatch = estimateRecipeMaterialCost(
       recipe,
-      state.inventory,
+      activeInventory,
       labourRate,
     )
     const fallbackPerBatch =
@@ -90,30 +154,60 @@ export default function PricingCalculatorSheet({
       unpricedItems: perBatch.unpricedItems,
       hasLivePricing: perBatch.hasLivePricing,
     }
-  }, [labourRate, recipe, safeQty, state.inventory])
+  }, [activeInventory, labourRate, recipe, safeQty])
+
+  const parsedMargin = marginText.trim() === "" ? 0 : Number(marginText)
+  const parsedMarkup = markupText.trim() === "" ? 0 : Number(markupText)
 
   const result = useMemo(
     () =>
       calculateSuggestedPrice(breakdown.totalCost, {
         mode,
-        marginPercent: Number(marginText),
-        markupPercent: Number(markupText),
+        marginPercent: parsedMargin,
+        markupPercent: parsedMarkup,
         roundingStep,
       }),
-    [breakdown.totalCost, marginText, markupText, mode, roundingStep],
+    [breakdown.totalCost, mode, parsedMargin, parsedMarkup, roundingStep],
   )
 
-  const activePrice =
+  const savedReferencePrice =
     currentSellingPrice && currentSellingPrice > 0
       ? currentSellingPrice
-      : result.valid
-        ? result.suggestedPrice
-        : 0
+      : recipe?.sellingPrice && recipe.sellingPrice > 0
+        ? recipe.sellingPrice * safeQty
+        : undefined
+
+  const activePrice =
+    savedReferencePrice ?? (result.valid ? result.suggestedPrice : 0)
 
   const currentMetrics = useMemo(
     () => calculatePriceMetricsAtSellingPrice(breakdown.totalCost, activePrice),
     [activePrice, breakdown.totalCost],
   )
+
+  const hasApplyHandler = Boolean(onApplyPricing || onApplyPrice)
+  const handleApply = () => {
+    if (!result.valid) return
+    const perUnitSelling =
+      safeQty > 1 ? Math.round(result.suggestedPrice / safeQty) : result.suggestedPrice
+    onApplyPricing?.({
+      sellingPrice: perUnitSelling,
+      pricing: {
+        mode,
+        marginPercent: Number.isFinite(parsedMargin)
+          ? parsedMargin
+          : state.settings.defaultMarginPercent,
+        markupPercent: Number.isFinite(parsedMarkup)
+          ? parsedMarkup
+          : state.settings.defaultMarkupPercent,
+        labourRatePerHour: labourRate,
+        roundingStep,
+      },
+      saveAsDefault,
+    })
+    onApplyPrice?.(result.suggestedPrice)
+    onClose()
+  }
 
   return (
     <Sheet
@@ -126,19 +220,14 @@ export default function PricingCalculatorSheet({
       }
       onClose={onClose}
       footer={
-        onApplyPrice && result.valid ? (
+        hasApplyHandler && result.valid ? (
           <div className="flex gap-2">
             <Button variant="secondary" className="flex-1" onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              className="flex-1"
-              onClick={() => {
-                onApplyPrice(result.suggestedPrice)
-                onClose()
-              }}
-            >
-              Use <MoneyText amount={result.suggestedPrice} />
+            <Button className="flex-1" onClick={handleApply}>
+              {applyLabel ?? (onApplyPricing ? "Save" : "Use")}{" "}
+              <MoneyText amount={result.suggestedPrice} />
             </Button>
           </div>
         ) : (
@@ -206,32 +295,37 @@ export default function PricingCalculatorSheet({
             {mode === "margin" ? (
               <Field
                 label="Profit of price (%)"
-                type="number"
-                min="0"
-                max="99"
-                step="1"
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
                 value={marginText}
-                onChange={(e) => setMarginText(e.target.value)}
+                onChange={(e) =>
+                  setMarginText(sanitizeNumericDraft(e.target.value, true))
+                }
                 error={!result.valid ? result.error : undefined}
               />
             ) : (
               <Field
                 label="Extra on cost (%)"
-                type="number"
-                min="0"
-                step="5"
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
                 value={markupText}
-                onChange={(e) => setMarkupText(e.target.value)}
+                onChange={(e) =>
+                  setMarkupText(sanitizeNumericDraft(e.target.value, true))
+                }
                 error={!result.valid ? result.error : undefined}
               />
             )}
             <Field
               label="Labour (Rs./hr)"
-              type="number"
-              min="0"
-              step="50"
+              type="text"
+              inputMode="numeric"
+              placeholder="0"
               value={labourRateText}
-              onChange={(e) => setLabourRateText(e.target.value)}
+              onChange={(e) =>
+                setLabourRateText(sanitizeNumericDraft(e.target.value, false))
+              }
             />
           </div>
 
@@ -282,10 +376,10 @@ export default function PricingCalculatorSheet({
           </Card>
         ) : null}
 
-        {currentSellingPrice && currentSellingPrice > 0 ? (
+        {savedReferencePrice && savedReferencePrice > 0 ? (
           <Card className="flex items-center justify-between text-xs">
             <span className="text-muted">
-              At your entered price (<MoneyText amount={currentSellingPrice} />
+              At your saved price (<MoneyText amount={savedReferencePrice} />
               ):
             </span>
             <span
@@ -297,6 +391,15 @@ export default function PricingCalculatorSheet({
               {currentMetrics.marginPercent}% margin)
             </span>
           </Card>
+        ) : null}
+
+        {allowSaveDefaults && onApplyPricing ? (
+          <CheckboxField
+            checked={saveAsDefault}
+            onChange={setSaveAsDefault}
+            label="Also set as my default pricing rules"
+            description="Applies this method, profit %, labour rate, and rounding to future recipes."
+          />
         ) : null}
       </div>
     </Sheet>

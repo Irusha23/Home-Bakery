@@ -276,8 +276,9 @@ export class SqliteAppRepository implements AppRepository {
           `INSERT INTO recipes (
             id, name, image, product_id, variant_id, version, yield, yield_label,
             expected_output_json, preparation_minutes, ingredients_json, packaging_json,
-            instructions_json, estimated_cost, updated_at, archived, notes, history_json, sort_order
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            instructions_json, estimated_cost, selling_price, pricing_json,
+            updated_at, archived, notes, history_json, sort_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             recipe.id,
             recipe.name,
@@ -293,6 +294,8 @@ export class SqliteAppRepository implements AppRepository {
             JSON.stringify(recipe.packaging),
             JSON.stringify(recipe.instructions),
             recipe.estimatedCost,
+            recipe.sellingPrice ?? null,
+            recipe.pricing ? JSON.stringify(recipe.pricing) : null,
             recipe.updatedAt,
             recipe.archived ? 1 : 0,
             recipe.notes ?? null,
@@ -790,6 +793,11 @@ export class SqliteAppRepository implements AppRepository {
         typeof row.history_json === "string"
           ? parseJson<RecipeSnapshot[]>(row.history_json, [])
           : null
+      const sellingPrice = asNullableNumber(row.selling_price)
+      const pricing =
+        typeof row.pricing_json === "string"
+          ? parseJson<Recipe["pricing"]>(row.pricing_json, undefined)
+          : undefined
       return {
         id: asString(row.id),
         name: asString(row.name),
@@ -811,6 +819,8 @@ export class SqliteAppRepository implements AppRepository {
         packaging: parseJson(row.packaging_json, []),
         instructions: parseJson(row.instructions_json, []),
         estimatedCost: asNumber(row.estimated_cost),
+        ...(sellingPrice !== null ? { sellingPrice } : {}),
+        ...(pricing !== undefined ? { pricing } : {}),
         updatedAt: asString(row.updated_at),
         ...(asNumber(row.archived) === 1 ? { archived: true } : {}),
         ...(notes !== null ? { notes } : {}),

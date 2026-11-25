@@ -183,21 +183,30 @@ export function calculateCostSnapshot(
   let packaging = 0
   let labour = 0
   let labourMinutes = 0
+  let savedLinesSellingTotal = 0
+  let hasAnySavedSellingPrice = false
+  let unsavedCostTotal = 0
   const unpriced = new Set<string>()
 
   for (const line of lines) {
     const qty = Math.max(1, line.quantity)
+    const lineLabourRate =
+      options?.labourRatePerHour ??
+      line.recipeSnapshot.pricing?.labourRatePerHour ??
+      labourRatePerHour
     const breakdown = estimateRecipeMaterialCost(
       line.recipeSnapshot,
       state.inventory,
-      labourRatePerHour,
+      lineLabourRate,
     )
     labourMinutes += Math.max(0, line.recipeSnapshot.preparationMinutes) * qty
 
+    let lineTotalCost = 0
     if (breakdown.hasCompletePricing) {
       ingredients += breakdown.ingredientsCost * qty
       packaging += breakdown.packagingCost * qty
       labour += breakdown.labourCost * qty
+      lineTotalCost = breakdown.totalCost * qty
     } else {
       const fallbackTotal = line.recipeSnapshot.estimatedCost * qty
       const lineIngredients = Math.round(fallbackTotal * 0.82)
@@ -206,18 +215,55 @@ export function calculateCostSnapshot(
       ingredients += lineIngredients
       packaging += linePackaging
       labour += lineLabour
+      lineTotalCost = fallbackTotal
       for (const name of breakdown.unpricedItems) {
         unpriced.add(name)
       }
     }
+
+    if (
+      !options?.pricing &&
+      line.recipeSnapshot.sellingPrice !== undefined &&
+      Number.isFinite(line.recipeSnapshot.sellingPrice) &&
+      line.recipeSnapshot.sellingPrice > 0
+    ) {
+      hasAnySavedSellingPrice = true
+      savedLinesSellingTotal += Math.round(line.recipeSnapshot.sellingPrice) * qty
+    } else {
+      unsavedCostTotal += lineTotalCost
+    }
   }
 
+  const singleLinePricing =
+    !options?.pricing && lines.length === 1 && lines[0].recipeSnapshot.pricing
+      ? {
+          mode: lines[0].recipeSnapshot.pricing.mode,
+          marginPercent: lines[0].recipeSnapshot.pricing.marginPercent,
+          markupPercent: lines[0].recipeSnapshot.pricing.markupPercent,
+          roundingStep: lines[0].recipeSnapshot.pricing.roundingStep,
+        }
+      : pricing
+
   const estimatedTotal = ingredients + packaging + labour
-  const suggested = calculateSuggestedPrice(estimatedTotal, pricing)
-  const suggestedPrice = suggested.valid
-    ? suggested.suggestedPrice
-    : Math.ceil((estimatedTotal * 2.4) / pricing.roundingStep) *
-      pricing.roundingStep
+  let suggestedPrice: number
+  if (hasAnySavedSellingPrice) {
+    if (unsavedCostTotal > 0) {
+      const remainder = calculateSuggestedPrice(unsavedCostTotal, pricing)
+      const remainderPrice = remainder.valid
+        ? remainder.suggestedPrice
+        : Math.ceil((unsavedCostTotal * 2.4) / pricing.roundingStep) *
+          pricing.roundingStep
+      suggestedPrice = savedLinesSellingTotal + remainderPrice
+    } else {
+      suggestedPrice = savedLinesSellingTotal
+    }
+  } else {
+    const suggested = calculateSuggestedPrice(estimatedTotal, singleLinePricing)
+    suggestedPrice = suggested.valid
+      ? suggested.suggestedPrice
+      : Math.ceil((estimatedTotal * 2.4) / singleLinePricing.roundingStep) *
+        singleLinePricing.roundingStep
+  }
 
   return {
     ingredients,
@@ -225,11 +271,15 @@ export function calculateCostSnapshot(
     labour,
     estimatedTotal,
     suggestedPrice,
-    pricingMode: pricing.mode,
-    marginPercent: pricing.marginPercent,
-    markupPercent: pricing.markupPercent,
+    pricingMode: singleLinePricing.mode,
+    marginPercent: singleLinePricing.marginPercent,
+    markupPercent: singleLinePricing.markupPercent,
     labourMinutes,
-    labourRatePerHour,
+    labourRatePerHour:
+      options?.labourRatePerHour ??
+      (lines.length === 1 && lines[0].recipeSnapshot.pricing
+        ? lines[0].recipeSnapshot.pricing.labourRatePerHour
+        : labourRatePerHour),
     unpricedIngredients: Array.from(unpriced),
   }
 }

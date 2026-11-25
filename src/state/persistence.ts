@@ -240,6 +240,31 @@ function validateRecipeSnapshot(value: unknown, label: string) {
   requireArray(recipe.instructions, `${label} instructions`).forEach((step) =>
     requireString(step, `${label} instruction`, true),
   )
+
+  if (recipe.sellingPrice !== undefined) {
+    requireFiniteNumber(recipe.sellingPrice, `${label} selling price`, 0)
+  }
+
+  if (recipe.pricing !== undefined) {
+    const pricing = requireRecord(recipe.pricing, `${label} pricing`)
+    requireValue(
+      pricing.mode === "margin" || pricing.mode === "markup",
+      `${label} pricing mode is invalid.`,
+    )
+    requireFiniteNumber(pricing.marginPercent, `${label} margin percent`, 0)
+    requireValue(
+      (pricing.marginPercent as number) < 100,
+      `${label} margin percent must be below 100.`,
+    )
+    requireFiniteNumber(pricing.markupPercent, `${label} markup percent`, 0)
+    requireFiniteNumber(pricing.labourRatePerHour, `${label} labour rate`, 0)
+    requireValue(
+      pricing.roundingStep === 1 ||
+        pricing.roundingStep === 50 ||
+        pricing.roundingStep === 100,
+      `${label} rounding step is invalid.`,
+    )
+  }
 }
 
 function validateRecipeReferences(

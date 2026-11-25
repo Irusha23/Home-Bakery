@@ -362,8 +362,8 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
     )
 
     const upgrade = await runMigrations(engine, ALL_MIGRATIONS)
-    expect(upgrade.appliedVersions).toEqual([2, 3])
-    expect(upgrade.currentVersion).toBe(3)
+    expect(upgrade.appliedVersions).toEqual([2, 3, 4])
+    expect(upgrade.currentVersion).toBe(LATEST_DB_SCHEMA_VERSION)
 
     const loadedV1 = await repo.loadAppData()
     expect(loadedV1?.orders[0].id).toBe("v1-order")
@@ -459,11 +459,21 @@ describe("Phase 13 SQLite schema, migrations, and repository", () => {
       productId: "",
       variantId: "",
       yieldLabel: "2 jars",
+      sellingPrice: 1450,
+      pricing: {
+        mode: "margin",
+        marginPercent: 40,
+        markupPercent: 80,
+        labourRatePerHour: 550,
+        roundingStep: 50,
+      },
     })
     await repo.saveAppData(state)
     const loaded = await repo.loadAppData()
     const saved = loaded?.recipes.find((r) => r.id === "recipe-standalone-paste")
     expect(saved?.productId).toBe("")
     expect(saved?.variantId).toBe("")
+    expect(saved?.sellingPrice).toBe(1450)
+    expect(saved?.pricing?.roundingStep).toBe(50)
   })
 })

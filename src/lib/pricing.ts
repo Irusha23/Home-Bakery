@@ -6,6 +6,7 @@ import type {
   InventoryItem,
   PricingMode,
   RecipeIngredient,
+  RecipePricingConfig,
   PackagingRequirement,
   Unit,
 } from "../types"
@@ -263,4 +264,68 @@ export function calculatePriceMetricsAtSellingPrice(
 
 export function getStateLabourRate(state?: AppData): number {
   return state?.settings?.defaultLabourRatePerHour ?? 600
+}
+
+export type ResolvedRecipePrice = {
+  breakdown: RecipeCostBreakdown
+  effectiveCost: number
+  sellingPrice: number
+  source: "saved" | "suggested"
+  profitLkr: number
+  marginPercent: number
+}
+
+export function resolveRecipeSellingPrice(
+  recipe: {
+    ingredients: RecipeIngredient[]
+    packaging: PackagingRequirement[]
+    preparationMinutes: number
+    estimatedCost?: number
+    sellingPrice?: number
+    pricing?: RecipePricingConfig
+  },
+  inventory: InventoryItem[],
+  settings: AppSettings,
+): ResolvedRecipePrice {
+  const labourRate =
+    recipe.pricing?.labourRatePerHour ?? settings.defaultLabourRatePerHour
+  const breakdown = estimateRecipeMaterialCost(recipe, inventory, labourRate)
+  const effectiveCost = breakdown.hasLivePricing
+    ? breakdown.totalCost
+    : (recipe.estimatedCost ?? 0)
+  const pricingInput: PricingInput = recipe.pricing
+    ? {
+        mode: recipe.pricing.mode,
+        marginPercent: recipe.pricing.marginPercent,
+        markupPercent: recipe.pricing.markupPercent,
+        roundingStep: recipe.pricing.roundingStep,
+      }
+    : pricingInputFromSettings(settings)
+
+  let sellingPrice: number
+  let source: "saved" | "suggested"
+  if (
+    recipe.sellingPrice !== undefined &&
+    Number.isFinite(recipe.sellingPrice) &&
+    recipe.sellingPrice > 0
+  ) {
+    sellingPrice = Math.round(recipe.sellingPrice)
+    source = "saved"
+  } else {
+    const suggested = calculateSuggestedPrice(effectiveCost, pricingInput)
+    sellingPrice = suggested.valid
+      ? suggested.suggestedPrice
+      : Math.round(effectiveCost * 2)
+    source = "suggested"
+  }
+
+  const metrics = calculatePriceMetricsAtSellingPrice(effectiveCost, sellingPrice)
+  return {
+    breakdown,
+    effectiveCost,
+    sellingPrice,
+    source,
+    profitLkr: metrics.profitLkr,
+    marginPercent: metrics.marginPercent,
+  }
 }

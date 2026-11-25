@@ -1402,6 +1402,14 @@ describe("local persistence recovery", () => {
       productId: "",
       variantId: "",
       yieldLabel: "3 jars",
+      sellingPrice: 1850,
+      pricing: {
+        mode: "markup" as const,
+        marginPercent: 35,
+        markupPercent: 60,
+        labourRatePerHour: 500,
+        roundingStep: 50 as const,
+      },
     }
     const nextData = {
       ...custom,
@@ -1418,5 +1426,7 @@ describe("local persistence recovery", () => {
     expect(parsed.recipes).toHaveLength(1)
     expect(parsed.recipes[0].productId).toBe("")
     expect(parsed.recipes[0].variantId).toBe("")
+    expect(parsed.recipes[0].sellingPrice).toBe(1850)
+    expect(parsed.recipes[0].pricing?.markupPercent).toBe(60)
   })
 })

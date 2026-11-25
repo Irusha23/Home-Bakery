@@ -61,6 +61,14 @@ export type PackagingRequirement = {
   unit: "unit"
 }
 
+export type RecipePricingConfig = {
+  mode: PricingMode
+  marginPercent: number
+  markupPercent: number
+  labourRatePerHour: number
+  roundingStep: 1 | 50 | 100
+}
+
 export type RecipeSnapshot = {
   id: string
   name: string
@@ -76,6 +84,8 @@ export type RecipeSnapshot = {
   packaging: PackagingRequirement[]
   instructions: string[]
   estimatedCost: number
+  sellingPrice?: number
+  pricing?: RecipePricingConfig
 }
 
 export type Recipe = RecipeSnapshot & {
