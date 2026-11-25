@@ -1,14 +1,17 @@
-import groovy.json.JsonSlurper
-
 apply plugin: 'com.android.application'
 
 def versionJsonFile = file('../../src/version.json')
 if (!versionJsonFile.exists()) {
     throw new GradleException("Missing version file at ${versionJsonFile.absolutePath}")
 }
-def appVersionInfo = new JsonSlurper().parse(versionJsonFile)
-def appVersionCode = appVersionInfo.versionCode as Integer
-def appVersionName = appVersionInfo.version as String
+def versionJsonText = versionJsonFile.getText('UTF-8')
+def versionNameMatcher = (versionJsonText =~ /"version"\s*:\s*"([^"]+)"/)
+def versionCodeMatcher = (versionJsonText =~ /"versionCode"\s*:\s*(\d+)/)
+if (!versionNameMatcher.find() || !versionCodeMatcher.find()) {
+    throw new GradleException("Invalid version format in ${versionJsonFile.absolutePath}")
+}
+def appVersionName = versionNameMatcher.group(1)
+def appVersionCode = versionCodeMatcher.group(1).toInteger()
 
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 def keystoreProperties = new Properties()
