@@ -225,8 +225,12 @@ type AppAction =
       patch: {
         name?: string
         image?: string | null
+        physical?: number
         lowStockThreshold?: number
         averageUnitCost?: number
+        gramsPerTsp?: number | null
+        mlPerTsp?: number | null
+        trackStock?: boolean
         archived?: boolean
       }
     }
@@ -1718,6 +1722,12 @@ export function reducer(state: AppData, action: AppAction): AppData {
         (rawItem.averageUnitCost !== undefined &&
           (!Number.isFinite(rawItem.averageUnitCost) ||
             rawItem.averageUnitCost < 0)) ||
+        (rawItem.gramsPerTsp !== undefined &&
+          (!Number.isFinite(rawItem.gramsPerTsp) ||
+            rawItem.gramsPerTsp <= 0)) ||
+        (rawItem.mlPerTsp !== undefined &&
+          (!Number.isFinite(rawItem.mlPerTsp) ||
+            rawItem.mlPerTsp <= 0)) ||
         state.inventory.some(
           (existing) => existing.inventoryId === rawItem.inventoryId,
         )
@@ -1765,37 +1775,81 @@ export function reducer(state: AppData, action: AppAction): AppData {
       const { patch } = action
       if (
         (patch.name !== undefined && !patch.name.trim()) ||
+        (patch.physical !== undefined &&
+          (inventoryCategory(target) === "finished" ||
+            !Number.isFinite(patch.physical) ||
+            patch.physical < 0)) ||
         (patch.lowStockThreshold !== undefined &&
           (!Number.isFinite(patch.lowStockThreshold) ||
             patch.lowStockThreshold < 0)) ||
         (patch.averageUnitCost !== undefined &&
           (!Number.isFinite(patch.averageUnitCost) ||
-            patch.averageUnitCost < 0))
+            patch.averageUnitCost < 0)) ||
+        (patch.gramsPerTsp !== undefined &&
+          patch.gramsPerTsp !== null &&
+          (!Number.isFinite(patch.gramsPerTsp) || patch.gramsPerTsp <= 0)) ||
+        (patch.mlPerTsp !== undefined &&
+          patch.mlPerTsp !== null &&
+          (!Number.isFinite(patch.mlPerTsp) || patch.mlPerTsp <= 0))
       ) {
         return state
       }
-      const nextInventory = state.inventory.map((item) =>
-        item.inventoryId === action.inventoryId
-          ? {
-              ...item,
-              ...(patch.name !== undefined
-                ? { name: patch.name.trim() }
-                : {}),
-              ...(patch.image !== undefined
-                ? { image: patch.image ?? undefined }
-                : {}),
-              ...(patch.lowStockThreshold !== undefined
-                ? { lowStockThreshold: patch.lowStockThreshold }
-                : {}),
-              ...(patch.averageUnitCost !== undefined
-                ? { averageUnitCost: patch.averageUnitCost }
-                : {}),
-              ...(patch.archived !== undefined
-                ? { archived: patch.archived }
-                : {}),
-            }
-          : item,
-      )
+      const nextInventory = state.inventory.map((item) => {
+        if (item.inventoryId !== action.inventoryId) return item
+        const updated: InventoryItem = {
+          ...item,
+          ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+          ...(patch.image !== undefined
+            ? { image: patch.image ?? undefined }
+            : {}),
+          ...(patch.physical !== undefined ? { physical: patch.physical } : {}),
+          ...(patch.lowStockThreshold !== undefined
+            ? { lowStockThreshold: patch.lowStockThreshold }
+            : {}),
+          ...(patch.averageUnitCost !== undefined
+            ? { averageUnitCost: patch.averageUnitCost }
+            : {}),
+          ...(patch.trackStock !== undefined
+            ? { trackStock: patch.trackStock }
+            : {}),
+          ...(patch.archived !== undefined
+            ? { archived: patch.archived }
+            : {}),
+        }
+        if (patch.gramsPerTsp === null) {
+          delete updated.gramsPerTsp
+        } else if (patch.gramsPerTsp !== undefined) {
+          updated.gramsPerTsp = patch.gramsPerTsp
+        }
+        if (patch.mlPerTsp === null) {
+          delete updated.mlPerTsp
+        } else if (patch.mlPerTsp !== undefined) {
+          updated.mlPerTsp = patch.mlPerTsp
+        }
+        return updated
+      })
+      const stockDelta =
+        patch.physical !== undefined ? patch.physical - target.physical : 0
+      const now = new Date().toISOString()
+      const stockMovement: InventoryMovement[] =
+        patch.physical !== undefined && Math.abs(stockDelta) > 1e-9
+          ? [
+              {
+                id: makeUniqueId(
+                  "movement-adjust",
+                  new Set(state.inventoryMovements.map((m) => m.id)),
+                ),
+                inventoryId: target.inventoryId,
+                type: "Correction",
+                quantityDelta: stockDelta,
+                unit: target.unit,
+                balanceAfter: patch.physical,
+                date: getColomboTodayIso(new Date(now)),
+                reason: "Updated available stock",
+                createdAt: now,
+              },
+            ]
+          : []
       const nextRecipes = state.recipes.map((recipe) => {
         const usesItem =
           recipe.ingredients.some(
@@ -1830,7 +1884,10 @@ export function reducer(state: AppData, action: AppAction): AppData {
           state.settings.defaultLabourRatePerHour,
         )
         const canUpdateCost =
-          (patch.averageUnitCost !== undefined || patch.archived !== undefined) &&
+          (patch.averageUnitCost !== undefined ||
+            patch.gramsPerTsp !== undefined ||
+            patch.mlPerTsp !== undefined ||
+            patch.archived !== undefined) &&
           breakdown.hasCompletePricing
         return {
           ...recipe,
@@ -1844,6 +1901,7 @@ export function reducer(state: AppData, action: AppAction): AppData {
       return {
         ...state,
         inventory: nextInventory,
+        inventoryMovements: [...stockMovement, ...state.inventoryMovements],
         recipes: nextRecipes,
       }
     }

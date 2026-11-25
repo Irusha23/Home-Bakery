@@ -29,8 +29,9 @@ import SegmentedControl from "../components/ui/SegmentedControl"
 import StatusBadge from "../components/ui/StatusBadge"
 import Stepper from "../components/ui/Stepper"
 import { useToast } from "../components/ui/Toast"
-import { formatLkr, formatQuantity } from "../lib/format"
+import { formatDualQuantity, formatLkr, formatQuantity } from "../lib/format"
 import { createId } from "../lib/id"
+import { convertInventoryUnitQuantity } from "../lib/inventory"
 import {
   calculateItemRecipeCost,
   estimateRecipeMaterialCost,
@@ -38,7 +39,7 @@ import {
   toDisplayUnitPrice,
 } from "../lib/pricing"
 import { useAppState } from "../state/AppState"
-import type { InventoryItem, Product, Recipe } from "../types"
+import type { InventoryItem, Product, Recipe, Unit } from "../types"
 
 type RecipesScreenProps = {
   onFocusedChange: (focused: boolean) => void
@@ -55,6 +56,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
   const [showArchived, setShowArchived] = useState(false)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
   const [scaleMultiplier, setScaleMultiplier] = useState(1)
+  const [unitView, setUnitView] = useState<"recipe" | "base" | "tsp">("recipe")
   const [showHistory, setShowHistory] = useState(false)
 
   const [recipeEditorTarget, setRecipeEditorTarget] =
@@ -239,52 +241,90 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
               />
             </Card>
 
-            <GroupedList title={`Ingredients (${selectedRecipe.ingredients.length})`}>
-              {selectedRecipe.ingredients.map((item) => {
-                const invItem = state.inventory.find(
-                  (i) => i.inventoryId === item.inventoryId,
-                )
-                const unitPrice = invItem
-                  ? toDisplayUnitPrice(invItem.averageUnitCost, invItem.unit)
-                  : undefined
-                const priceUnitLabel = invItem
-                  ? getDisplayPriceUnitLabel(invItem.unit)
-                  : "kg"
-                const lineCost = calculateItemRecipeCost(
-                  item.quantity * scaleMultiplier,
-                  item.unit,
-                  invItem,
-                )
-                return (
-                  <ListRow
-                    key={`${item.inventoryId}-${item.name}`}
-                    leading={
-                      <ItemThumbnail
-                        image={invItem?.image}
-                        alt={invItem?.name ?? item.name}
-                        size="sm"
-                      />
+            <div className="space-y-2">
+              <SegmentedControl
+                label="Measure display units"
+                value={unitView}
+                onChange={(val) => setUnitView(val as "recipe" | "base" | "tsp")}
+                segments={[
+                  { value: "recipe", label: "Recipe units" },
+                  { value: "base", label: "g / ml" },
+                  { value: "tsp", label: "Teaspoons" },
+                ]}
+              />
+              <GroupedList title={`Ingredients (${selectedRecipe.ingredients.length})`}>
+                {selectedRecipe.ingredients.map((item) => {
+                  const invItem = state.inventory.find(
+                    (i) => i.inventoryId === item.inventoryId,
+                  )
+                  const unitPrice = invItem
+                    ? toDisplayUnitPrice(invItem.averageUnitCost, invItem.unit)
+                    : undefined
+                  const priceUnitLabel = invItem
+                    ? getDisplayPriceUnitLabel(invItem.unit)
+                    : "kg"
+                  const lineCost = calculateItemRecipeCost(
+                    item.quantity * scaleMultiplier,
+                    item.unit,
+                    invItem,
+                  )
+                  const scaledQty = item.quantity * scaleMultiplier
+                  let displayQty = scaledQty
+                  let displayUnit: Unit = item.unit
+                  if (invItem && (invItem.unit === "g" || invItem.unit === "ml")) {
+                    const targetUnit: Unit | null =
+                      unitView === "base"
+                        ? invItem.unit
+                        : unitView === "tsp"
+                          ? "tsp"
+                          : null
+                    if (targetUnit) {
+                      const converted = convertInventoryUnitQuantity(
+                        scaledQty,
+                        item.unit,
+                        targetUnit,
+                        invItem,
+                      )
+                      if (Number.isFinite(converted)) {
+                        displayQty = converted
+                        displayUnit = targetUnit
+                      }
                     }
-                    title={invItem?.name ?? item.name}
-                    subtitle={
-                      unitPrice !== undefined
-                        ? `${formatLkr(unitPrice)} / ${priceUnitLabel}${
-                            lineCost !== null ? ` · Cost ${formatLkr(lineCost)}` : ""
-                          }`
-                        : "Tap to set price per " + priceUnitLabel
-                    }
-                    value={formatQuantity(
-                      Number((item.quantity * scaleMultiplier).toFixed(2)),
-                      item.unit,
-                    )}
-                    showChevron={Boolean(invItem)}
-                    onClick={
-                      invItem ? () => setEditingPriceItem(invItem) : undefined
-                    }
-                  />
-                )
-              })}
-            </GroupedList>
+                  }
+                  const roundedQty = Number(displayQty.toFixed(2))
+                  const dual = formatDualQuantity(roundedQty, displayUnit, invItem)
+                  return (
+                    <ListRow
+                      key={`${item.inventoryId}-${item.name}`}
+                      leading={
+                        <ItemThumbnail
+                          image={invItem?.image}
+                          alt={invItem?.name ?? item.name}
+                          size="sm"
+                        />
+                      }
+                      title={invItem?.name ?? item.name}
+                      subtitle={
+                        unitPrice !== undefined
+                          ? `${formatLkr(unitPrice)} / ${priceUnitLabel}${
+                              lineCost !== null ? ` · Cost ${formatLkr(lineCost)}` : ""
+                            }`
+                          : "Tap to set price per " + priceUnitLabel
+                      }
+                      value={
+                        dual.secondary
+                          ? `${dual.primary} (${dual.secondary})`
+                          : dual.primary
+                      }
+                      showChevron={Boolean(invItem)}
+                      onClick={
+                        invItem ? () => setEditingPriceItem(invItem) : undefined
+                      }
+                    />
+                  )
+                })}
+              </GroupedList>
+            </div>
 
             {selectedRecipe.packaging.length > 0 ? (
               <GroupedList

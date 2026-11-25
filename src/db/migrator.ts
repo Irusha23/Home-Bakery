@@ -4,10 +4,12 @@ import {
   type SqlMigration,
 } from "./migrations/0001_initial_schema"
 import { migration0002OrderReferencePhoto } from "./migrations/0002_order_reference_photo"
+import { migration0003IngredientMeasurements } from "./migrations/0003_ingredient_measurements"
 
 export const ALL_MIGRATIONS: readonly SqlMigration[] = [
   migration0001InitialSchema,
   migration0002OrderReferencePhoto,
+  migration0003IngredientMeasurements,
 ]
 
 export const LATEST_DB_SCHEMA_VERSION =

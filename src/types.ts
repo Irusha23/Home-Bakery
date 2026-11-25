@@ -21,7 +21,7 @@ export type StarterAction = "create-order" | "record-sale" | "plan-shopping" | "
 export type OrderStatus = "Draft" | "Confirmed" | "In Progress" | "Completed" | "Cancelled"
 export type PreparationStatus = "Not started" | "Awaiting preparation" | "In progress" | "Ready" | "Completed" | "Cancelled"
 export type PaymentStatus = "Unpaid" | "Part paid" | "Paid" | "Refunded"
-export type Unit = "g" | "kg" | "ml" | "L" | "unit"
+export type Unit = "g" | "kg" | "ml" | "L" | "tsp" | "tbsp" | "cup" | "unit"
 export type BaseUnit = "g" | "ml" | "unit"
 export type InventoryCategory = "ingredient" | "packaging" | "finished"
 
@@ -217,6 +217,9 @@ export type InventoryItem = {
   unbatchedLegacyQuantity?: number
   lowStockThreshold?: number
   averageUnitCost?: number
+  gramsPerTsp?: number
+  mlPerTsp?: number
+  trackStock?: boolean
   archived?: boolean
 }
 

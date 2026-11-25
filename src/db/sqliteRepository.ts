@@ -221,8 +221,8 @@ export class SqliteAppRepository implements AppRepository {
           `INSERT INTO inventory_items (
             inventory_id, name, image, physical, unit, category,
             unbatched_legacy_quantity, low_stock_threshold, average_unit_cost,
-            archived, sort_order
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            grams_per_tsp, ml_per_tsp, track_stock, archived, sort_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             item.inventoryId,
             item.name,
@@ -233,6 +233,9 @@ export class SqliteAppRepository implements AppRepository {
             item.unbatchedLegacyQuantity ?? null,
             item.lowStockThreshold ?? null,
             item.averageUnitCost ?? null,
+            item.gramsPerTsp ?? null,
+            item.mlPerTsp ?? null,
+            item.trackStock === true ? 1 : item.trackStock === false ? 0 : null,
             item.archived ? 1 : 0,
             index,
           ],
@@ -715,18 +718,30 @@ export class SqliteAppRepository implements AppRepository {
       )
       const lowStockThreshold = asNullableNumber(row.low_stock_threshold)
       const averageUnitCost = asNullableNumber(row.average_unit_cost)
+      const gramsPerTsp = asNullableNumber(row.grams_per_tsp)
+      const mlPerTsp = asNullableNumber(row.ml_per_tsp)
+      const rawTrackStock = asNullableNumber(row.track_stock)
+      const physical = asNumber(row.physical)
+      const category = asString(row.category, "ingredient") as InventoryCategory
       return {
         inventoryId: asString(row.inventory_id),
         name: asString(row.name),
         ...(image !== null ? { image } : {}),
-        physical: asNumber(row.physical),
+        physical,
         unit: asString(row.unit, "unit") as BaseUnit,
-        category: asString(row.category, "ingredient") as InventoryCategory,
+        category,
         ...(unbatchedLegacyQuantity !== null
           ? { unbatchedLegacyQuantity }
           : {}),
         ...(lowStockThreshold !== null ? { lowStockThreshold } : {}),
         ...(averageUnitCost !== null ? { averageUnitCost } : {}),
+        ...(gramsPerTsp !== null && gramsPerTsp > 0 ? { gramsPerTsp } : {}),
+        ...(mlPerTsp !== null && mlPerTsp > 0 ? { mlPerTsp } : {}),
+        ...(rawTrackStock === 1
+          ? { trackStock: true }
+          : rawTrackStock === 0
+            ? { trackStock: false }
+            : {}),
         ...(asNumber(row.archived) === 1 ? { archived: true } : {}),
       }
     })

@@ -2645,4 +2645,55 @@ describe("application reducer business rules", () => {
     })
     expect(afterOneInPantry.shoppingSelections.flour).toBe(1200)
   })
+
+  it("recalculates recipe estimatedCost when updating per-ingredient tsp conversions and optional stock", () => {
+    const sugar = createTestInventoryItem({
+      inventoryId: "sugar",
+      name: "White sugar",
+      physical: 0,
+      unit: "g",
+      averageUnitCost: 0.4, // Rs. 400 / kg
+      gramsPerTsp: 4,
+      trackStock: false,
+    })
+    const recipe = {
+      ...createTestRecipeSnapshot({
+        id: "rec-tsp",
+        ingredients: [
+          { inventoryId: "sugar", name: "White sugar", quantity: 10, unit: "tsp" as const },
+        ],
+        packaging: [],
+        preparationMinutes: 0,
+        estimatedCost: 16,
+      }),
+      updatedAt: "2026-11-25T10:00:00.000Z",
+    }
+    const state = createTestAppData({
+      inventory: [sugar],
+      recipes: [recipe],
+    })
+
+    // Updating 1 tsp from 4g -> 6g changes 10 tsp from 40g (Rs.16) to 60g (Rs.24)
+    const updated = reducer(state, {
+      type: "UPDATE_INVENTORY_ITEM",
+      inventoryId: "sugar",
+      patch: {
+        gramsPerTsp: 6,
+        trackStock: true,
+        physical: 1500,
+      },
+    })
+
+    expect(updated.inventory[0]).toMatchObject({
+      gramsPerTsp: 6,
+      trackStock: true,
+      physical: 1500,
+    })
+    expect(updated.recipes[0].estimatedCost).toBe(24)
+    expect(updated.inventoryMovements[0]).toMatchObject({
+      type: "Correction",
+      quantityDelta: 1500,
+      balanceAfter: 1500,
+    })
+  })
 })

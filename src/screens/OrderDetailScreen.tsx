@@ -35,6 +35,7 @@ import TextAreaField from "../components/ui/TextAreaField"
 import { getBakeTargetMs, getCollectionTargetMs } from "../lib/countdown"
 import {
   formatDate,
+  formatDualQuantity,
   formatLkr,
   formatQuantity,
   formatTime,
@@ -741,10 +742,16 @@ export default function OrderDetailScreen({
                                       {usage.name}
                                     </span>
                                     <span className="block text-[11px] text-muted">
-                                      {formatQuantity(
-                                        usage.plannedQuantity,
-                                        usage.unit,
-                                      )}
+                                      {(() => {
+                                        const dual = formatDualQuantity(
+                                          usage.plannedQuantity,
+                                          usage.unit,
+                                          invItem,
+                                        )
+                                        return dual.secondary
+                                          ? `${dual.primary} (${dual.secondary})`
+                                          : dual.primary
+                                      })()}
                                     </span>
                                   </div>
                                 </div>
@@ -833,10 +840,16 @@ export default function OrderDetailScreen({
                                 </span>
                               </span>
                               <span className="shrink-0 text-muted">
-                                {formatQuantity(
-                                  usage.plannedQuantity,
-                                  usage.unit,
-                                )}
+                                {(() => {
+                                  const dual = formatDualQuantity(
+                                    usage.plannedQuantity,
+                                    usage.unit,
+                                    invItem,
+                                  )
+                                  return dual.secondary
+                                    ? `${dual.primary} (${dual.secondary})`
+                                    : dual.primary
+                                })()}
                               </span>
                             </div>
                           )

@@ -1,4 +1,10 @@
-import type { Unit } from "../types"
+import type { InventoryItem, Unit } from "../types"
+import {
+  fromBaseQuantity,
+  getEffectiveGramsPerTsp,
+  getEffectiveMlPerTsp,
+  toBaseQuantity,
+} from "./inventory"
 
 export const COLOMBO_TIME_ZONE = "Asia/Colombo"
 
@@ -74,7 +80,71 @@ export function formatQuantity(quantity: number, unit: Unit) {
       maximumFractionDigits: 2,
     })} L`
   }
-  return `${quantity.toLocaleString("en-LK")} ${
-    unit === "unit" ? (absQty === 1 ? "unit" : "units") : unit
-  }`
+  return `${quantity.toLocaleString("en-LK", {
+    maximumFractionDigits: 2,
+  })} ${unit === "unit" ? (absQty === 1 ? "unit" : "units") : unit}`
+}
+
+export function formatDualQuantity(
+  quantity: number,
+  unit: Unit,
+  item?: Pick<InventoryItem, "name" | "unit" | "gramsPerTsp" | "mlPerTsp">,
+): { primary: string; secondary: string | null } {
+  const primary = formatQuantity(quantity, unit)
+  if (!item || !Number.isFinite(quantity) || quantity <= 0) {
+    return { primary, secondary: null }
+  }
+  const opts = {
+    gramsPerTsp: getEffectiveGramsPerTsp(item),
+    mlPerTsp: getEffectiveMlPerTsp(item),
+  }
+  const baseQty = toBaseQuantity(quantity, unit, item.unit, opts)
+  if (!Number.isFinite(baseQty)) {
+    return { primary, secondary: null }
+  }
+
+  if (item.unit === "g") {
+    if (unit === "tsp" || unit === "tbsp") {
+      return {
+        primary,
+        secondary: `≈ ${formatQuantity(Math.round(baseQty * 10) / 10, "g")}`,
+      }
+    }
+    if (unit === "g" && quantity <= 250) {
+      const tsps = fromBaseQuantity(baseQty, "tsp", "g", opts)
+      if (Number.isFinite(tsps) && tsps > 0 && tsps <= 50) {
+        return {
+          primary,
+          secondary: `≈ ${formatQuantity(Math.round(tsps * 4) / 4, "tsp")}`,
+        }
+      }
+    }
+    return { primary, secondary: null }
+  }
+
+  if (item.unit === "ml") {
+    if (unit === "tsp" || unit === "tbsp" || unit === "cup") {
+      const customTsp = item.mlPerTsp !== undefined && item.mlPerTsp !== 5 && unit !== "cup"
+      return {
+        primary,
+        secondary: `${customTsp ? "≈ " : ""}${formatQuantity(Math.round(baseQty * 10) / 10, "ml")}`,
+      }
+    }
+    if (unit === "ml" && quantity <= 250) {
+      if (quantity === 250) return { primary, secondary: "1 cup" }
+      const tsps = fromBaseQuantity(baseQty, "tsp", "ml", opts)
+      const tbsps = fromBaseQuantity(baseQty, "tbsp", "ml", opts)
+      if (Number.isFinite(tbsps) && tbsps >= 1 && Math.abs(tbsps - Math.round(tbsps)) < 0.01) {
+        return { primary, secondary: formatQuantity(tbsps, "tbsp") }
+      }
+      if (Number.isFinite(tsps) && tsps > 0 && tsps <= 50) {
+        return {
+          primary,
+          secondary: `≈ ${formatQuantity(Math.round(tsps * 4) / 4, "tsp")}`,
+        }
+      }
+    }
+  }
+
+  return { primary, secondary: null }
 }

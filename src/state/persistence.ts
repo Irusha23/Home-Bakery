@@ -855,6 +855,29 @@ function validateBackupData(
       )
     }
 
+    if (item.gramsPerTsp !== undefined) {
+      requireFiniteNumber(
+        item.gramsPerTsp,
+        "Teaspoon grams conversion",
+        Number.MIN_VALUE,
+      )
+    }
+
+    if (item.mlPerTsp !== undefined) {
+      requireFiniteNumber(
+        item.mlPerTsp,
+        "Teaspoon ml conversion",
+        Number.MIN_VALUE,
+      )
+    }
+
+    if (item.trackStock !== undefined) {
+      requireValue(
+        typeof item.trackStock === "boolean",
+        "Inventory track-stock flag is invalid.",
+      )
+    }
+
     requireUniqueId(inventoryIds, item.inventoryId as string, "Inventory")
   })
 
@@ -1670,7 +1693,16 @@ function isSupportedDataShape(value: unknown): value is PersistedAppData {
         typeof item.physical !== "number" ||
         !Number.isFinite(item.physical) ||
         item.physical < 0 ||
-        !["g", "ml", "unit"].includes(String(item.unit)),
+        !["g", "ml", "unit"].includes(String(item.unit)) ||
+        (item.gramsPerTsp !== undefined &&
+          (typeof item.gramsPerTsp !== "number" ||
+            !Number.isFinite(item.gramsPerTsp) ||
+            item.gramsPerTsp <= 0)) ||
+        (item.mlPerTsp !== undefined &&
+          (typeof item.mlPerTsp !== "number" ||
+            !Number.isFinite(item.mlPerTsp) ||
+            item.mlPerTsp <= 0)) ||
+        (item.trackStock !== undefined && typeof item.trackStock !== "boolean"),
     ) ||
     (value.shoppingTrips !== undefined && !Array.isArray(value.shoppingTrips))
   ) {

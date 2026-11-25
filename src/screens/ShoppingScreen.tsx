@@ -30,6 +30,7 @@ import SwipeableRow from "../components/ui/SwipeableRow"
 import { useToast } from "../components/ui/Toast"
 import {
   formatDate,
+  formatDualQuantity,
   formatLkr,
   formatQuantity,
   getColomboTodayIso,
@@ -578,7 +579,19 @@ export default function ShoppingScreen({
                       <StatusBadge tone={item.checked ? "success" : "warning"}>
                         {item.checked
                           ? "Bought"
-                          : formatQuantity(item.boughtQuantity, item.unit)}
+                          : (() => {
+                              const inv = selectableItems.find(
+                                (i) => i.inventoryId === item.inventoryId,
+                              )
+                              const dual = formatDualQuantity(
+                                item.boughtQuantity,
+                                item.unit,
+                                inv,
+                              )
+                              return dual.secondary
+                                ? `${dual.primary} (${dual.secondary})`
+                                : dual.primary
+                            })()}
                       </StatusBadge>
                       <div className="mt-1 text-[11px] font-semibold tabular-nums text-cocoa">
                         {item.estimatedCost !== null
@@ -746,11 +759,32 @@ export default function ShoppingScreen({
               value={addUnit}
               options={(selectedInventoryItem
                 ? compatibleUnits(selectedInventoryItem.unit)
-                : (["g", "kg", "ml", "L", "unit"] as Unit[])
+                : (["g", "kg", "ml", "L", "tsp", "tbsp", "cup", "unit"] as Unit[])
               ).map((u) => ({ value: u, label: u }))}
               onChange={(e) => setAddUnit(e.target.value as Unit)}
             />
           </div>
+
+          {selectedInventoryItem &&
+          Number.isFinite(Number(addQty)) &&
+          Number(addQty) > 0 &&
+          (selectedInventoryItem.unit === "g" ||
+            selectedInventoryItem.unit === "ml") &&
+          addUnit !== selectedInventoryItem.unit ? (
+            <p className="text-xs text-muted">
+              Equals{" "}
+              {formatQuantity(
+                Math.round(
+                  toInventoryBaseQuantity(
+                    Number(addQty),
+                    addUnit,
+                    selectedInventoryItem,
+                  ) * 100,
+                ) / 100,
+                selectedInventoryItem.unit,
+              )}
+            </p>
+          ) : null}
 
           {addError ? (
             <p className="text-sm font-medium text-error">{addError}</p>
