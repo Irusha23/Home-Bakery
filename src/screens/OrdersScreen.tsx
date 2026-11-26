@@ -509,7 +509,7 @@ export default function OrdersScreen({
         />
 
         {filteredOrders.length ? (
-          <AnimatedList className="grid grid-cols-1 gap-3 pt-1 md:grid-cols-2">
+          <AnimatedList layoutMode="grid" className="grid-cards pt-1">
             {filteredOrders.map((order, index) => {
               const quickAction = getQuickAction(order)
               const primaryLine = order.lines[0]
@@ -517,7 +517,12 @@ export default function OrdersScreen({
                 (p) => p.id === primaryLine?.productId,
               )
               return (
-                <AnimatedItem key={order.id} index={index}>
+                <AnimatedItem
+                  key={order.id}
+                  index={index}
+                  disableLayout
+                  className="h-full"
+                >
                   <OrderCard
                     order={order}
                     thumbnailImage={

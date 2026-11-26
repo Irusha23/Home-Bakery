@@ -554,7 +554,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
         <TabView viewKey={section}>
           {section === "recipes" ? (
           recipes.length > 0 ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid-cards">
               {recipes.map((recipe) => {
                 const product = state.products.find(
                   (item) => item.id === recipe.productId,
@@ -572,9 +572,9 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
                     key={recipe.id}
                     type="button"
                     onClick={() => openRecipe(recipe.id)}
-                    className="group block w-full rounded-card text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30"
+                    className="group block h-full min-w-0 w-full rounded-card text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sage/30"
                   >
-                    <Card className="transition duration-ui group-hover:border-sage-border group-active:scale-button">
+                    <Card className="flex h-full flex-col justify-between transition duration-ui group-hover:border-sage-border group-active:scale-button">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex min-w-0 items-start gap-3">
                           <ItemThumbnail
@@ -631,9 +631,9 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             />
           )
         ) : products.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid-cards">
             {products.map((product) => (
-              <Card key={product.id} className="space-y-2.5">
+              <Card key={product.id} className="flex h-full min-w-0 flex-col justify-between space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-start gap-3">
                     <ItemThumbnail

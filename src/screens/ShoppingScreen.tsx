@@ -491,7 +491,7 @@ export default function ShoppingScreen({
         ) : null}
 
         {visibleItems.length > 0 ? (
-          <AnimatedList className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <AnimatedList layoutMode="grid" className="grid-cards">
             {visibleItems.map((item, index) => {
               const inventoryItem = state.inventory.find(
                 (inv) => inv.inventoryId === item.inventoryId,
@@ -516,10 +516,16 @@ export default function ShoppingScreen({
               const unitOptions = compatibleUnits(item.unit)
 
               return (
-              <AnimatedItem key={item.inventoryId} index={index}>
+              <AnimatedItem
+                key={item.inventoryId}
+                index={index}
+                disableLayout
+                className="h-full"
+              >
                 <SwipeableRow
                   actionLabel="Remove"
                   disabled={!item.isManualExtra}
+                  className="h-full min-w-0"
                   onAction={() => {
                     dispatch({
                       type: "REMOVE_MANUAL_SHOPPING_ITEM",
@@ -533,7 +539,7 @@ export default function ShoppingScreen({
                   }}
                 >
                   <Card
-                    className={`space-y-3 transition ${
+                    className={`flex h-full flex-col justify-between space-y-3 transition ${
                       item.checked ? "border-sage bg-sage-soft/50" : ""
                     }`}
                   >

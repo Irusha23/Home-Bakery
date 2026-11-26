@@ -76,7 +76,7 @@ export default function OrderCard({
   const statusText = orderLabel(order.status, order.preparationStatus)
 
   return (
-    <div className="rounded-card border border-warm-border bg-white shadow-subtle transition duration-ui ease-out hover:border-sage-border hover:shadow-card">
+    <div className="flex h-full min-w-0 flex-col justify-between rounded-card border border-warm-border bg-white shadow-subtle transition duration-ui ease-out hover:border-sage-border hover:shadow-card">
       <button
         type="button"
         onClick={onClick}

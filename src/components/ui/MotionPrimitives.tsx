@@ -108,15 +108,23 @@ export function PushView({
 type AnimatedListProps = {
   children: ReactNode
   className?: string
+  layoutMode?: "list" | "grid"
 }
 
 /**
  * Smoothly reflows list items when rows are added, removed, or filtered.
  */
-export function AnimatedList({ children, className = "" }: AnimatedListProps) {
+export function AnimatedList({
+  children,
+  className = "",
+  layoutMode = "list",
+}: AnimatedListProps) {
   return (
     <div className={`relative ${className}`.trim()}>
-      <AnimatePresence mode="popLayout" initial={false}>
+      <AnimatePresence
+        mode={layoutMode === "grid" ? "sync" : "popLayout"}
+        initial={false}
+      >
         {children}
       </AnimatePresence>
     </div>
@@ -127,19 +135,21 @@ type AnimatedItemProps = {
   children: ReactNode
   index?: number
   className?: string
+  disableLayout?: boolean
 }
 
 export function AnimatedItem({
   children,
   index = 0,
   className = "",
+  disableLayout = false,
 }: AnimatedItemProps) {
   const reducedMotion = useReducedMotion()
   const delay = reducedMotion ? 0 : staggerDelay(index)
 
   return (
     <motion.div
-      layout={!reducedMotion}
+      layout={!reducedMotion && !disableLayout}
       variants={reducedMotion ? undefined : listItemVariants}
       initial={reducedMotion ? { opacity: 0 } : "initial"}
       animate={reducedMotion ? { opacity: 1 } : "animate"}
@@ -149,7 +159,7 @@ export function AnimatedItem({
           ? REDUCED_MOTION_TRANSITION
           : { ...SPRING_PANEL, delay }
       }
-      className={`w-full ${className}`.trim()}
+      className={`min-w-0 w-full ${className}`.trim()}
     >
       {children}
     </motion.div>
