@@ -51,3 +51,20 @@ export function exitNativeApp(): void {
   if (!Capacitor.isNativePlatform()) return
   void CapacitorApp.exitApp().catch(() => undefined)
 }
+
+export function setCookModeStatusBar(
+  active: boolean,
+  backgroundHex = "#FAF5ED",
+  lightBackground = true,
+): void {
+  if (!Capacitor.isNativePlatform()) return
+  if (active) {
+    StatusBar.setStyle({
+      style: lightBackground ? Style.Light : Style.Dark,
+    }).catch(() => undefined)
+    StatusBar.setBackgroundColor({ color: backgroundHex }).catch(() => undefined)
+  } else {
+    StatusBar.setStyle({ style: Style.Light }).catch(() => undefined)
+    StatusBar.setBackgroundColor({ color: "#f8fafc" }).catch(() => undefined)
+  }
+}

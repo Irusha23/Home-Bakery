@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   AlertTriangle,
   CalendarDays,
@@ -8,7 +8,9 @@ import {
   ClipboardCheck,
   Clock3,
   Flame,
+  Plus,
   ShoppingBag,
+  Trash2,
 } from "lucide-react"
 import KitchenModeOverlay from "../components/domain/KitchenModeOverlay"
 import ScreenHeader from "../components/ScreenHeader"
@@ -27,6 +29,8 @@ import {
   formatTime,
 } from "../lib/format"
 import {
+  getEffectiveGramsPerTsp,
+  getEffectiveMlPerTsp,
   hasUnpurchasedShoppingItems,
   isUsageInPantry,
 } from "../lib/inventory"
@@ -130,16 +134,16 @@ export default function PreparationWorkspaceScreen({
                   {record.status}
                 </StatusBadge>
               </span>
-              <span className="mt-3 flex items-center justify-between gap-3 border-t border-warm-border pt-3">
-                <span>
+              <span className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-warm-border pt-3">
+                <span className="min-w-0">
                   <span className="block text-xs font-semibold text-cocoa">
                     {order.customerName} · {order.reference}
                   </span>
-                  <span className="mt-1 flex items-center gap-1 text-xs text-muted">
-                    <CalendarDays aria-hidden="true" size={13} />
-                    {formatDate(order.collectionDate)}
-                    <Clock3 aria-hidden="true" className="ml-1" size={13} />
-                    {formatTime(order.collectionTime)}
+                  <span className="mt-1 flex items-center gap-1 whitespace-nowrap text-xs text-muted">
+                    <CalendarDays aria-hidden="true" size={13} className="shrink-0" />
+                    <span>{formatDate(order.collectionDate)}</span>
+                    <Clock3 aria-hidden="true" className="ml-1 shrink-0" size={13} />
+                    <span>{formatTime(order.collectionTime)}</span>
                   </span>
                 </span>
                 {toBuyCount > 0 && record.status !== "Ready" ? (
@@ -158,16 +162,27 @@ export default function PreparationWorkspaceScreen({
 
 export function PreparationProductScreen({
   preparationId,
+  openCookModeIntent,
   onBack,
   onOpenShopping,
 }: {
   preparationId: string
+  openCookModeIntent?: { preparationId: string; stepIndex: number; key: number }
   onBack: () => void
   onOpenShopping?: () => void
 }) {
   const { state, dispatch, dispatchIfAccepted } = useAppState()
   const { showToast } = useToast()
-  const [kitchenOpen, setKitchenOpen] = useState(false)
+  const [kitchenOpen, setKitchenOpen] = useState(Boolean(openCookModeIntent))
+  const [addingStep, setAddingStep] = useState(false)
+  const [optionalStepText, setOptionalStepText] = useState("")
+  const [saveOptionalToRecipe, setSaveOptionalToRecipe] = useState(false)
+
+  useEffect(() => {
+    if (openCookModeIntent && openCookModeIntent.preparationId === preparationId) {
+      setKitchenOpen(true)
+    }
+  }, [openCookModeIntent, preparationId])
 
   const record = state.preparationRecords.find(
     (item) => item.id === preparationId,
@@ -300,10 +315,10 @@ export function PreparationProductScreen({
                             {usage.name}
                           </span>
                         </div>
-                        <span className="shrink-0 text-xs font-semibold tabular-nums text-muted">
+                        <span className="shrink-0 text-right text-xs font-semibold tabular-nums text-muted">
                           {(() => {
                             const dual = formatDualQuantity(
-                              usage.plannedQuantity,
+                              usage.actualQuantity,
                               usage.unit,
                               invItem,
                             )
@@ -311,6 +326,13 @@ export function PreparationProductScreen({
                               ? `${dual.primary} (${dual.secondary})`
                               : dual.primary
                           })()}
+                          {Math.abs(usage.actualQuantity - usage.plannedQuantity) >
+                          0.01 ? (
+                            <span className="block text-[10px] font-normal text-muted-light">
+                              Planned:{" "}
+                              {formatQuantity(usage.plannedQuantity, usage.unit)}
+                            </span>
+                          ) : null}
                         </span>
                       </div>
                     )
@@ -511,57 +533,155 @@ export function PreparationProductScreen({
                 {record.recipeSnapshot.instructions.map(
                   (instruction, index) => {
                     const checked = record.completedSteps.includes(index)
+                    const isCustom = (
+                      record.recipeSnapshot.customStepIndexes ?? []
+                    ).includes(index)
                     return (
-                      <button
+                      <div
                         key={`${index}-${instruction}`}
-                        type="button"
-                        disabled={hasShortages}
-                        onClick={() => {
-                          if (hasShortages) return
-                          if (record.status === "Awaiting preparation") {
-                            dispatch({
-                              type: "START_PREPARATION",
-                              preparationId: record.id,
-                            })
-                          }
-                          dispatch({
-                            type: "TOGGLE_PREPARATION_STEP",
-                            preparationId: record.id,
-                            stepIndex: index,
-                          })
-                        }}
-                        className={`flex w-full items-start gap-3 rounded-control p-3 text-left transition disabled:cursor-not-allowed ${
+                        className={`flex w-full items-start gap-2 rounded-control p-3 transition ${
                           checked ? "bg-success-soft" : "bg-ivory"
                         }`}
                       >
-                        <span
-                          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            checked
-                              ? "bg-success text-white"
-                              : "bg-white text-sage-dark"
-                          }`}
+                        <button
+                          type="button"
+                          disabled={hasShortages}
+                          onClick={() => {
+                            if (hasShortages) return
+                            if (record.status === "Awaiting preparation") {
+                              dispatch({
+                                type: "START_PREPARATION",
+                                preparationId: record.id,
+                              })
+                            }
+                            dispatch({
+                              type: "TOGGLE_PREPARATION_STEP",
+                              preparationId: record.id,
+                              stepIndex: index,
+                            })
+                          }}
+                          className="flex min-w-0 flex-1 items-start gap-3 text-left disabled:cursor-not-allowed"
                         >
-                          {checked ? (
-                            <Check aria-hidden="true" size={15} />
-                          ) : (
-                            index + 1
-                          )}
-                        </span>
-                        <span
-                          className={`pt-1 text-sm leading-relaxed ${
-                            checked ? "text-success line-through" : "text-cocoa"
-                          }`}
-                        >
-                          {instruction}
-                        </span>
-                      </button>
+                          <span
+                            className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                              checked
+                                ? "bg-success text-white"
+                                : "bg-white text-sage-dark"
+                            }`}
+                          >
+                            {checked ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : (
+                              index + 1
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1 pt-1">
+                            <span
+                              className={`block text-sm leading-relaxed ${
+                                checked ? "text-success line-through" : "text-cocoa"
+                              }`}
+                            >
+                              {instruction}
+                            </span>
+                            {isCustom ? (
+                              <span className="mt-0.5 inline-block text-[11px] font-medium text-muted">
+                                Optional note
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                        {isCustom &&
+                        record.recipeSnapshot.instructions.length > 1 ? (
+                          <button
+                            type="button"
+                            aria-label={`Remove optional step ${index + 1}`}
+                            onClick={() =>
+                              dispatch({
+                                type: "REMOVE_PREPARATION_INSTRUCTION",
+                                preparationId: record.id,
+                                stepIndex: index,
+                              })
+                            }
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:text-error"
+                          >
+                            <Trash2 aria-hidden="true" size={14} />
+                          </button>
+                        ) : null}
+                      </div>
                     )
                   },
+                )}
+
+                {addingStep ? (
+                  <div className="space-y-2.5 rounded-control border border-warm-border bg-ivory p-3">
+                    <textarea
+                      rows={2}
+                      value={optionalStepText}
+                      onChange={(e) => setOptionalStepText(e.target.value)}
+                      placeholder="Add an extra prep step or decorating note..."
+                      className="w-full rounded-control border border-warm-border bg-white px-3 py-2 text-sm text-cocoa placeholder:text-muted-light focus:border-sage focus:outline-none"
+                    />
+                    {record.recipeSnapshot.id &&
+                    state.recipes.some(
+                      (r) => r.id === record.recipeSnapshot.id,
+                    ) ? (
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          checked={saveOptionalToRecipe}
+                          onChange={(e) =>
+                            setSaveOptionalToRecipe(e.target.checked)
+                          }
+                          className="size-4 rounded accent-sage"
+                        />
+                        Also save to recipe for future orders
+                      </label>
+                    ) : null}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="compact"
+                        variant="ghost"
+                        onClick={() => {
+                          setAddingStep(false)
+                          setOptionalStepText("")
+                          setSaveOptionalToRecipe(false)
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="compact"
+                        disabled={!optionalStepText.trim()}
+                        onClick={() => {
+                          dispatch({
+                            type: "ADD_PREPARATION_INSTRUCTION",
+                            preparationId: record.id,
+                            text: optionalStepText,
+                            saveToRecipe: saveOptionalToRecipe,
+                          })
+                          setAddingStep(false)
+                          setOptionalStepText("")
+                          setSaveOptionalToRecipe(false)
+                        }}
+                      >
+                        Add step
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAddingStep(true)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-warm-border py-2.5 text-xs font-semibold text-sage-dark transition hover:bg-ivory"
+                  >
+                    <Plus aria-hidden="true" size={14} />
+                    Add optional step
+                  </button>
                 )}
               </Card>
             </section>
 
-            <div className="sticky bottom-0 z-20 -mx-5 mt-6 space-y-2 border-t border-warm-border bg-ivory/95 px-5 pb-3 pt-3 backdrop-blur-nav">
+            <div className="page-bleed sticky bottom-0 z-20 mt-6 space-y-2 border-t border-warm-border bg-ivory/95 pb-3 pt-3 backdrop-blur-nav">
               {hasShortages ? (
                 onOpenShopping ? (
                   <Button
@@ -618,16 +738,88 @@ export function PreparationProductScreen({
 
       <KitchenModeOverlay
         open={kitchenOpen && !hasShortages}
+        preparationId={record.id}
+        jumpToStep={
+          openCookModeIntent
+            ? { index: openCookModeIntent.stepIndex, key: openCookModeIntent.key }
+            : undefined
+        }
         title={line.productName}
         subtitle={`${line.variantName} · Qty ${line.quantity} · ${order.reference}`}
+        productImage={
+          record.recipeSnapshot.image ??
+          state.products.find((p) => p.id === line.productId)?.image
+        }
+        orderInstructions={order.instructions}
+        ingredients={record.actualUsage.map((usage) => {
+          const invItem = state.inventory.find(
+            (inv) => inv.inventoryId === usage.inventoryId,
+          )
+          return {
+            inventoryId: usage.inventoryId,
+            name: usage.name,
+            baseQuantity: usage.actualQuantity,
+            plannedBaseQuantity: usage.plannedQuantity,
+            baseUnit: usage.unit,
+            gramsPerTsp: getEffectiveGramsPerTsp(invItem),
+            mlPerTsp: getEffectiveMlPerTsp(invItem),
+            image: invItem?.image,
+          }
+        })}
         steps={record.recipeSnapshot.instructions}
+        customStepIndexes={record.recipeSnapshot.customStepIndexes}
         completedSteps={record.completedSteps}
+        canSaveToRecipe={Boolean(
+          record.recipeSnapshot.id &&
+            state.recipes.some((r) => r.id === record.recipeSnapshot.id),
+        )}
         onToggleStep={(stepIndex) => {
           if (hasShortages) return
           dispatch({
             type: "TOGGLE_PREPARATION_STEP",
             preparationId: record.id,
             stepIndex,
+          })
+        }}
+        onUpdateIngredientQuantity={(inventoryId, quantity) => {
+          dispatch({
+            type: "UPDATE_PREPARATION_USAGE",
+            preparationId: record.id,
+            inventoryId,
+            quantity,
+          })
+        }}
+        onAddOptionalStep={(text, saveToRecipe, insertAfterIndex) => {
+          dispatch({
+            type: "ADD_PREPARATION_INSTRUCTION",
+            preparationId: record.id,
+            text,
+            saveToRecipe,
+            insertAfterIndex,
+          })
+        }}
+        onEditStep={(stepIndex, text, saveToRecipe) => {
+          dispatch({
+            type: "UPDATE_PREPARATION_INSTRUCTION",
+            preparationId: record.id,
+            stepIndex,
+            text,
+            saveToRecipe,
+          })
+        }}
+        onRemoveOptionalStep={(stepIndex) => {
+          dispatch({
+            type: "REMOVE_PREPARATION_INSTRUCTION",
+            preparationId: record.id,
+            stepIndex,
+          })
+        }}
+        onMoveStep={(fromIndex, toIndex) => {
+          dispatch({
+            type: "MOVE_PREPARATION_STEP",
+            preparationId: record.id,
+            fromIndex,
+            toIndex,
           })
         }}
         onFinishAll={() => {

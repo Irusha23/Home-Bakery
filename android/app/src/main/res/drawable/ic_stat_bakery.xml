@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Cherry -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M13.5,2.2c-1.1,0.2 -1.9,1.0 -2.1,2.0c-0.8,0.2 -1.4,0.9 -1.4,1.8c0,1.1 0.9,2.0 2.0,2.0c1.1,0 2.0,-0.9 2.0,-2.0c0,-0.8 -0.5,-1.5 -1.2,-1.8c0.2,-0.5 0.6,-0.8 1.2,-0.9l-0.5,-1.1z" />
+    <!-- Cupcake frosting swirl -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6.2,11.8c-0.7,0 -1.2,-0.5 -1.2,-1.2c0,-1.5 1.1,-2.7 2.5,-2.9c0.4,-1.4 1.7,-2.4 3.2,-2.4h2.6c1.5,0 2.8,1.0 3.2,2.4c1.4,0.2 2.5,1.4 2.5,2.9c0,0.7 -0.5,1.2 -1.2,1.2H6.2z" />
+    <!-- Cupcake wrapper -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M5.6,13.2h12.8l-1.5,6.8c-0.2,1.0 -1.1,1.7 -2.1,1.7H9.2c-1.0,0 -1.9,-0.7 -2.1,-1.7L5.6,13.2zM8.8,15.0v4.8h1.3V15.0H8.8zM11.4,15.0v4.8h1.2V15.0H11.4zM13.9,15.0v4.8h1.3V15.0H13.9z" />
+</vector>

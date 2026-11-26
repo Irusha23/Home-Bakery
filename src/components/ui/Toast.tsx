@@ -99,7 +99,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   setToast(null)
                 }
               }}
-              className="pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-full border border-warm-border bg-cocoa px-4 py-2.5 text-sm text-white shadow-dialog"
+              className="pointer-events-auto flex w-full max-w-md items-center gap-2.5 rounded-full border border-warm-border bg-cocoa px-4 py-2.5 text-sm text-white shadow-dialog"
             >
               {toast.tone === "warning" ? (
                 <AlertTriangle

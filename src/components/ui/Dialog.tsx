@@ -75,7 +75,7 @@ export default function Dialog({
             transition={
               reducedMotion ? REDUCED_MOTION_TRANSITION : DIALOG_SPRING
             }
-            className="relative z-10 flex max-h-[85dvh] w-full max-w-dialog flex-col overflow-hidden rounded-sheet border border-warm-border bg-white p-5 shadow-dialog"
+            className="relative z-10 flex max-h-[85dvh] w-full max-w-[32rem] flex-col overflow-hidden rounded-sheet border border-warm-border bg-white p-5 shadow-dialog"
           >
             <div className="flex shrink-0 items-start justify-between gap-4">
               <div>

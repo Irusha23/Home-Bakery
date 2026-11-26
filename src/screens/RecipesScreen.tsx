@@ -554,7 +554,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
         <TabView viewKey={section}>
           {section === "recipes" ? (
           recipes.length > 0 ? (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {recipes.map((recipe) => {
                 const product = state.products.find(
                   (item) => item.id === recipe.productId,
@@ -631,7 +631,7 @@ export default function RecipesScreen({ onFocusedChange }: RecipesScreenProps) {
             />
           )
         ) : products.length > 0 ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {products.map((product) => (
               <Card key={product.id} className="space-y-2.5">
                 <div className="flex items-start justify-between gap-2">

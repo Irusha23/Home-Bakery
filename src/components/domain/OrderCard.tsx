@@ -133,8 +133,8 @@ export default function OrderCard({
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-warm-border/70 pt-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
-              <CalendarDays aria-hidden="true" size={13} className="text-sage" />
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-muted">
+              <CalendarDays aria-hidden="true" size={13} className="shrink-0 text-sage" />
               <span>
                 {formatDate(order.collectionDate)} · {formatTime(order.collectionTime)}
               </span>

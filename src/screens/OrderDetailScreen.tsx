@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
+  ArrowLeft,
   BookOpen,
   CalendarDays,
   Camera,
@@ -80,6 +81,7 @@ function today() {
 type OrderDetailScreenProps = {
   order: Order
   onBack: () => void
+  onBackToActiveOrders?: () => void
   onEditDraft: () => void
   onOpenShopping: () => void
   onOpenPreparation: (lineId: string) => void
@@ -94,6 +96,7 @@ type OrderDetailScreenProps = {
 export default function OrderDetailScreen({
   order,
   onBack,
+  onBackToActiveOrders,
   onEditDraft,
   onOpenShopping,
   onOpenPreparation,
@@ -547,20 +550,20 @@ export default function OrderDetailScreen({
       <section className="mt-4" aria-label="Products and collection">
         <Card className="p-0">
           <div className="border-b border-warm-border bg-sage-soft/60 px-4 py-3.5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <div className="flex shrink-0 items-center gap-2">
                 <CalendarDays
                   aria-hidden="true"
                   size={17}
                   className="shrink-0 text-sage-dark"
                 />
-                <span className="text-sm font-semibold text-cocoa">
+                <span className="whitespace-nowrap text-sm font-semibold text-cocoa">
                   {formatDate(order.collectionDate)}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-cocoa">
-                  <Clock3 aria-hidden="true" size={13} className="text-muted" />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-semibold text-cocoa">
+                  <Clock3 aria-hidden="true" size={13} className="shrink-0 text-muted" />
                   {formatTime(order.collectionTime)}
                 </span>
                 {order.status !== "Completed" &&
@@ -580,7 +583,7 @@ export default function OrderDetailScreen({
               </p>
             ) : null}
             {order.referencePhoto ? (
-              <div className="mt-2 flex items-center justify-between gap-2.5 border-t border-sage-border/70 pt-2.5">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2.5 border-t border-sage-border/70 pt-2.5">
                 <button
                   type="button"
                   onClick={() => setPhotoViewerOpen(true)}
@@ -1264,6 +1267,18 @@ export default function OrderDetailScreen({
               Cancel order
             </Button>
           ) : null}
+        </div>
+      ) : null}
+
+      {order.status === "Completed" && onBackToActiveOrders ? (
+        <div className="mt-2.5">
+          <Button
+            fullWidth
+            leadingIcon={<ArrowLeft aria-hidden="true" size={16} />}
+            onClick={onBackToActiveOrders}
+          >
+            Back to orders
+          </Button>
         </div>
       ) : null}
 

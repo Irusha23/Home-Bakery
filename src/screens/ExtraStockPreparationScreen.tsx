@@ -516,7 +516,7 @@ function ExtraStockPreparationDetail({
         </Card>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-[27rem] border-t border-warm-border bg-ivory/95 px-5 pb-3 pt-3 backdrop-blur-nav">
+      <div className="page-x fixed inset-x-0 bottom-0 z-20 border-t border-warm-border bg-ivory/95 pb-3 pt-3 backdrop-blur-nav">
         <Button
           fullWidth
           leadingIcon={<ClipboardCheck aria-hidden="true" size={18} />}

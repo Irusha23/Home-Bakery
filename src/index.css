@@ -57,11 +57,13 @@
   --spacing-nav-item: 3.75rem;
   --spacing-quick-action: 7.25rem;
   --spacing-hero-image: 13.25rem;
-  --spacing-dialog: 26rem;
-  --spacing-copy: 19rem;
-  --spacing-empty: 17rem;
+  --spacing-dialog: 28rem;
+  --spacing-copy: 20rem;
+  --spacing-empty: 17.5rem;
   --spacing-textarea: 6.5rem;
-  --spacing-dialog-content: 24rem;
+  --spacing-dialog-content: 26rem;
+
+  --app-shell-max: 29rem;
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
@@ -72,9 +74,10 @@
 }
 
 :root {
+  --page-px: clamp(1rem, 3.2vw, 2rem);
   font-family: var(--font-sans);
   color: var(--color-cocoa);
-  background: oklch(0.955 0.008 247.896);
+  background: var(--color-ivory);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -85,8 +88,9 @@
 
 html {
   width: 100%;
+  font-size: clamp(13.5px, min(3.9vw, 2dvh), 17px);
   overflow-x: hidden;
-  background: oklch(0.955 0.008 247.896);
+  background: var(--color-ivory);
   scroll-behavior: smooth;
   overscroll-behavior-y: contain;
 }
@@ -94,9 +98,9 @@ html {
 body {
   margin: 0;
   width: 100%;
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
-  background: oklch(0.955 0.008 247.896);
+  background: var(--color-ivory);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -111,9 +115,21 @@ button {
 
 .mobile-shell {
   width: 100%;
-  max-width: 26.875rem;
-  margin-inline: auto;
-  overflow-x: hidden;
+  max-width: none;
+  overflow-x: clip;
+}
+
+.page-x {
+  padding-inline: var(--page-px);
+}
+
+.page-bleed {
+  margin-inline: calc(var(--page-px) * -1);
+  padding-inline: var(--page-px);
+}
+
+.page-bleed-x {
+  margin-inline: calc(var(--page-px) * -1);
 }
 
 .screen-safe-top {
@@ -133,7 +149,7 @@ button {
 }
 
 .w-nav {
-  width: min(calc(100% - 1.5rem), 25rem);
+  width: min(calc(100% - 2rem), 32rem);
 }
 
 .grid-cols-hero {
@@ -188,9 +204,17 @@ button {
   display: none;
 }
 
-@media (min-width: 30rem) {
-  .mobile-shell {
-    border-inline: 1px solid var(--color-warm-border);
+@media (orientation: landscape) and (max-height: 540px) {
+  html {
+    font-size: clamp(12.5px, 2.8dvh, 15px);
+  }
+
+  .screen-safe-top {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  }
+
+  .screen-bottom-padding {
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
   }
 }
 

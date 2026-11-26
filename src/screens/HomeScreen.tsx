@@ -272,7 +272,7 @@ export default function HomeScreen({
 
       <StaggerSection index={3}>
         <section aria-label="Snapshot">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <button
             type="button"
             onClick={() => onNavigate("orders")}

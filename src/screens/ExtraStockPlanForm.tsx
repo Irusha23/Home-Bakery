@@ -223,7 +223,7 @@ export default function ExtraStockPlanForm({
         ) : null}
       </div>
 
-      <div className="sticky bottom-0 z-20 -mx-5 mt-auto border-t border-warm-border bg-ivory/95 px-5 pb-3 pt-3 backdrop-blur-nav">
+      <div className="page-bleed sticky bottom-0 z-20 mt-auto border-t border-warm-border bg-ivory/95 pb-3 pt-3 backdrop-blur-nav">
         <Button
           fullWidth
           leadingIcon={<Save aria-hidden="true" size={17} />}

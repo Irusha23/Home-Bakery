@@ -10,6 +10,8 @@ export type IllustrationName =
   | "all-clear-bell"
   | "customers-wave"
   | "loading-cupcake"
+  | "kitchen-prep"
+  | "timer-bell"
 
 type IllustrationSize = "sm" | "md" | "lg"
 
@@ -354,6 +356,66 @@ function renderArtwork(name: IllustrationName) {
             strokeWidth="2.8"
             strokeLinecap="round"
           />
+        </svg>
+      )
+
+    case "kitchen-prep":
+      return (
+        <svg viewBox="0 0 160 124" fill="none" className="h-full w-full">
+          <ellipse cx="80" cy="106" rx="44" ry="6.5" fill="#FDE68A" fillOpacity="0.4" />
+          <circle cx="34" cy="40" r="4" fill="#FBBF24" />
+          <circle cx="126" cy="36" r="4.5" fill="#6EE7B7" />
+          <circle cx="118" cy="56" r="2.5" fill="#FB7185" />
+          {/* Whisk handle */}
+          <path
+            d="M92 22l14-8c2.2-1.2 4.8.4 4.2 2.8L104 38"
+            stroke="#F59E0B"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M95 34c-7 7-9 18-3 24s17 4 24-3c6-6 2-15-6-19-8-4-11-6-15-2Z"
+            stroke="#FAF7F2"
+            strokeWidth="2.5"
+            fill="none"
+          />
+          {/* Mixing bowl */}
+          <path
+            d="M42 60h76c0 22-14 38-38 38S42 82 42 60Z"
+            fill="#F59E0B"
+            stroke="#0F172A"
+            strokeWidth="3"
+            strokeLinejoin="round"
+          />
+          <rect
+            x="36"
+            y="53"
+            width="88"
+            height="10"
+            rx="5"
+            fill="#FDE68A"
+            stroke="#0F172A"
+            strokeWidth="3"
+          />
+          <path d="M56 72c4 8 10 13 18 15" stroke="#FFFBEB" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      )
+
+    case "timer-bell":
+      return (
+        <svg viewBox="0 0 160 124" fill="none" className="h-full w-full">
+          <ellipse cx="80" cy="107" rx="40" ry="6.5" fill="#FDE68A" fillOpacity="0.35" />
+          {/* Ringing motion arcs */}
+          <path d="M36 44c-6 8-6 18 0 26" stroke="#FBBF24" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M27 38c-8 12-8 26 0 38" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
+          <path d="M124 44c6 8 6 18 0 26" stroke="#FBBF24" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M133 38c8 12 8 26 0 38" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
+          {/* Clock / kitchen timer */}
+          <rect x="74" y="20" width="12" height="8" rx="3" fill="#E11D48" stroke="#0F172A" strokeWidth="2.5" />
+          <circle cx="80" cy="64" r="32" fill="#FFFBEB" stroke="#0F172A" strokeWidth="3.2" />
+          <circle cx="80" cy="64" r="24" fill="#FEF3C7" />
+          <path d="M80 46v18l12 8" stroke="#0F172A" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="80" cy="64" r="4" fill="#E11D48" />
         </svg>
       )
   }

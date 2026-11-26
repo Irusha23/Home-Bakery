@@ -63,8 +63,10 @@ type OrdersScreenProps = {
   starterAction: StarterAction | null
   initialOrderId?: string
   initialPreparationId?: string
+  cookModeIntent?: { preparationId: string; stepIndex: number; key: number }
   onConsumeOrderIntent?: () => void
   onReturnFromIntent?: () => void
+  onClearReturnIntent?: () => void
   onConsumeStarterAction: () => void
   onFocusedChange: (focused: boolean) => void
   onOpenShopping: () => void
@@ -74,8 +76,10 @@ export default function OrdersScreen({
   starterAction,
   initialOrderId,
   initialPreparationId,
+  cookModeIntent,
   onConsumeOrderIntent,
   onReturnFromIntent,
+  onClearReturnIntent,
   onConsumeStarterAction,
   onFocusedChange,
   onOpenShopping,
@@ -98,6 +102,9 @@ export default function OrdersScreen({
   >(undefined)
   const [selectedPreparationId, setSelectedPreparationId] =
     useState<string | null>(initialPreparationId ?? null)
+  const [activeCookModeIntent, setActiveCookModeIntent] = useState<
+    { preparationId: string; stepIndex: number; key: number } | undefined
+  >(cookModeIntent)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<Filter>("Active")
   const [repeatNotice, setRepeatNotice] = useState<string | null>(null)
@@ -106,7 +113,10 @@ export default function OrdersScreen({
   const consumedAction = useRef<StarterAction | null>(null)
 
   useEffect(() => {
-    if (!initialOrderId && !initialPreparationId) return
+    if (!initialOrderId && !initialPreparationId && !cookModeIntent) return
+    if (cookModeIntent) {
+      setActiveCookModeIntent(cookModeIntent)
+    }
     if (initialPreparationId) {
       setSelectedOrderId(initialOrderId ?? null)
       setSelectedPreparationId(initialPreparationId)
@@ -116,7 +126,7 @@ export default function OrdersScreen({
       setView("detail")
     }
     onConsumeOrderIntent?.()
-  }, [initialOrderId, initialPreparationId, onConsumeOrderIntent])
+  }, [initialOrderId, initialPreparationId, cookModeIntent, onConsumeOrderIntent])
 
   useEffect(() => {
     if (!starterAction) {
@@ -381,6 +391,16 @@ export default function OrdersScreen({
             }
             setView("list")
           }}
+          onBackToActiveOrders={() => {
+            setSelectedOrderId(null)
+            setRepeatNotice(null)
+            setOpenPaymentOnDetail(false)
+            setOpenRefundOnDetail(false)
+            setFilter("Active")
+            setSearch("")
+            setView("list")
+            onClearReturnIntent?.()
+          }}
           onEditDraft={() => {
             setEditingOrderId(selectedOrder.id)
             setView("create")
@@ -412,6 +432,11 @@ export default function OrdersScreen({
       return (
         <PreparationProductScreen
           preparationId={selectedPreparationId}
+          openCookModeIntent={
+            activeCookModeIntent?.preparationId === selectedPreparationId
+              ? activeCookModeIntent
+              : undefined
+          }
           onOpenShopping={onOpenShopping}
           onBack={() => {
             setSelectedPreparationId(null)
@@ -484,7 +509,7 @@ export default function OrdersScreen({
         />
 
         {filteredOrders.length ? (
-          <AnimatedList className="space-y-3 pt-1">
+          <AnimatedList className="grid grid-cols-1 gap-3 pt-1 md:grid-cols-2">
             {filteredOrders.map((order, index) => {
               const quickAction = getQuickAction(order)
               const primaryLine = order.lines[0]

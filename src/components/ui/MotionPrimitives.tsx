@@ -81,7 +81,7 @@ export function PushView({
   }, [effectiveDepth, viewKey])
 
   return (
-    <div className="relative -mx-5 overflow-x-clip">
+    <div className="page-bleed-x relative overflow-x-clip">
       <AnimatePresence mode="popLayout" initial={false} custom={direction}>
         <motion.div
           key={viewKey}
@@ -92,7 +92,7 @@ export function PushView({
           exit={reducedMotion ? { opacity: 0 } : "exit"}
           transition={reducedMotion ? REDUCED_MOTION_TRANSITION : SPRING_PAGE}
           style={{ zIndex: effectiveDepth * 10 }}
-          className={`relative w-full px-5 ${
+          className={`page-x relative w-full ${
             effectiveDepth > 0
               ? "min-h-dvh bg-ivory shadow-[-12px_0_28px_rgb(15_23_42/0.08)]"
               : "bg-ivory"

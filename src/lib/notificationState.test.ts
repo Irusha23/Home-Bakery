@@ -9,6 +9,7 @@ import {
   restoreNotification,
   saveNotificationPreferences,
 } from "./notificationState"
+import { applySystemReminderEvent } from "./systemNotifications"
 
 function createMemoryStorage() {
   const store = new Map<string, string>()
@@ -73,5 +74,43 @@ describe("notificationState", () => {
       readIds: ["a"],
       dismissedIds: ["b"],
     })
+  })
+
+  it("syncs phone notification actions (read, open, clear, clear-all) cleanly", () => {
+    const start = { readIds: [], dismissedIds: [] }
+    const afterRead = applySystemReminderEvent(start, {
+      action: "read",
+      id: "due-order-1",
+    })
+    expect(afterRead).toEqual({ readIds: ["due-order-1"], dismissedIds: [] })
+
+    const afterOpen = applySystemReminderEvent(afterRead, {
+      action: "open",
+      id: "backup-weekly",
+    })
+    expect(afterOpen.readIds).toEqual(["due-order-1", "backup-weekly"])
+
+    const afterClear = applySystemReminderEvent(afterOpen, {
+      action: "clear",
+      id: "due-order-1",
+    })
+    expect(afterClear.dismissedIds).toEqual(["due-order-1"])
+
+    const afterClearAll = applySystemReminderEvent(afterClear, {
+      action: "clear-all",
+      ids: ["backup-weekly", "shortage-2"],
+    })
+    expect(afterClearAll.dismissedIds).toEqual([
+      "due-order-1",
+      "backup-weekly",
+      "shortage-2",
+    ])
+    expect(afterClearAll.readIds).toContain("shortage-2")
+
+    const unchanged = applySystemReminderEvent(afterClearAll, {
+      action: "open-alarm",
+      id: "prep-1::2",
+    })
+    expect(unchanged).toBe(afterClearAll)
   })
 })

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { Capacitor } from "@capacitor/core"
 import { Share } from "@capacitor/share"
 import {
+  Bell,
   BellOff,
   Calculator,
   Download,
@@ -36,6 +37,10 @@ import { LATEST_DB_SCHEMA_VERSION } from "../db/migrator"
 import { formatDate, formatLkr } from "../lib/format"
 import { calculateSuggestedPrice } from "../lib/pricing"
 import { sanitizeNumericDraft } from "../lib/quantityInput"
+import {
+  requestSystemNotificationPermission,
+  usePhoneNotificationsEnabled,
+} from "../lib/systemNotifications"
 import { useAppState } from "../state/AppState"
 import type { PricingMode } from "../types"
 
@@ -114,6 +119,8 @@ export default function SettingsScreen({
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(
     null,
   )
+  const [phoneNotificationsEnabled, setPhoneNotificationsEnabled] =
+    usePhoneNotificationsEnabled()
 
   useEffect(() => {
     setActivePage(initialSection)
@@ -307,6 +314,59 @@ export default function SettingsScreen({
           subtitle={pricingSummary}
           showChevron
           onClick={() => openPage("pricing")}
+        />
+        <ListRow
+          leading={
+            <SettingsRowIcon tone={phoneNotificationsEnabled ? "sage" : "neutral"}>
+              {phoneNotificationsEnabled ? (
+                <Bell aria-hidden="true" size={17} />
+              ) : (
+                <BellOff aria-hidden="true" size={17} />
+              )}
+            </SettingsRowIcon>
+          }
+          title="Phone notifications"
+          subtitle={
+            phoneNotificationsEnabled
+              ? "Active alerts also show in your phone notification bar"
+              : "Off · Reminders stay inside the app only"
+          }
+          trailing={
+            <button
+              type="button"
+              role="switch"
+              aria-checked={phoneNotificationsEnabled}
+              aria-label="Toggle phone notifications"
+              onClick={() => {
+                const next = !phoneNotificationsEnabled
+                setPhoneNotificationsEnabled(next)
+                if (next) {
+                  void requestSystemNotificationPermission().then((granted) => {
+                    showToast({
+                      message: granted
+                        ? "Phone notifications enabled"
+                        : "Turn on Notifications for Udeni's Specials in Android settings to see them outside the app",
+                      tone: granted ? "success" : "warning",
+                    })
+                  })
+                } else {
+                  showToast({
+                    message: "Phone notification bar sync turned off",
+                    tone: "info",
+                  })
+                }
+              }}
+              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                phoneNotificationsEnabled ? "bg-success" : "bg-muted-light/50"
+              }`}
+            >
+              <span
+                className={`inline-block size-6 rounded-full bg-white shadow-subtle transition-transform ${
+                  phoneNotificationsEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          }
         />
       </GroupedList>
 

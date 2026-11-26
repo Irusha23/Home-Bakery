@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Check, X } from "lucide-react"
+import { App as CapacitorApp } from "@capacitor/app"
+import { Capacitor } from "@capacitor/core"
+import { BellRing, Check, X } from "lucide-react"
 import { MotionConfig } from "motion/react"
 import AppShell from "./components/AppShell"
 import ErrorBoundary from "./components/ErrorBoundary"
+import AlarmRingingBanner from "./components/ui/AlarmRingingBanner"
 import Illustration from "./components/ui/Illustration"
 import {
   AnimatedItem,
@@ -25,6 +28,17 @@ import {
   restoreNotification,
   saveNotificationPreferences,
 } from "./lib/notificationState"
+import { parseStepAlarmId } from "./lib/kitchenAlarm"
+import {
+  applySystemReminderEvent,
+  consumeSystemReminderEvents,
+  getSystemNotificationPermissionGranted,
+  requestSystemNotificationPermission,
+  subscribeToSystemReminderEvents,
+  syncRemindersToPhoneBar,
+  usePhoneNotificationsEnabled,
+  type SystemReminderEvent,
+} from "./lib/systemNotifications"
 import { selectAttentionItems } from "./lib/selectors/todaySelectors"
 import { useNavigationStack } from "./navigation/useNavigationStack"
 import AppStateProvider, { useAppState } from "./state/AppState"
@@ -46,15 +60,22 @@ function AppContent() {
   const [focusedScreen, setFocusedScreen] = useState(false)
   const [orderIntent, setOrderIntent] = useState<string | undefined>()
   const [preparationIntent, setPreparationIntent] = useState<string | undefined>()
+  const [cookModeIntent, setCookModeIntent] = useState<
+    { preparationId: string; stepIndex: number; key: number } | undefined
+  >()
   const [orderReturnTab, setOrderReturnTab] = useState<TabId | null>(null)
   const [notifPrefs, setNotifPrefs] = useState(() =>
     loadNotificationPreferences(),
   )
   const notifHydratedRef = useRef(false)
+  const [notifHydrated, setNotifHydrated] = useState(false)
+  const [phoneNotificationsEnabled] = usePhoneNotificationsEnabled()
+  const [phonePermissionGranted, setPhonePermissionGranted] = useState(true)
 
   useEffect(() => {
     if (!repository) {
       notifHydratedRef.current = true
+      setNotifHydrated(true)
       return
     }
     let cancelled = false
@@ -66,9 +87,11 @@ function AppContent() {
           setNotifPrefs(loaded)
         }
         notifHydratedRef.current = true
+        setNotifHydrated(true)
       })
       .catch(() => {
         notifHydratedRef.current = true
+        setNotifHydrated(true)
       })
     return () => {
       cancelled = true
@@ -101,10 +124,11 @@ function AppContent() {
     () => allAttentionItems.filter((item) => !dismissedIdSet.has(item.id)),
     [allAttentionItems, dismissedIdSet],
   )
-  const unreadAttentionCount = useMemo(
-    () => attentionItems.filter((item) => !readIdSet.has(item.id)).length,
+  const unreadAttentionItems = useMemo(
+    () => attentionItems.filter((item) => !readIdSet.has(item.id)),
     [attentionItems, readIdSet],
   )
+  const unreadAttentionCount = unreadAttentionItems.length
 
   const navigate = useCallback(
     (tab: TabId, action: StarterAction | null = null) => {
@@ -171,7 +195,34 @@ function AppContent() {
   const consumeOrderIntent = useCallback(() => {
     setOrderIntent(undefined)
     setPreparationIntent(undefined)
+    setCookModeIntent(undefined)
   }, [])
+
+  const openCookModeFromAlarm = useCallback(
+    (preparationId: string, stepIndex: number) => {
+      const record = state.preparationRecords.find(
+        (item) => item.id === preparationId,
+      )
+      if (!record) return
+      setIsUpdatesOpen(false)
+      setIsSettingsOpen(false)
+      setSettingsSection("root")
+      if (activeTab !== "orders") {
+        setOrderReturnTab(activeTab)
+      }
+      setOrderIntent(record.orderId)
+      setPreparationIntent(record.id)
+      setCookModeIntent({
+        preparationId: record.id,
+        stepIndex,
+        key: Date.now(),
+      })
+      setFocusedScreen(true)
+      switchTab("orders")
+      window.scrollTo(0, 0)
+    },
+    [activeTab, state.preparationRecords, switchTab],
+  )
 
   const lastBackPressRef = useRef(0)
   const rootBackRef = useRef<() => void>(() => {})
@@ -204,6 +255,110 @@ function AppContent() {
     })
   }, [])
 
+  const handleSystemReminderEvent = useCallback(
+    (evt: SystemReminderEvent) => {
+      if (evt.action === "open-alarm" && evt.id) {
+        const parsed = parseStepAlarmId(evt.id)
+        if (parsed) {
+          openCookModeFromAlarm(parsed.preparationId, parsed.stepIndex)
+        }
+        return
+      }
+      setNotifPrefs((prev) => applySystemReminderEvent(prev, evt))
+      if (evt.action === "open") {
+        setIsUpdatesOpen(false)
+        if (
+          evt.id === "backup-reminder" ||
+          evt.id === "backup-weekly" ||
+          evt.targetTab === "backup"
+        ) {
+          setSettingsSection("backup")
+          setIsSettingsOpen(true)
+        } else if (evt.orderId) {
+          openOrder(evt.orderId)
+        } else if (
+          evt.targetTab === "today" ||
+          evt.targetTab === "orders" ||
+          evt.targetTab === "kitchen" ||
+          evt.targetTab === "money"
+        ) {
+          navigate(
+            evt.targetTab,
+            (evt.starterAction as StarterAction | undefined) ?? null,
+          )
+        }
+      }
+    },
+    [navigate, openCookModeFromAlarm, openOrder],
+  )
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    void getSystemNotificationPermissionGranted().then((granted) => {
+      setPhonePermissionGranted(granted)
+      if (!granted && phoneNotificationsEnabled) {
+        void requestSystemNotificationPermission().then((afterReq) => {
+          setPhonePermissionGranted(afterReq)
+        })
+      }
+    })
+  }, [phoneNotificationsEnabled])
+
+  useEffect(() => {
+    const drainEvents = () => {
+      void consumeSystemReminderEvents().then((events) => {
+        for (const evt of events) {
+          handleSystemReminderEvent(evt)
+        }
+      })
+    }
+
+    drainEvents()
+    const unsubscribe = subscribeToSystemReminderEvents(handleSystemReminderEvent)
+
+    let stateHandle: { remove: () => Promise<void> } | null = null
+    let cancelled = false
+    if (Capacitor.isNativePlatform()) {
+      void CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+        if (isActive) {
+          drainEvents()
+          void getSystemNotificationPermissionGranted().then(
+            setPhonePermissionGranted,
+          )
+        }
+      }).then((listener) => {
+        if (cancelled) {
+          void listener.remove()
+        } else {
+          stateHandle = listener
+        }
+      })
+    }
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+      if (stateHandle) {
+        void stateHandle.remove()
+      }
+    }
+  }, [handleSystemReminderEvent])
+
+  useEffect(() => {
+    if (!notifHydrated) return
+    if (Capacitor.isNativePlatform() && phoneNotificationsEnabled && !phonePermissionGranted) {
+      return
+    }
+    void syncRemindersToPhoneBar(
+      unreadAttentionItems,
+      phoneNotificationsEnabled,
+    ).then((res) => {
+      if (Capacitor.isNativePlatform() && phoneNotificationsEnabled) {
+        setPhonePermissionGranted(res.permissionGranted)
+      }
+    })
+  }, [notifHydrated, unreadAttentionItems, phoneNotificationsEnabled, phonePermissionGranted])
+
   const renderTabScreen = () => {
     if (activeTab === "today") {
       return (
@@ -226,8 +381,10 @@ function AppContent() {
           starterAction={starterAction}
           initialOrderId={orderIntent}
           initialPreparationId={preparationIntent}
+          cookModeIntent={cookModeIntent}
           onConsumeOrderIntent={consumeOrderIntent}
           onReturnFromIntent={orderReturnTab ? handleOrderBackToOrigin : undefined}
+          onClearReturnIntent={() => setOrderReturnTab(null)}
           onConsumeStarterAction={consumeStarterAction}
           onFocusedChange={setFocusedScreen}
           onOpenShopping={() => navigate("kitchen", "plan-shopping")}
@@ -257,6 +414,17 @@ function AppContent() {
 
   return (
     <>
+      <AlarmRingingBanner
+        onOpenAlarm={(alarm) => {
+          const parsed =
+            alarm.preparationId
+              ? { preparationId: alarm.preparationId, stepIndex: alarm.stepIndex }
+              : parseStepAlarmId(alarm.alarmId)
+          if (parsed) {
+            openCookModeFromAlarm(parsed.preparationId, parsed.stepIndex)
+          }
+        }}
+      />
       <AppShell
         activeTab={activeTab}
         hideNavigation={focusedScreen || isSettingsOpen}
@@ -291,6 +459,30 @@ function AppContent() {
         onClose={() => setIsUpdatesOpen(false)}
       >
         <div className="space-y-3">
+          {Capacitor.isNativePlatform() &&
+          phoneNotificationsEnabled &&
+          !phonePermissionGranted ? (
+            <div className="flex items-center justify-between gap-2 rounded-card border border-warning-border bg-warning-soft px-3.5 py-2.5 text-xs">
+              <div className="flex items-center gap-2 text-cocoa">
+                <BellRing aria-hidden="true" size={15} className="shrink-0 text-warning" />
+                <span>Allow notifications to see alerts in your phone bar.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  void requestSystemNotificationPermission().then((granted) => {
+                    setPhonePermissionGranted(granted)
+                    if (granted) {
+                      void syncRemindersToPhoneBar(unreadAttentionItems, true)
+                    }
+                  })
+                }
+                className="shrink-0 rounded-full bg-sage px-3 py-1 font-semibold text-white"
+              >
+                Allow
+              </button>
+            </div>
+          ) : null}
           {attentionItems.length > 0 ? (
             <>
               <div className="flex items-center justify-between gap-2 px-0.5 text-xs">

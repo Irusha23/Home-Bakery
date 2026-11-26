@@ -96,7 +96,7 @@ export default function Sheet({
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0.04, bottom: 0.45 }}
             onDragEnd={handleDragEnd}
-            className={`relative z-10 flex w-full max-w-dialog flex-col overflow-hidden rounded-t-sheet border border-warm-border bg-white shadow-sheet sm:rounded-sheet ${maxHeightClass}`}
+            className={`relative z-10 flex w-full max-w-none flex-col overflow-hidden rounded-t-sheet border border-warm-border bg-white shadow-sheet sm:max-w-[34rem] sm:rounded-sheet ${maxHeightClass}`}
           >
             <div
               onPointerDown={(event) => {

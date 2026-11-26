@@ -491,7 +491,7 @@ export default function ShoppingScreen({
         ) : null}
 
         {visibleItems.length > 0 ? (
-          <AnimatedList className="space-y-3">
+          <AnimatedList className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {visibleItems.map((item, index) => {
               const inventoryItem = state.inventory.find(
                 (inv) => inv.inventoryId === item.inventoryId,
@@ -537,117 +537,118 @@ export default function ShoppingScreen({
                       item.checked ? "border-sage bg-sage-soft/50" : ""
                     }`}
                   >
-                <div className="flex items-start justify-between gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleItemChecked(item)}
-                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
-                    aria-pressed={item.checked}
-                  >
-                    <span className="mt-0.5 shrink-0 text-sage-dark">
-                      {item.checked ? (
-                        <CheckSquare
-                          aria-hidden="true"
-                          size={20}
-                          className="text-success"
-                        />
-                      ) : (
-                        <Square
-                          aria-hidden="true"
-                          size={20}
-                          className="text-muted"
-                        />
-                      )}
-                    </span>
-                    <ItemThumbnail
-                      image={inventoryItem?.image}
-                      alt={item.name}
-                      size="sm"
-                    />
-                    <span className="min-w-0">
+                <div className="space-y-1.5">
+                  <div className="flex items-start justify-between gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleItemChecked(item)}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                      aria-pressed={item.checked}
+                    >
+                      <span className="shrink-0 text-sage-dark">
+                        {item.checked ? (
+                          <CheckSquare
+                            aria-hidden="true"
+                            size={20}
+                            className="text-success"
+                          />
+                        ) : (
+                          <Square
+                            aria-hidden="true"
+                            size={20}
+                            className="text-muted"
+                          />
+                        )}
+                      </span>
+                      <ItemThumbnail
+                        image={inventoryItem?.image}
+                        alt={item.name}
+                        size="sm"
+                      />
                       <span
-                        className={`block text-sm font-semibold text-cocoa ${
+                        className={`min-w-0 text-sm font-semibold leading-snug text-cocoa ${
                           item.checked ? "line-through opacity-75" : ""
                         }`}
                       >
                         {item.name}
                       </span>
-                      {item.orders.length > 0 ? (
-                        <span className="mt-1.5 block space-y-1">
-                          {item.orders.map((o) => (
-                            <span
-                              key={o.orderId}
-                              className="flex items-center justify-between gap-3 text-xs text-muted"
-                            >
-                              <span className="flex min-w-0 items-center gap-1.5">
-                                <span
-                                  aria-hidden="true"
-                                  className="size-1 shrink-0 rounded-full bg-muted-light"
-                                />
-                                <span className="leading-snug">
-                                  {o.customerName}
-                                </span>
-                              </span>
-                              <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">
-                                {formatQuantity(o.quantity, item.unit)}
-                              </span>
-                            </span>
-                          ))}
-                        </span>
-                      ) : (
-                        <span className="mt-0.5 block text-xs text-muted">
-                          Added manually
-                        </span>
-                      )}
-                    </span>
-                  </button>
+                    </button>
 
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <div className="text-right">
-                      <StatusBadge tone={item.checked ? "success" : "warning"}>
-                        {item.checked
-                          ? "Bought"
-                          : (() => {
-                              const badgeQty =
-                                Number.isFinite(displayQty) && displayQty > 0
-                                  ? displayQty
-                                  : item.boughtQuantity
-                              const dual = formatDualQuantity(
-                                badgeQty,
-                                selectedUnit,
-                                inventoryItem,
-                              )
-                              return dual.secondary
-                                ? `${dual.primary} (${dual.secondary})`
-                                : dual.primary
-                            })()}
-                      </StatusBadge>
-                      <div className="mt-1 text-[11px] font-semibold tabular-nums text-cocoa">
-                        {item.estimatedCost !== null
-                          ? formatLkr(item.estimatedCost)
-                          : "No price"}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="text-right">
+                        <StatusBadge tone={item.checked ? "success" : "warning"}>
+                          {item.checked
+                            ? "Bought"
+                            : (() => {
+                                const badgeQty =
+                                  Number.isFinite(displayQty) && displayQty > 0
+                                    ? displayQty
+                                    : item.boughtQuantity
+                                const dual = formatDualQuantity(
+                                  badgeQty,
+                                  selectedUnit,
+                                  inventoryItem,
+                                )
+                                return dual.secondary
+                                  ? `${dual.primary} (${dual.secondary})`
+                                  : dual.primary
+                              })()}
+                        </StatusBadge>
+                        <div className="mt-1 text-[11px] font-semibold tabular-nums text-cocoa">
+                          {item.estimatedCost !== null
+                            ? formatLkr(item.estimatedCost)
+                            : "No price"}
+                        </div>
                       </div>
+                      {item.isManualExtra ? (
+                        <IconButton
+                          label={`Remove ${item.name}`}
+                          className="size-8"
+                          onClick={() => {
+                            dispatch({
+                              type: "REMOVE_MANUAL_SHOPPING_ITEM",
+                              inventoryId: item.inventoryId,
+                            })
+                            setCheckedExtraIds((prev) => {
+                              const next = new Set(prev)
+                              next.delete(item.inventoryId)
+                              return next
+                            })
+                          }}
+                        >
+                          <Trash2 aria-hidden="true" size={14} />
+                        </IconButton>
+                      ) : null}
                     </div>
-                    {item.isManualExtra ? (
-                      <IconButton
-                        label={`Remove ${item.name}`}
-                        className="size-8"
-                        onClick={() => {
-                          dispatch({
-                            type: "REMOVE_MANUAL_SHOPPING_ITEM",
-                            inventoryId: item.inventoryId,
-                          })
-                          setCheckedExtraIds((prev) => {
-                            const next = new Set(prev)
-                            next.delete(item.inventoryId)
-                            return next
-                          })
-                        }}
-                      >
-                        <Trash2 aria-hidden="true" size={14} />
-                      </IconButton>
-                    ) : null}
                   </div>
+
+                  {item.orders.length > 0 ? (
+                    <div className="space-y-1 pl-7">
+                      {item.orders.map((o) => (
+                        <div
+                          key={o.orderId}
+                          className="flex items-baseline justify-between gap-3 text-xs text-muted"
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span
+                              aria-hidden="true"
+                              className="size-1 shrink-0 rounded-full bg-muted-light"
+                            />
+                            <span className="min-w-0 leading-snug">
+                              {o.customerName}
+                            </span>
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">
+                            {formatQuantity(o.quantity, item.unit)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="pl-7 text-xs text-muted">
+                      Added manually
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between gap-3 border-t border-warm-border/70 pt-2.5 text-xs">

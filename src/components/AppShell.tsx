@@ -54,9 +54,9 @@ export default function AppShell({
   const navHidden = hideNavigation || keyboardOpen
 
   return (
-    <div className="mobile-shell min-h-screen bg-ivory text-cocoa">
+    <div className="mobile-shell min-h-dvh bg-ivory text-cocoa">
       <main
-        className={`screen-safe-top min-h-screen w-full overflow-x-clip px-5 ${
+        className={`screen-safe-top page-x min-h-dvh w-full overflow-x-clip ${
           navHidden ? "pb-safe-bottom" : "screen-bottom-padding"
         }`}
       >

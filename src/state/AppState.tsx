@@ -206,6 +206,31 @@ type AppAction =
     stepIndex: number
   }
   | {
+    type: "ADD_PREPARATION_INSTRUCTION"
+    preparationId: string
+    text: string
+    saveToRecipe?: boolean
+    insertAfterIndex?: number
+  }
+  | {
+    type: "REMOVE_PREPARATION_INSTRUCTION"
+    preparationId: string
+    stepIndex: number
+  }
+  | {
+    type: "MOVE_PREPARATION_STEP"
+    preparationId: string
+    fromIndex: number
+    toIndex: number
+  }
+  | {
+    type: "UPDATE_PREPARATION_INSTRUCTION"
+    preparationId: string
+    stepIndex: number
+    text: string
+    saveToRecipe?: boolean
+  }
+  | {
     type: "UPDATE_PREPARATION_USAGE"
     preparationId: string
     inventoryId: string
@@ -2757,6 +2782,293 @@ export function reducer(state: AppData, action: AppAction): AppData {
               ...item,
               completedSteps,
               updatedAt: new Date().toISOString(),
+            }
+            : item,
+        ),
+      }
+    }
+
+    case "ADD_PREPARATION_INSTRUCTION": {
+      const trimmed = action.text.trim()
+      if (!trimmed) return state
+      const record = state.preparationRecords.find(
+        (item) => item.id === action.preparationId,
+      )
+      if (!record || record.status === "Ready" || record.status === "Cancelled") {
+        return state
+      }
+      const existingInstructions = record.recipeSnapshot.instructions
+      const insertAt =
+        action.insertAfterIndex !== undefined &&
+        Number.isInteger(action.insertAfterIndex)
+          ? Math.max(
+            0,
+            Math.min(existingInstructions.length, action.insertAfterIndex + 1),
+          )
+          : existingInstructions.length
+
+      const nextInstructions = [
+        ...existingInstructions.slice(0, insertAt),
+        trimmed,
+        ...existingInstructions.slice(insertAt),
+      ]
+      const nextCompleted = record.completedSteps.map((idx) =>
+        idx >= insertAt ? idx + 1 : idx,
+      )
+      const nextCustomIndexes = [
+        ...(record.recipeSnapshot.customStepIndexes ?? []).map((idx) =>
+          idx >= insertAt ? idx + 1 : idx,
+        ),
+        insertAt,
+      ].sort((a, b) => a - b)
+      const now = new Date().toISOString()
+
+      const nextRecipes =
+        action.saveToRecipe && record.recipeSnapshot.id
+          ? state.recipes.map((recipe) =>
+            recipe.id === record.recipeSnapshot.id
+              ? {
+                ...recipe,
+                instructions: [
+                  ...recipe.instructions.slice(
+                    0,
+                    Math.min(insertAt, recipe.instructions.length),
+                  ),
+                  trimmed,
+                  ...recipe.instructions.slice(
+                    Math.min(insertAt, recipe.instructions.length),
+                  ),
+                ],
+                updatedAt: now,
+              }
+              : recipe,
+          )
+          : state.recipes
+
+      return {
+        ...state,
+        recipes: nextRecipes,
+        preparationRecords: state.preparationRecords.map((item) =>
+          item.id === record.id
+            ? {
+              ...item,
+              completedSteps: nextCompleted,
+              recipeSnapshot: {
+                ...item.recipeSnapshot,
+                instructions: nextInstructions,
+                customStepIndexes: nextCustomIndexes,
+              },
+              updatedAt: now,
+            }
+            : item,
+        ),
+      }
+    }
+
+    case "MOVE_PREPARATION_STEP": {
+      const record = state.preparationRecords.find(
+        (item) => item.id === action.preparationId,
+      )
+      if (!record || record.status === "Ready" || record.status === "Cancelled") {
+        return state
+      }
+      const instructions = record.recipeSnapshot.instructions
+      const { fromIndex, toIndex } = action
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= instructions.length ||
+        toIndex >= instructions.length
+      ) {
+        return state
+      }
+
+      const nextInstructions = [...instructions]
+      const [moved] = nextInstructions.splice(fromIndex, 1)
+      nextInstructions.splice(toIndex, 0, moved)
+
+      const remapIndex = (idx: number) => {
+        if (idx === fromIndex) return toIndex
+        if (fromIndex < toIndex && idx > fromIndex && idx <= toIndex) {
+          return idx - 1
+        }
+        if (fromIndex > toIndex && idx >= toIndex && idx < fromIndex) {
+          return idx + 1
+        }
+        return idx
+      }
+
+      const nextCompleted = record.completedSteps
+        .map(remapIndex)
+        .sort((a, b) => a - b)
+      const nextCustomIndexes = (record.recipeSnapshot.customStepIndexes ?? [])
+        .map(remapIndex)
+        .sort((a, b) => a - b)
+
+      return {
+        ...state,
+        preparationRecords: state.preparationRecords.map((item) =>
+          item.id === record.id
+            ? {
+              ...item,
+              completedSteps: nextCompleted,
+              recipeSnapshot: {
+                ...item.recipeSnapshot,
+                instructions: nextInstructions,
+                customStepIndexes: nextCustomIndexes,
+              },
+              updatedAt: new Date().toISOString(),
+            }
+            : item,
+        ),
+      }
+    }
+
+    case "UPDATE_PREPARATION_INSTRUCTION": {
+      const trimmed = action.text.trim()
+      if (!trimmed) return state
+      const record = state.preparationRecords.find(
+        (item) => item.id === action.preparationId,
+      )
+      if (!record || record.status === "Ready" || record.status === "Cancelled") {
+        return state
+      }
+      if (
+        action.stepIndex < 0 ||
+        action.stepIndex >= record.recipeSnapshot.instructions.length
+      ) {
+        return state
+      }
+      const now = new Date().toISOString()
+      const nextInstructions = record.recipeSnapshot.instructions.map(
+        (step, idx) => (idx === action.stepIndex ? trimmed : step),
+      )
+      const nextRecipes =
+        action.saveToRecipe && record.recipeSnapshot.id
+          ? state.recipes.map((recipe) =>
+            recipe.id === record.recipeSnapshot.id &&
+            action.stepIndex < recipe.instructions.length
+              ? {
+                ...recipe,
+                instructions: recipe.instructions.map((step, idx) =>
+                  idx === action.stepIndex ? trimmed : step,
+                ),
+                updatedAt: now,
+              }
+              : recipe,
+          )
+          : state.recipes
+
+      return {
+        ...state,
+        recipes: nextRecipes,
+        preparationRecords: state.preparationRecords.map((item) =>
+          item.id === record.id
+            ? {
+              ...item,
+              recipeSnapshot: {
+                ...item.recipeSnapshot,
+                instructions: nextInstructions,
+              },
+              updatedAt: now,
+            }
+            : item,
+        ),
+      }
+    }
+
+    case "REMOVE_PREPARATION_INSTRUCTION": {
+      const record = state.preparationRecords.find(
+        (item) => item.id === action.preparationId,
+      )
+      if (!record || record.status === "Ready" || record.status === "Cancelled") {
+        return state
+      }
+      const customIndexes = record.recipeSnapshot.customStepIndexes ?? []
+      if (!customIndexes.includes(action.stepIndex)) {
+        return state
+      }
+      if (record.recipeSnapshot.instructions.length <= 1) {
+        return state
+      }
+
+      const nextInstructions = record.recipeSnapshot.instructions.filter(
+        (_, idx) => idx !== action.stepIndex,
+      )
+      const nextCompleted = record.completedSteps
+        .filter((idx) => idx !== action.stepIndex)
+        .map((idx) => (idx > action.stepIndex ? idx - 1 : idx))
+      const nextCustomIndexes = customIndexes
+        .filter((idx) => idx !== action.stepIndex)
+        .map((idx) => (idx > action.stepIndex ? idx - 1 : idx))
+
+      return {
+        ...state,
+        preparationRecords: state.preparationRecords.map((item) =>
+          item.id === record.id
+            ? {
+              ...item,
+              completedSteps: nextCompleted,
+              recipeSnapshot: {
+                ...item.recipeSnapshot,
+                instructions: nextInstructions,
+                customStepIndexes: nextCustomIndexes,
+              },
+              updatedAt: new Date().toISOString(),
+            }
+            : item,
+        ),
+      }
+    }
+
+    case "UPDATE_PREPARATION_INSTRUCTION": {
+      const trimmed = action.text.trim()
+      if (!trimmed) return state
+      const record = state.preparationRecords.find(
+        (item) => item.id === action.preparationId,
+      )
+      if (!record || record.status === "Ready" || record.status === "Cancelled") {
+        return state
+      }
+      if (
+        action.stepIndex < 0 ||
+        action.stepIndex >= record.recipeSnapshot.instructions.length
+      ) {
+        return state
+      }
+      const now = new Date().toISOString()
+      const nextInstructions = record.recipeSnapshot.instructions.map(
+        (step, idx) => (idx === action.stepIndex ? trimmed : step),
+      )
+      const nextRecipes =
+        action.saveToRecipe && record.recipeSnapshot.id
+          ? state.recipes.map((recipe) =>
+            recipe.id === record.recipeSnapshot.id &&
+            action.stepIndex < recipe.instructions.length
+              ? {
+                ...recipe,
+                instructions: recipe.instructions.map((step, idx) =>
+                  idx === action.stepIndex ? trimmed : step,
+                ),
+                updatedAt: now,
+              }
+              : recipe,
+          )
+          : state.recipes
+
+      return {
+        ...state,
+        recipes: nextRecipes,
+        preparationRecords: state.preparationRecords.map((item) =>
+          item.id === record.id
+            ? {
+              ...item,
+              recipeSnapshot: {
+                ...item.recipeSnapshot,
+                instructions: nextInstructions,
+              },
+              updatedAt: now,
             }
             : item,
         ),

@@ -54,7 +54,7 @@ export default function KitchenScreen({
   return (
     <div className="space-y-5">
       {!focused ? (
-        <div className="sticky top-0 z-10 -mx-5 border-b border-warm-border/70 bg-ivory/95 px-5 pb-3 pt-1 backdrop-blur-sm">
+        <div className="page-bleed sticky top-0 z-10 border-b border-warm-border/70 bg-ivory/95 pb-3 pt-1 backdrop-blur-sm">
           <SegmentedControl
             label="Kitchen section"
             value={section}

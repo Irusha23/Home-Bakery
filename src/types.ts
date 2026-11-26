@@ -83,6 +83,7 @@ export type RecipeSnapshot = {
   ingredients: RecipeIngredient[]
   packaging: PackagingRequirement[]
   instructions: string[]
+  customStepIndexes?: number[]
   estimatedCost: number
   sellingPrice?: number
   pricing?: RecipePricingConfig
